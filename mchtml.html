@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MediCare Consultant</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+<!-- FRONT PAGE -->
+<section id="home" class="page">
+
+    <nav>
+        <div class="logo">🏥 MediCare</div>
+        <div class="nav-links">
+            <a href="#home">Home</a>
+            <a href="#about">About</a>
+            <a href="#contact">Contact</a>
+        </div>
+    </nav>
+
+    <div class="hero">
+
+        <div class="hero-text">
+            <h1>Smart Medical<br><span>Consultation</span></h1>
+
+            <p>
+                A simple platform for managing patients,
+                doctors and healthcare helpers.
+            </p>
+
+            <button onclick="showLogin('patient')">
+                Patient Login
+            </button>
+        </div>
+
+        <div class="login-card">
+
+            <h2>Login Portal</h2>
+            <p>Select your account type</p>
+
+            <button class="doctor-btn"
+                    onclick="showLogin('doctor')">
+                👨‍⚕️ Login as Doctor
+            </button>
+
+            <button class="helper-btn"
+                    onclick="showLogin('helper')">
+                🧑‍💼 Login as Helper
+            </button>
+
+            <button class="patient-btn"
+                    onclick="showLogin('patient')">
+                🧑 Login as Patient
+            </button>
+
+        </div>
+
+    </div>
+</section>
+
+
+<!-- LOGIN PAGE -->
+<section id="loginPage" class="hidden page">
+
+    <div class="login-container">
+
+        <button class="back" onclick="goHome()">← Back</button>
+
+        <div class="login-box">
+
+            <div class="medical-icon">🏥</div>
+
+            <h2 id="loginTitle">Login</h2>
+
+            <p id="loginDescription">
+                Enter your details
+            </p>
+
+            <input
+                type="text"
+                id="username"
+                placeholder="Username / Patient ID"
+            >
+
+            <input
+                type="password"
+                id="password"
+                placeholder="Password"
+            >
+
+            <button onclick="login()">Login</button>
+
+            <p id="loginMessage"></p>
+
+            <div class="demo-info">
+                <b>Demo Accounts</b><br><br>
+                Patient ID: PAT1001<br>
+                Doctor: doctor<br>
+                Helper: helper<br>
+                Password: 1234
+            </div>
+
+        </div>
+    </div>
+
+</section>
+
+
+<!-- PATIENT DASHBOARD -->
+<section id="patientDashboard" class="hidden dashboard">
+
+    <nav class="dashboard-nav">
+        <h2>🏥 MediCare</h2>
+        <button onclick="logout()">Logout</button>
+    </nav>
+
+    <div class="dashboard-content">
+
+        <div class="welcome">
+            <h1>Patient Dashboard</h1>
+            <p>Welcome to your medical profile.</p>
+        </div>
+
+        <div class="patient-card">
+
+            <div class="profile-header">
+                <div class="avatar">👤</div>
+
+                <div>
+                    <h2 id="patientName">Patient Name</h2>
+                    <p>Patient ID:
+                        <b id="patientId">PAT1001</b>
+                    </p>
+                </div>
+            </div>
+
+            <hr>
+
+            <h3>Primary Details</h3>
+
+            <div class="details-grid">
+
+                <div>
+                    <label>Full Name</label>
+                    <input id="pName" disabled>
+                </div>
+
+                <div>
+                    <label>Age</label>
+                    <input id="pAge" disabled>
+                </div>
+
+                <div>
+                    <label>Gender</label>
+                    <input id="pGender" disabled>
+                </div>
+
+                <div>
+                    <label>Blood Group</label>
+                    <input id="pBlood" disabled>
+                </div>
+
+                <div>
+                    <label>Phone</label>
+                    <input id="pPhone" disabled>
+                </div>
+
+                <div>
+                    <label>Email</label>
+                    <input id="pEmail" disabled>
+                </div>
+
+                <div class="full">
+                    <label>Address</label>
+                    <textarea id="pAddress" disabled></textarea>
+                </div>
+
+                <div class="full">
+                    <label>Medical Notes</label>
+                    <textarea id="pNotes" disabled></textarea>
+                </div>
+
+            </div>
+
+            <div class="buttons">
+
+                <button id="updateBtn"
+                        onclick="enableUpdate()">
+                    ✏️ Update Details
+                </button>
+
+                <button id="saveBtn"
+                        class="save-btn hidden"
+                        onclick="saveDetails()">
+                    💾 Save Changes
+                </button>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</section>
+
+
+<!-- DOCTOR DASHBOARD -->
+<section id="doctorDashboard" class="hidden dashboard">
+
+    <nav class="dashboard-nav">
+        <h2>👨‍⚕️ Doctor Portal</h2>
+        <button onclick="logout()">Logout</button>
+    </nav>
+
+    <div class="dashboard-content">
+
+        <h1>Doctor Dashboard</h1>
+
+        <div class="stats">
+
+            <div class="stat-card">
+                <h2>24</h2>
+                <p>Total Patients</p>
+            </div>
+
+            <div class="stat-card">
+                <h2>8</h2>
+                <p>Today's Appointments</p>
+            </div>
+
+            <div class="stat-card">
+                <h2>5</h2>
+                <p>Pending Reports</p>
+            </div>
+
+        </div>
+
+        <div class="doctor-panel">
+
+            <h2>Patient Search</h2>
+
+            <input
+                type="text"
+                id="searchPatient"
+                placeholder="Enter Patient ID"
+            >
+
+            <button onclick="searchPatient()">
+                Search Patient
+            </button>
+
+            <div id="searchResult"></div>
+
+        </div>
+
+    </div>
+
+</section>
+
+
+<!-- HELPER DASHBOARD -->
+<section id="helperDashboard" class="hidden dashboard">
+
+    <nav class="dashboard-nav">
+        <h2>🧑‍💼 Helper Portal</h2>
+        <button onclick="logout()">Logout</button>
+    </nav>
+
+    <div class="dashboard-content">
+
+        <h1>Helper Dashboard</h1>
+
+        <div class="helper-card">
+
+            <h2>Patient Assistance</h2>
+
+            <p>
+                Helpers can assist patients with appointments,
+                basic information and communication.
+            </p>
+
+            <div class="helper-actions">
+
+                <button onclick="alert('Appointment section opened')">
+                    📅 Appointments
+                </button>
+
+                <button onclick="alert('Patient list opened')">
+                    👥 Patient List
+                </button>
+
+                <button onclick="alert('Messages opened')">
+                    💬 Messages
+                </button>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</section>
+
+
+<!-- CHAT BUTTON -->
+<div class="chat-button" onclick="toggleChat()">
+    💬
+</div>
+
+
+<!-- CHAT BOX -->
+<div id="chatBox" class="chat-box hidden">
+
+    <div class="chat-header">
+        <b>💬 MediCare Support</b>
+
+        <button onclick="toggleChat()">×</button>
+    </div>
+
+    <div id="chatMessages" class="chat-messages">
+
+        <div class="bot-message">
+            Hello! 👋 How can we help you?
+        </div>
+
+    </div>
+
+    <div class="chat-input">
+
+        <input
+            id="chatInput"
+            type="text"
+            placeholder="Type a message..."
+            onkeypress="handleChat(event)"
+        >
+
+        <button onclick="sendMessage()">➤</button>
+
+    </div>
+
+</div>
+
+
+<script src="script.js"></script>
+
+</body>
+</html>
