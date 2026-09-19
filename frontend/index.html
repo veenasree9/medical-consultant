@@ -1,0 +1,800 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>MediCare Consultant</title>
+
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+<div id="toast" class="toast"></div>
+
+<!-- ================= HOME ================= -->
+
+<section id="homePage" class="page">
+
+    <nav class="navbar">
+
+        <div class="brand">
+            🏥 MediCare Consultant
+        </div>
+
+        <div class="navlinks">
+            <a href="#homePage">Home</a>
+            <a href="#about">About</a>
+            <a href="#contact">Contact</a>
+        </div>
+
+    </nav>
+
+
+    <main class="hero">
+
+        <div class="hero-copy">
+
+            <p class="eyebrow">
+                DIGITAL HEALTHCARE PORTAL
+            </p>
+
+            <h1>
+                Medical care,
+                <span>made simple.</span>
+            </h1>
+
+            <p>
+                Secure access for patients, doctors
+                and healthcare helpers.
+            </p>
+
+            <button
+                class="primary large"
+                onclick="openLogin('patient')">
+
+                Patient Login
+
+            </button>
+
+        </div>
+
+
+        <div class="portal-card">
+
+            <h2>Login Portal</h2>
+
+            <p>
+                Choose how you want to sign in.
+            </p>
+
+            <button
+                class="role doctor"
+                onclick="openLogin('doctor')">
+
+                👨‍⚕️ Login as Doctor
+
+            </button>
+
+            <button
+                class="role helper"
+                onclick="openLogin('helper')">
+
+                🧑‍💼 Login as Helper
+
+            </button>
+
+            <button
+                class="role patient"
+                onclick="openLogin('patient')">
+
+                🧑 Login as Patient
+
+            </button>
+
+        </div>
+
+    </main>
+
+
+    <section id="about" class="info-section">
+
+        <h2>About MediCare</h2>
+
+        <p>
+            MediCare is a medical consultant project
+            for managing patients, doctors and
+            healthcare helpers.
+        </p>
+
+    </section>
+
+
+    <section id="contact" class="info-section">
+
+        <h2>Contact</h2>
+
+        <p>
+            Contact your healthcare organization
+            for assistance.
+        </p>
+
+    </section>
+
+</section>
+
+
+
+<!-- ================= LOGIN ================= -->
+
+<section id="loginPage" class="page hidden">
+
+    <button
+        class="back-btn"
+        onclick="goHome()">
+
+        ← Back
+
+    </button>
+
+
+    <div class="login-wrap">
+
+        <div class="login-card">
+
+            <div class="medical-icon">
+                🏥
+            </div>
+
+            <h1 id="loginTitle">
+                Patient Login
+            </h1>
+
+            <p id="loginSubtitle">
+                Verify your mobile number with OTP.
+            </p>
+
+
+            <!-- PATIENT OTP -->
+
+            <div id="patientLogin">
+
+                <label>
+                    10-digit Indian mobile number
+                </label>
+
+                <div class="phone-row">
+
+                    <span>+91</span>
+
+                    <input
+                        id="phone"
+                        type="text"
+                        maxlength="10"
+                        inputmode="numeric"
+                        placeholder="9876543210">
+
+                </div>
+
+
+                <button
+                    id="sendOtpBtn"
+                    class="primary full"
+                    onclick="sendOTP()">
+
+                    Send Verification Code
+
+                </button>
+
+
+                <!-- OTP -->
+
+                <div
+                    id="otpSection"
+                    class="otp-section hidden">
+
+                    <label>
+                        6-digit verification code
+                    </label>
+
+                    <input
+                        id="otp"
+                        type="text"
+                        maxlength="6"
+                        inputmode="numeric"
+                        placeholder="123456">
+
+
+                    <button
+                        id="verifyOtpBtn"
+                        class="primary full"
+                        onclick="verifyOTP()">
+
+                        Verify Code
+
+                    </button>
+
+
+                    <button
+                        id="resendBtn"
+                        class="link-btn"
+                        onclick="sendOTP(true)"
+                        disabled>
+
+                        Resend Code
+                        <span id="timer"></span>
+
+                    </button>
+
+                </div>
+
+
+                <div class="divider">
+                    <span>OR</span>
+                </div>
+
+            </div>
+
+
+            <!-- PASSWORD LOGIN -->
+
+            <label id="credentialLabel">
+                Patient ID
+            </label>
+
+            <input
+                id="username"
+                placeholder="PAT1001">
+
+
+            <label>
+                Password
+            </label>
+
+            <input
+                id="password"
+                type="password"
+                placeholder="Password">
+
+
+            <button
+                class="primary full"
+                onclick="passwordLogin()">
+
+                Log In with Password
+
+            </button>
+
+
+            <button
+                class="secondary full"
+                onclick="createUser()">
+
+                Create New User
+
+            </button>
+
+
+            <p
+                id="loginMessage"
+                class="error">
+
+            </p>
+
+
+            <div class="demo-box">
+
+                <b>Demo Login</b>
+
+                <br><br>
+
+                Doctor:
+                <code>doctor</code>
+                /
+                <code>1234</code>
+
+                <br>
+
+                Helper:
+                <code>helper</code>
+                /
+                <code>1234</code>
+
+                <br>
+
+                Patient:
+                <code>PAT1001</code>
+                /
+                <code>1234</code>
+
+                <br><br>
+
+                <small>
+                    Real SMS OTP requires Twilio configuration.
+                </small>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</section>
+
+
+
+<!-- ================= PATIENT DASHBOARD ================= -->
+
+<section
+    id="patientDashboard"
+    class="dashboard hidden">
+
+    <nav class="dashboard-nav">
+
+        <div class="brand">
+            🏥 MediCare
+        </div>
+
+        <div>
+
+            <span id="patientHeaderName"></span>
+
+            <button
+                class="logout"
+                onclick="logout()">
+
+                Logout
+
+            </button>
+
+        </div>
+
+    </nav>
+
+
+    <main class="dashboard-content">
+
+        <div class="welcome">
+
+            <p class="eyebrow">
+                PATIENT PORTAL
+            </p>
+
+            <h1>
+                Patient Dashboard
+            </h1>
+
+            <p>
+                Your primary information is shown below.
+            </p>
+
+        </div>
+
+
+        <div class="profile-card">
+
+            <div class="profile-head">
+
+                <div class="avatar">
+                    👤
+                </div>
+
+                <div>
+
+                    <h2 id="patientName">
+                        Patient
+                    </h2>
+
+                    <p>
+                        Patient ID:
+                        <b id="patientId">-</b>
+                    </p>
+
+                </div>
+
+            </div>
+
+
+            <hr>
+
+
+            <h3>
+                Primary Details
+            </h3>
+
+
+            <div class="details-grid">
+
+                <div>
+
+                    <label>Full Name</label>
+
+                    <input
+                        id="pName"
+                        disabled>
+
+                </div>
+
+
+                <div>
+
+                    <label>Age</label>
+
+                    <input
+                        id="pAge"
+                        type="number"
+                        disabled>
+
+                </div>
+
+
+                <div>
+
+                    <label>Gender</label>
+
+                    <select
+                        id="pGender"
+                        disabled>
+
+                        <option>Male</option>
+                        <option>Female</option>
+                        <option>Other</option>
+
+                    </select>
+
+                </div>
+
+
+                <div>
+
+                    <label>Blood Group</label>
+
+                    <input
+                        id="pBlood"
+                        disabled>
+
+                </div>
+
+
+                <div>
+
+                    <label>Phone</label>
+
+                    <input
+                        id="pPhone"
+                        disabled>
+
+                </div>
+
+
+                <div>
+
+                    <label>Email</label>
+
+                    <input
+                        id="pEmail"
+                        type="email"
+                        disabled>
+
+                </div>
+
+
+                <div class="full">
+
+                    <label>Address</label>
+
+                    <textarea
+                        id="pAddress"
+                        disabled>
+                    </textarea>
+
+                </div>
+
+
+                <div class="full">
+
+                    <label>Medical Notes</label>
+
+                    <textarea
+                        id="pNotes"
+                        disabled>
+                    </textarea>
+
+                </div>
+
+            </div>
+
+
+            <div class="button-row">
+
+                <button
+                    id="updateBtn"
+                    class="primary"
+                    onclick="enableUpdate()">
+
+                    ✏️ Update Details
+
+                </button>
+
+
+                <button
+                    id="saveBtn"
+                    class="success hidden"
+                    onclick="saveDetails()">
+
+                    💾 Save Changes
+
+                </button>
+
+
+                <button
+                    id="cancelBtn"
+                    class="secondary hidden"
+                    onclick="cancelUpdate()">
+
+                    Cancel
+
+                </button>
+
+            </div>
+
+        </div>
+
+    </main>
+
+</section>
+
+
+
+<!-- ================= DOCTOR DASHBOARD ================= -->
+
+<section
+    id="doctorDashboard"
+    class="dashboard hidden">
+
+    <nav class="dashboard-nav">
+
+        <div class="brand">
+            👨‍⚕️ MediCare Doctor
+        </div>
+
+        <button
+            class="logout"
+            onclick="logout()">
+
+            Logout
+
+        </button>
+
+    </nav>
+
+
+    <main class="dashboard-content">
+
+        <div class="welcome">
+
+            <p class="eyebrow">
+                DOCTOR PORTAL
+            </p>
+
+            <h1>
+                Doctor Dashboard
+            </h1>
+
+            <p>
+                Search patients using their unique Patient ID.
+            </p>
+
+        </div>
+
+
+        <div class="stats">
+
+            <div>
+                <b>24</b>
+                <span>Total Patients</span>
+            </div>
+
+            <div>
+                <b>8</b>
+                <span>Today's Appointments</span>
+            </div>
+
+            <div>
+                <b>5</b>
+                <span>Pending Reports</span>
+            </div>
+
+        </div>
+
+
+        <div class="profile-card">
+
+            <h2>
+                Patient Search
+            </h2>
+
+
+            <div class="search-row">
+
+                <input
+                    id="doctorPatientId"
+                    placeholder="PAT1001">
+
+                <button
+                    class="primary"
+                    onclick="searchPatient()">
+
+                    Search
+
+                </button>
+
+            </div>
+
+
+            <div id="doctorResult"></div>
+
+        </div>
+
+    </main>
+
+</section>
+
+
+
+<!-- ================= HELPER DASHBOARD ================= -->
+
+<section
+    id="helperDashboard"
+    class="dashboard hidden">
+
+    <nav class="dashboard-nav">
+
+        <div class="brand">
+            🧑‍💼 MediCare Helper
+        </div>
+
+        <button
+            class="logout"
+            onclick="logout()">
+
+            Logout
+
+        </button>
+
+    </nav>
+
+
+    <main class="dashboard-content">
+
+        <div class="welcome">
+
+            <p class="eyebrow">
+                HELPER PORTAL
+            </p>
+
+            <h1>
+                Helper Dashboard
+            </h1>
+
+            <p>
+                Assist patients with basic portal tasks.
+            </p>
+
+        </div>
+
+
+        <div class="profile-card">
+
+            <h2>
+                Patient Assistance
+            </h2>
+
+            <p>
+                Manage appointments,
+                patient communication and support.
+            </p>
+
+
+            <div class="helper-actions">
+
+                <button
+                    class="helper-action"
+                    onclick="showToast('Appointments opened')">
+
+                    📅 Appointments
+
+                </button>
+
+
+                <button
+                    class="helper-action"
+                    onclick="showToast('Patient list opened')">
+
+                    👥 Patient List
+
+                </button>
+
+
+                <button
+                    class="helper-action"
+                    onclick="showToast('Messages opened')">
+
+                    💬 Messages
+
+                </button>
+
+            </div>
+
+        </div>
+
+    </main>
+
+</section>
+
+
+
+<!-- ================= CHAT ================= -->
+
+<button
+    class="chat-fab"
+    onclick="toggleChat()">
+
+    💬
+
+</button>
+
+
+<div
+    id="chatBox"
+    class="chat-box hidden">
+
+    <div class="chat-head">
+
+        <b>
+            💬 MediCare Support
+        </b>
+
+        <button onclick="toggleChat()">
+            ×
+        </button>
+
+    </div>
+
+
+    <div
+        id="chatMessages"
+        class="chat-messages">
+
+        <div class="bot-msg">
+
+            Hello! 👋
+            How can we help you?
+
+        </div>
+
+    </div>
+
+
+    <div class="chat-input">
+
+        <input
+            id="chatInput"
+            placeholder="Type a message..."
+            onkeydown="if(event.key==='Enter') sendMessage()">
+
+        <button onclick="sendMessage()">
+            ➤
+        </button>
+
+    </div>
+
+</div>
+
+
+<script src="config.js"></script>
+<script src="app.js"></script>
+
+</body>
+</html>
