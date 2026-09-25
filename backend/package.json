@@ -8,10 +8,15 @@
     "dev": "node server.js"
   },
   "dependencies": {
+    "@simplewebauthn/server": "^14.0.2",
+    "bcryptjs": "^2.4.3",
+    "better-sqlite3": "^13.0.3",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "jsonwebtoken": "^9.0.2",
+    "multer": "^2.4.0",
+    "pg": "^8.17.0",
     "twilio": "^5.4.3"
   }
 }

@@ -46,17 +46,9 @@
             </h1>
 
             <p>
-                Secure access for patients, doctors
+                Secure access for users, doctors
                 and healthcare helpers.
             </p>
-
-            <button
-                class="primary large"
-                onclick="openLogin('patient')">
-
-                Patient Login
-
-            </button>
 
         </div>
 
@@ -89,7 +81,7 @@
                 class="role patient"
                 onclick="openLogin('patient')">
 
-                🧑 Login as Patient
+                🧑 Login as User
 
             </button>
 
@@ -104,7 +96,7 @@
 
         <p>
             MediCare is a medical consultant project
-            for managing patients, doctors and
+            for managing users, doctors and
             healthcare helpers.
         </p>
 
@@ -121,6 +113,162 @@
         </p>
 
     </section>
+
+</section>
+
+
+<!-- ================= REGISTRATION ================= -->
+
+<section id="registrationPage" class="page hidden">
+
+    <button
+        class="back-btn"
+        onclick="goHome()">
+
+        ← Back
+
+    </button>
+
+    <div class="login-wrap">
+
+        <div class="login-card wide-card">
+
+            <div class="medical-icon">
+                📝
+            </div>
+
+            <h1>Create New User</h1>
+
+            <p>
+                Register as a patient, doctor, or healthcare helper and save the record to your PostgreSQL database.
+            </p>
+
+            <form id="registrationForm" onsubmit="event.preventDefault(); submitRegistration();">
+
+                <label>Account Type</label>
+                <select id="regAccountType" onchange="toggleRegistrationFields()">
+                    <option value="patient">Patient</option>
+                    <option value="doctor">Doctor</option>
+                    <option value="helper">Helper</option>
+                </select>
+
+                <div class="registration-section">
+                    <div class="form-grid">
+                        <div>
+                            <label>Full Name</label>
+                            <input id="regFullName" placeholder="Enter full name">
+                        </div>
+
+                        <div>
+                            <label>Phone Number</label>
+                            <input id="regPhone" placeholder="9876543210">
+                        </div>
+
+                        <div>
+                            <label>Email</label>
+                            <input id="regEmail" type="email" placeholder="name@example.com">
+                        </div>
+
+                        <div>
+                            <label>Password</label>
+                            <input id="regPassword" type="password" placeholder="Create password">
+                        </div>
+
+                        <div>
+                            <label>Confirm Password</label>
+                            <input id="regConfirmPassword" type="password" placeholder="Repeat password">
+                        </div>
+                    </div>
+                </div>
+
+                <div id="patientRegistrationFields" class="registration-section">
+                    <div class="form-grid">
+                        <div>
+                            <label>Date of Birth</label>
+                            <input id="regDob" type="date">
+                        </div>
+
+                        <div>
+                            <label>Age</label>
+                            <input id="regAge" type="number" min="0" placeholder="21">
+                        </div>
+
+                        <div>
+                            <label>Gender</label>
+                            <select id="regGender">
+                                <option value="Male">Male</option>
+                                <option value="Female">Female</option>
+                                <option value="Other">Other</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label>Blood Group</label>
+                            <select id="regBloodGroup" required>
+                                <option value="A+">A+</option>
+                                <option value="A-">A-</option>
+                                <option value="B+">B+</option>
+                                <option value="B-">B-</option>
+                                <option value="AB+">AB+</option>
+                                <option value="AB-">AB-</option>
+                                <option value="O+" selected>O+</option>
+                                <option value="O-">O-</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label>Guardian Name</label>
+                            <input id="regGuardianName" placeholder="Guardian full name">
+                        </div>
+
+                        <div>
+                            <label>Guardian Phone</label>
+                            <input id="regGuardianPhone" placeholder="Guardian mobile number">
+                        </div>
+
+                        <div class="full-width">
+                            <label>Address</label>
+                            <textarea id="regAddress" rows="3" placeholder="Residential address"></textarea>
+                        </div>
+
+                        <div class="full-width">
+                            <label>Medical History</label>
+                            <textarea id="regMedicalHistory" rows="3" placeholder="Any relevant medical history"></textarea>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="doctorRegistrationFields" class="registration-section hidden">
+                    <div class="form-grid">
+                        <div>
+                            <label>Specialization</label>
+                            <input id="regSpecialization" placeholder="Cardiology">
+                        </div>
+
+                        <div>
+                            <label>Hospital / Clinic</label>
+                            <input id="regHospitalClinic" placeholder="MedCare Hospital">
+                        </div>
+                    </div>
+                </div>
+
+                <div id="helperRegistrationFields" class="registration-section hidden">
+                    <div class="form-grid">
+                        <div class="full-width">
+                            <label>Organization / Agency</label>
+                            <input id="regOrganization" placeholder="Emergency Response Team">
+                        </div>
+                    </div>
+                </div>
+
+                <button type="submit" class="primary full">Register Account</button>
+            </form>
+
+            <p id="registrationMessage" class="error"></p>
+
+        </div>
+
+    </div>
 
 </section>
 
@@ -148,123 +296,165 @@
             </div>
 
             <h1 id="loginTitle">
-                Patient Login
+                User Login
             </h1>
 
             <p id="loginSubtitle">
-                Verify your mobile number with OTP.
+                Use your User ID and password.
             </p>
 
 
-            <!-- PATIENT OTP -->
+            <div id="passwordLoginSection">
 
-            <div id="patientLogin">
-
-                <label>
-                    10-digit Indian mobile number
+                <label id="credentialLabel">
+                    User ID
                 </label>
 
-                <div class="phone-row">
+                <input
+                    id="username"
+                    placeholder="PAT1001">
 
-                    <span>+91</span>
 
-                    <input
-                        id="phone"
-                        type="text"
-                        maxlength="10"
-                        inputmode="numeric"
-                        placeholder="9876543210">
+                <label>
+                    Password
+                </label>
 
-                </div>
-
+                <input
+                    id="password"
+                    type="password"
+                    placeholder="Password">
 
                 <button
-                    id="sendOtpBtn"
                     class="primary full"
-                    onclick="sendOTP()">
+                    onclick="passwordLogin()">
 
-                    Send Verification Code
+                    Log In with Password
 
                 </button>
 
+            </div>
 
-                <!-- OTP -->
 
-                <div
-                    id="otpSection"
-                    class="otp-section hidden">
+            <div id="patientBiometricSection" class="camera-panel hidden">
 
-                    <label>
-                        6-digit verification code
-                    </label>
+                <div class="camera-shell">
 
-                    <input
-                        id="otp"
-                        type="text"
-                        maxlength="6"
-                        inputmode="numeric"
-                        placeholder="123456">
+                    <video
+                        id="patientCamera"
+                        autoplay
+                        muted
+                        playsinline>
+                    </video>
 
+                    <img
+                        id="patientFacePreview"
+                        class="photo-preview hidden" />
+
+                    <canvas
+                        id="patientCanvas"
+                        class="hidden">
+                    </canvas>
+
+                </div>
+
+                <div class="camera-actions">
 
                     <button
-                        id="verifyOtpBtn"
                         class="primary full"
-                        onclick="verifyOTP()">
+                        onclick="startPatientCamera()">
 
-                        Verify Code
+                        Open Face Camera
 
                     </button>
 
+                    <button
+                        class="secondary full"
+                        onclick="capturePatientFace()">
+
+                        Capture Live Face
+
+                    </button>
 
                     <button
-                        id="resendBtn"
-                        class="link-btn"
-                        onclick="sendOTP(true)"
-                        disabled>
+                        class="secondary full"
+                        onclick="scanPatientFingerprint()">
 
-                        Resend Code
-                        <span id="timer"></span>
+                        Scan Fingerprint
 
                     </button>
 
                 </div>
 
-
-                <div class="divider">
-                    <span>OR</span>
+                <div id="biometricStatus" class="biometric-status">
+                    Face and fingerprint required before access.
                 </div>
 
             </div>
 
 
-            <!-- PASSWORD LOGIN -->
+            <div id="helperCameraSection" class="camera-panel hidden">
 
-            <label id="credentialLabel">
-                Patient ID
-            </label>
+                <div class="camera-shell emergency-shell">
 
-            <input
-                id="username"
-                placeholder="PAT1001">
+                    <video
+                        id="helperCamera"
+                        autoplay
+                        muted
+                        playsinline>
+                    </video>
 
+                    <img
+                        id="helperPhotoPreview"
+                        class="photo-preview hidden" />
 
-            <label>
-                Password
-            </label>
+                    <canvas
+                        id="helperCanvas"
+                        class="hidden">
+                    </canvas>
 
-            <input
-                id="password"
-                type="password"
-                placeholder="Password">
+                </div>
 
+                <div class="camera-actions emergency-actions">
 
-            <button
-                class="primary full"
-                onclick="passwordLogin()">
+                    <button
+                        class="primary full emergency-btn"
+                        onclick="startHelperCamera()">
 
-                Log In with Password
+                        📷 Open Camera
 
-            </button>
+                    </button>
+
+                    <button
+                        class="secondary full emergency-btn"
+                        onclick="captureHelperPhoto()">
+
+                        📸 Capture Photo
+
+                    </button>
+
+                    <button
+                        class="secondary full emergency-btn"
+                        onclick="retakeHelperPhoto()">
+
+                        🔄 Retake
+
+                    </button>
+
+                    <button
+                        class="success full emergency-btn"
+                        onclick="searchHelperPerson()">
+
+                        🔍 Search Registered User
+
+                    </button>
+
+                </div>
+
+                <p id="helperEmergencyStatus" class="helper-emergency-status">
+                    Capture a clear photo of the person's face to search registered users.
+                </p>
+
+            </div>
 
 
             <button
@@ -303,16 +493,10 @@
 
                 <br>
 
-                Patient:
+                User:
                 <code>PAT1001</code>
                 /
                 <code>1234</code>
-
-                <br><br>
-
-                <small>
-                    Real SMS OTP requires Twilio configuration.
-                </small>
 
             </div>
 
@@ -324,7 +508,7 @@
 
 
 
-<!-- ================= PATIENT DASHBOARD ================= -->
+<!-- ================= USER DASHBOARD ================= -->
 
 <section
     id="patientDashboard"
@@ -358,11 +542,11 @@
         <div class="welcome">
 
             <p class="eyebrow">
-                PATIENT PORTAL
+                USER PORTAL
             </p>
 
             <h1>
-                Patient Dashboard
+                User Dashboard
             </h1>
 
             <p>
@@ -383,11 +567,11 @@
                 <div>
 
                     <h2 id="patientName">
-                        Patient
+                        User
                     </h2>
 
                     <p>
-                        Patient ID:
+                        User ID:
                         <b id="patientId">-</b>
                     </p>
 
@@ -399,108 +583,334 @@
             <hr>
 
 
-            <h3>
-                Primary Details
-            </h3>
+            <div class="section-panel">
+
+                <div class="section-header">
+                    <h3>Primary Details</h3>
+                </div>
+
+                <div class="details-grid" id="primaryDetailsGrid">
+
+                    <div>
+
+                        <label>Patient ID</label>
+
+                        <input
+                            id="pId"
+                            disabled>
+
+                    </div>
+
+                    <div>
+
+                        <label>Full Name</label>
+
+                        <input
+                            id="pName"
+                            disabled>
+
+                    </div>
 
 
-            <div class="details-grid">
+                    <div>
 
-                <div>
+                        <label>Age</label>
 
-                    <label>Full Name</label>
+                        <input
+                            id="pAge"
+                            type="number"
+                            disabled>
 
-                    <input
-                        id="pName"
-                        disabled>
+                    </div>
+
+
+                    <div>
+
+                        <label>Gender</label>
+
+                        <select
+                            id="pGender"
+                            disabled>
+
+                            <option>Male</option>
+                            <option>Female</option>
+                            <option>Other</option>
+
+                        </select>
+
+                    </div>
+
+
+                    <div>
+
+                        <label>Blood Group</label>
+
+                        <select
+                            id="pBlood"
+                            disabled
+                            required>
+                            <option value="A+">A+</option>
+                            <option value="A-">A-</option>
+                            <option value="B+">B+</option>
+                            <option value="B-">B-</option>
+                            <option value="AB+">AB+</option>
+                            <option value="AB-">AB-</option>
+                            <option value="O+">O+</option>
+                            <option value="O-">O-</option>
+                        </select>
+
+                    </div>
+
+
+                    <div>
+
+                        <label>Phone Number</label>
+
+                        <input
+                            id="pPhone"
+                            disabled>
+
+                    </div>
+
+
+                    <div>
+
+                        <label>Guardian Name</label>
+
+                        <input
+                            id="pGuardianName"
+                            disabled>
+
+                    </div>
+
+
+                    <div>
+
+                        <label>Guardian Phone Number</label>
+
+                        <input
+                            id="pGuardianPhone"
+                            type="tel"
+                            disabled>
+
+                    </div>
+
+
+                    <div>
+
+                        <label>Email</label>
+
+                        <input
+                            id="pEmail"
+                            type="email"
+                            disabled>
+
+                    </div>
+
+
+                    <div class="full">
+
+                        <label>Address</label>
+
+                        <textarea
+                            id="pAddress"
+                            disabled>
+                        </textarea>
+
+                    </div>
+
+
+                    <div class="full">
+
+                        <label>Medical History</label>
+
+                        <textarea
+                            id="pNotes"
+                            disabled>
+                        </textarea>
+
+                        <button
+                            type="button"
+                            class="secondary medical-file-button"
+                            onclick="openMedicalFilePicker()">
+                            + Add New Medical File
+                        </button>
+
+                        <input
+                            id="medicalFileInput"
+                            class="hidden"
+                            type="file"
+                            accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,application/pdf,image/jpeg,image/png,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                            onchange="uploadMedicalFile(event)">
+
+                        <p id="medicalFileStatus" class="file-status">
+                            Existing medical files are securely stored and are not listed on this page.
+                        </p>
+
+                    </div>
 
                 </div>
 
+            </div>
 
-                <div>
 
-                    <label>Age</label>
+            <div class="button-row">
 
-                    <input
-                        id="pAge"
-                        type="number"
-                        disabled>
+                <button
+                    id="securityToggleBtn"
+                    class="secondary"
+                    onclick="toggleSecondaryDetails()">
+
+                    Show Security Details
+
+                </button>
+
+            </div>
+
+
+            <div id="secondaryDetailsBlock" class="hidden section-panel security-panel">
+
+                <div class="section-header">
+                    <h3>Secondary &amp; Security Details</h3>
+                </div>
+
+                <div class="security-grid">
+
+                    <div>
+
+                        <label>Password</label>
+
+                        <div class="password-toggle-field">
+                            <input
+                                id="securityPassword"
+                                type="password"
+                                value="••••••••"
+                                readonly
+                                aria-label="Password">
+                            <button
+                                type="button"
+                                class="secondary security-action"
+                                id="passwordVisibilityButton"
+                                onclick="togglePasswordVisibility()"
+                                aria-label="Show Password"
+                                title="Show Password">&#128065; Show Password</button>
+                        </div>
+
+                    </div>
+
+                    <div>
+
+                        <label>Face Verification</label>
+
+                        <button
+                            type="button"
+                            class="secondary security-action"
+                            onclick="startFaceVerification()">
+                            Set Up Face Verification
+                        </button>
+
+                        <div id="faceVerificationStatus" class="security-status">Not started</div>
+
+                    </div>
+
+                    <div>
+
+                        <label>Live Camera</label>
+
+                        <button
+                            type="button"
+                            class="secondary security-action"
+                            onclick="startCameraVerification()">
+                            Start Camera Verification
+                        </button>
+
+                        <div id="cameraVerificationStatus" class="security-status">Camera is off</div>
+
+                    </div>
+
+                    <div>
+
+                        <label>Iris Verification</label>
+
+                        <div class="security-status">Device/browser support required</div>
+
+                    </div>
+
+                    <div>
+
+                        <label>Liveness Verification</label>
+
+                        <button
+                            type="button"
+                            class="secondary security-action"
+                            onclick="startLivenessCheck()">
+                            Start Liveness Check
+                        </button>
+
+                        <div id="livenessVerificationStatus" class="security-status">Not started</div>
+
+                    </div>
+
+                    <div>
+
+                        <label>Fingerprint / Passkey</label>
+
+                        <button
+                            type="button"
+                            class="secondary security-action"
+                            onclick="setupPasskey()">
+                            Set Up Passkey
+                        </button>
+
+                        <button
+                            type="button"
+                            id="removePasskeyButton"
+                            class="secondary security-action hidden"
+                            onclick="removePasskey()">
+                            Remove Passkey
+                        </button>
+
+                        <div id="passkeyStatus" class="security-status">Not registered</div>
+
+                    </div>
+
+                    <div class="full security-note">
+                        Passkeys use the device authenticator. This application never reads or stores raw fingerprint or iris data.
+                    </div>
 
                 </div>
 
-
-                <div>
-
-                    <label>Gender</label>
-
-                    <select
-                        id="pGender"
-                        disabled>
-
-                        <option>Male</option>
-                        <option>Female</option>
-                        <option>Other</option>
-
-                    </select>
-
-                </div>
-
-
-                <div>
-
-                    <label>Blood Group</label>
-
-                    <input
-                        id="pBlood"
-                        disabled>
-
-                </div>
-
-
-                <div>
-
-                    <label>Phone</label>
-
-                    <input
-                        id="pPhone"
-                        disabled>
-
-                </div>
-
-
-                <div>
-
-                    <label>Email</label>
-
-                    <input
-                        id="pEmail"
-                        type="email"
-                        disabled>
-
-                </div>
-
-
-                <div class="full">
-
-                    <label>Address</label>
-
-                    <textarea
-                        id="pAddress"
-                        disabled>
-                    </textarea>
-
-                </div>
-
-
-                <div class="full">
-
-                    <label>Medical Notes</label>
-
-                    <textarea
-                        id="pNotes"
-                        disabled>
-                    </textarea>
-
+                <div id="securityCameraPanel" class="security-camera-panel hidden">
+                    <video id="securityCamera" autoplay muted playsinline></video>
+                    <img id="securityCameraPreview" class="security-camera-preview hidden" alt="Captured camera preview">
+                    <canvas id="securityCameraCanvas" class="hidden"></canvas>
+                    <button
+                        type="button"
+                        class="secondary security-action"
+                        id="securityCaptureButton"
+                        onclick="captureSecurityImage()">
+                        Capture
+                    </button>
+                    <button
+                        type="button"
+                        id="securityConfirmButton"
+                        class="success security-action hidden"
+                        onclick="confirmSecurityCapture()">
+                        Confirm Capture
+                    </button>
+                    <button
+                        type="button"
+                        id="securityRetakeButton"
+                        class="secondary security-action hidden"
+                        onclick="retakeSecurityCapture()">
+                        Retake
+                    </button>
+                    <button
+                        type="button"
+                        class="secondary security-action"
+                        onclick="cancelSecurityCamera()">
+                        Cancel
+                    </button>
                 </div>
 
             </div>
@@ -583,7 +993,7 @@
             </h1>
 
             <p>
-                Search patients using their unique Patient ID.
+                Search users using their unique User ID.
             </p>
 
         </div>
@@ -593,7 +1003,7 @@
 
             <div>
                 <b>24</b>
-                <span>Total Patients</span>
+                <span>Total Users</span>
             </div>
 
             <div>
@@ -612,7 +1022,7 @@
         <div class="profile-card">
 
             <h2>
-                Patient Search
+                User Search
             </h2>
 
 
@@ -661,6 +1071,8 @@
 
             Logout
 
+
+
         </button>
 
     </nav>
@@ -679,7 +1091,7 @@
             </h1>
 
             <p>
-                Assist patients with basic portal tasks.
+                Assist users with basic portal tasks.
             </p>
 
         </div>
@@ -688,12 +1100,12 @@
         <div class="profile-card">
 
             <h2>
-                Patient Assistance
+                User Assistance
             </h2>
 
             <p>
                 Manage appointments,
-                patient communication and support.
+                user communication and support.
             </p>
 
 
@@ -710,9 +1122,9 @@
 
                 <button
                     class="helper-action"
-                    onclick="showToast('Patient list opened')">
+                    onclick="showToast('User list opened')">
 
-                    👥 Patient List
+                    👥 User List
 
                 </button>
 
@@ -724,6 +1136,76 @@
                     💬 Messages
 
                 </button>
+
+            </div>
+
+            <div class="helper-identify-box emergency-layout">
+
+                <h3>Emergency Person Identification</h3>
+
+                <p>
+                    Capture a clear photo of the person's face to search registered users.
+                </p>
+
+                <div class="emergency-camera-shell">
+
+                    <video
+                        id="helperDashboardCamera"
+                        autoplay
+                        muted
+                        playsinline>
+                    </video>
+
+                    <img
+                        id="helperDashboardPreview"
+                        class="photo-preview hidden" />
+
+                    <canvas
+                        id="helperDashboardCanvas"
+                        class="hidden">
+                    </canvas>
+
+                </div>
+
+                <div class="camera-actions emergency-actions">
+
+                    <button
+                        class="primary full emergency-btn"
+                        onclick="startHelperDashboardCamera()">
+
+                        📷 Open Camera
+
+                    </button>
+
+                    <button
+                        class="secondary full emergency-btn"
+                        onclick="captureHelperDashboardPhoto()">
+
+                        📸 Capture Photo
+
+                    </button>
+
+                    <button
+                        class="secondary full emergency-btn"
+                        onclick="retakeHelperDashboardPhoto()">
+
+                        🔄 Retake
+
+                    </button>
+
+                    <button
+                        class="success full emergency-btn"
+                        onclick="searchHelperPerson()">
+
+                        🔍 Search Registered User
+
+                    </button>
+
+                </div>
+
+                <div id="helperIdentificationResult" class="helper-result-box">
+                    No registered user match found.
+                </div>
 
             </div>
 
