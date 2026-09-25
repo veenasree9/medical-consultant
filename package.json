@@ -1,11 +1,12 @@
 {
-  "name": "medical-consultant-backend",
+  "name": "medicare-consultant",
   "version": "1.0.0",
   "private": true,
-  "main": "server.js",
+  "main": "backend/server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node server.js"
+    "dev": "node backend/server.js",
+    "start": "node backend/server.js",
+    "build": "node -e \"console.log('Build complete')\""
   },
   "dependencies": {
     "cors": "^2.8.5",

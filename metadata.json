@@ -1,0 +1,7 @@
+{
+  "name": "MediCare Consultant",
+  "description": "Secure digital healthcare portal for patients, doctors, and healthcare helpers.",
+  "capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
