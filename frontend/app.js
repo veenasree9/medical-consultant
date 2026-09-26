@@ -62,25 +62,30 @@ function openLogin(type) {
 
     $("loginMessage").textContent = "";
 
-    const isPatient = type === "patient";
-
-    $("patientLogin")
-        .classList.toggle("hidden", !isPatient);
-
+    $("username").value = "";
+    $("password").value = "";
+    $("password").type = "password";
+    if ($("togglePasswordBtn")) {
+        $("togglePasswordBtn").textContent = "👁️";
+    }
 
     if (type === "doctor") {
 
         $("loginTitle").textContent =
             "Doctor Login";
 
-        $("loginSubtitle").textContent =
-            "Use your doctor username and password.";
-
         $("credentialLabel").textContent =
             "Doctor Username";
 
         $("username").placeholder =
-            "doctor";
+            "Enter your Doctor Username";
+
+        $("password").placeholder =
+            "Enter your password";
+
+        if ($("registerPrompt")) {
+            $("registerPrompt").classList.add("hidden");
+        }
 
     }
 
@@ -89,15 +94,42 @@ function openLogin(type) {
         $("loginTitle").textContent =
             "Patient Login";
 
-        $("loginSubtitle").textContent =
-            "Verify your mobile number with OTP.";
-
         $("credentialLabel").textContent =
             "Patient ID";
 
         $("username").placeholder =
-            "PAT1001";
+            "Enter your Patient ID";
 
+        $("password").placeholder =
+            "Enter your password";
+
+        if ($("registerPrompt")) {
+            $("registerPrompt").classList.remove("hidden");
+        }
+
+    }
+}
+
+
+/* ================= PASSWORD VISIBILITY TOGGLE ================= */
+
+function togglePasswordVisibility() {
+    const passwordInput = $("password");
+    const toggleBtn = $("togglePasswordBtn");
+    if (!passwordInput) return;
+
+    if (passwordInput.type === "password") {
+        passwordInput.type = "text";
+        if (toggleBtn) {
+            toggleBtn.textContent = "🙈";
+            toggleBtn.setAttribute("aria-label", "Hide password");
+        }
+    } else {
+        passwordInput.type = "password";
+        if (toggleBtn) {
+            toggleBtn.textContent = "👁️";
+            toggleBtn.setAttribute("aria-label", "Show password");
+        }
     }
 }
 
@@ -908,13 +940,57 @@ function escapeHTML(value) {
 }
 
 
-/* ================= CREATE USER ================= */
+/* ================= PATIENT REGISTRATION ================= */
 
 function createUser() {
+    openRegisterModal();
+}
 
-    showToast(
-        "Registration can be connected to your database later."
-    );
+function openRegisterModal() {
+    if ($("regName")) $("regName").value = "";
+    if ($("regPhone")) $("regPhone").value = "";
+    if ($("regPassword")) $("regPassword").value = "";
+    if ($("regBlood")) $("regBlood").value = "";
+    if ($("regMessage")) $("regMessage").textContent = "";
+    if ($("registerModal")) $("registerModal").classList.remove("hidden");
+}
+
+function closeRegisterModal() {
+    if ($("registerModal")) $("registerModal").classList.add("hidden");
+}
+
+async function submitRegistration() {
+    const fullName = $("regName") ? $("regName").value.trim() : "";
+    const phone = $("regPhone") ? $("regPhone").value.trim() : "";
+    const password = $("regPassword") ? $("regPassword").value.trim() : "";
+    const bloodGroup = $("regBlood") ? $("regBlood").value.trim() : "";
+
+    if (!fullName || !password) {
+        if ($("regMessage")) $("regMessage").textContent = "Please enter your Full Name and Password.";
+        return;
+    }
+
+    try {
+        const response = await fetch(`${API_URL}/api/auth/register-patient`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ fullName, phone, password, bloodGroup })
+        });
+
+        const data = await response.json();
+        if (!response.ok || !data.success) {
+            throw new Error(data.message || "Registration failed.");
+        }
+
+        closeRegisterModal();
+        showToast(`Registration complete! Your Patient ID is ${data.patientId}`);
+        $("username").value = data.patientId;
+        $("password").value = password;
+        $("loginMessage").className = "success-text";
+        $("loginMessage").textContent = `Registered successfully! Your Patient ID is ${data.patientId}. You can now log in.`;
+    } catch (err) {
+        if ($("regMessage")) $("regMessage").textContent = err.message;
+    }
 }
 
 
@@ -1015,30 +1091,29 @@ function sendMessage() {
 
 /* ================= INPUT VALIDATION ================= */
 
-$("phone").addEventListener(
-    "input",
-    event => {
+if ($("phone")) {
+    $("phone").addEventListener(
+        "input",
+        event => {
+            event.target.value =
+                event.target.value
+                    .replace(/\D/g, "")
+                    .slice(0, 10);
+        }
+    );
+}
 
-        event.target.value =
-            event.target.value
-                .replace(/\D/g, "")
-                .slice(0, 10);
-
-    }
-);
-
-
-$("otp").addEventListener(
-    "input",
-    event => {
-
-        event.target.value =
-            event.target.value
-                .replace(/\D/g, "")
-                .slice(0, 6);
-
-    }
-);
+if ($("otp")) {
+    $("otp").addEventListener(
+        "input",
+        event => {
+            event.target.value =
+                event.target.value
+                    .replace(/\D/g, "")
+                    .slice(0, 6);
+        }
+    );
+}
 
 
 /* ================= EMERGENCY HELPER IDENTIFICATION ================= */

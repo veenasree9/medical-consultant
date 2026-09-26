@@ -1,0 +1,1111 @@
+[{"_1":2,"_3":-5,"_4":-5},"loaderData",{"_5":6,"_7":8},"actionData","errors","root",{"_211":212,"_213":74,"_214":18,"_215":18,"_216":18,"_217":74,"_218":18,"_219":18,"_220":18,"_221":18,"_222":-5,"_223":224},"routes/s.$postId",{"_9":10,"_11":12,"_13":-7,"_14":-7,"_15":16,"_17":18,"_19":18,"_20":-5,"_21":22,"_23":24},"kind","post_with_profile","postWithProfile",{"_31":32,"_33":34},"messagingRoomId","referrer","imagegenOgImagePolicy","current_wide","preferIntrinsicAspectRatioForOgImage",false,"enforceRenderedOgImg","ogImageVariantOverride","defaultOgDescription","ChatGPT helps you get answers, find inspiration, and be more productive.","shareReceivePerformance",{"_25":26,"_27":28,"_29":30},"loaderDurationMs",355.89883599989116,"apiStartMs",25.694298000074923,"apiDurationMs",330.16392900049686,"post",{"_53":54,"_55":56,"_57":58,"_59":60,"_61":62,"_63":64,"_65":66,"_67":68,"_46":69,"_70":71,"_72":18},"profile",{"_35":36,"_37":36,"_38":39,"_40":-5,"_41":-5,"_42":43,"_44":18,"_45":-5,"_46":-5,"_47":-5,"_48":18,"_49":-5,"_50":-5,"_51":-5,"_52":18},"user_id","anonymous","username","profile_picture_url","https://cdn.openai.com/sora/images/profile_placeholder_v4.png","profile_picture_id","is_default_profile_picture","follower_count",0,"is_following","display_name","permalink","can_cameo","verified","character_count","owner_profile","social_context","follows_you","id","t_6aafeb65a6e0819194b9d33600f4ce33","posted_at",1789913957.651927,"text","Health Chatbot Code","og_title","Check out this chat","og_description","Here's a chat someone thought you'd want to see.","og_image_variant","control","attachments",[80],"preview_image_url","https://ogimg.chatgpt.com/?postId=t_6aafeb65a6e0819194b9d33600f4ce33","https://chatgpt.com/s/t_6aafeb65a6e0819194b9d33600f4ce33","permissions",{"_73":74,"_75":18,"_76":18,"_77":74,"_78":79},"use_experimental_unfurl","can_read",true,"can_write","can_delete","can_remix","share_setting","public",{"_53":81,"_82":83,"_9":84,"_85":86,"_87":-5,"_88":84,"_89":-5,"_90":-5,"_91":-5},"t_6aafeb65a6e0819194b9d33600f4ce33-attachment-0","tags",[],"message_slice","messages",[92],"group_chat_id","source_attachment_type","widget_type","widget_name","highlight",{"_53":93,"_94":95,"_96":97,"_98":99,"_100":101,"_102":103,"_104":74,"_105":106,"_107":108,"_109":110,"_111":112},"319bbf29-c74d-4690-9823-da1e57fd7b98","author",{"_207":208,"_209":-5,"_107":210},"create_time",1789913004.525211,"update_time",1789913781.187998,"content",{"_203":57,"_204":205},"status","finished_successfully","end_turn","weight",1,"metadata",{"_113":114,"_115":74,"_116":117,"_118":119,"_120":121,"_122":123,"_124":125,"_126":127,"_128":129,"_130":74,"_131":132,"_133":134,"_135":136,"_137":136,"_138":123,"_139":123,"_140":74,"_141":142,"_143":144},"recipient","all","channel","final","finish_details",{"_167":199,"_200":201},"is_complete","citations",[],"content_references",[164,165,166],"story_events",[],"resolved_model_slug","gpt-5-6","code_blocks",{"_145":146,"_147":148,"_149":150,"_151":152,"_153":154},"search_result_groups",[],"cot_version","v5","conversation_followup_suggestions_eligible","request_id","4dc78dfa-21db-47e4-8e9a-152b23319d99","message_type","next","turn_exchange_id","73bf6c30-4fbe-4e31-b155-2d2f52f2a2d6","working_turn_id","model_slug","default_model_slug","can_save","parent_id","62ee80c2-9c6a-471e-8c70-ace57187c0f7","turn_id","2931b720-1da8-4fcf-89ce-7e001f494889","0",{"_53":163,"_156":18,"_157":18,"_158":-5},"1",{"_53":161,"_156":18,"_157":74,"_158":162},"2",{"_53":160,"_156":18,"_157":18,"_158":-5},"3",{"_53":159,"_156":18,"_157":18,"_158":-5},"4",{"_53":155,"_156":18,"_157":18,"_158":-5},"8azkzr","edited","previewable","preview_language","x8s9us","a0nwql","j6uh38","html","w8x4k4",{"_167":168,"_169":195,"_171":196,"_173":197,"_175":195,"_176":198,"_178":179,"_180":106,"_182":183,"_184":185,"_186":187,"_188":189},{"_167":168,"_169":190,"_171":191,"_173":192,"_175":190,"_176":193,"_178":179,"_180":194,"_182":183,"_184":185,"_186":187,"_188":189},{"_167":168,"_169":170,"_171":172,"_173":174,"_175":170,"_176":177,"_178":179,"_180":181,"_182":183,"_184":185,"_186":187,"_188":189},"type","followup_a","matched_text","Integrate backend API for symptom analysis","start_idx",29400,"end_idx",29442,"alt","prompt_text","Suggest how to integrate and implement calls to a backend API for symptom analysis and health report extraction, including how the frontend prototype should handle API requests and display responses for user inputs and uploaded reports.","receiver_followup_intent","tailored_continuation","receiver_followup_position",3,"source","receiver_followups_tailored","receiver_followup_treatment","tailored","receiver_followup_capability_scope","logged_out","receiver_followup_prompt_version","v2","Add multi-language (Telugu/English) support",29354,29397,"Help me implement multi-language support switching, especially between Telugu and English languages for the UI and chatbot responses, following the described prototype's features.",2,"Implement the main JavaScript logic",29316,29351,"Please generate the full JavaScript (`script.js`) code implementing the chat UI behavior, file upload handling, symptom analysis prompts, health dashboard updates, medication tracker functions, mood selection logic, and navigation between the app sections as described in the frontend prototype.","stop","stop_tokens",[202],200002,"content_type","parts",[206],"Yes 👍 Below is a **working frontend prototype** for your health AI chatbot. It includes chat UI, emotion-aware replies, symptom analysis, file upload/preview, health dashboard, medication tracker, and Telugu/English support.\
+\
+**Important:** this frontend does not diagnose diseases or prescribe medicines. The “medicine” section is intentionally limited to medication information/reminders and doctor/pharmacist confirmation.\
+\
+Create these 3 files:\
+\
+```text\
+medimind-ai/\
+├── index.html\
+├── style.css\
+└── script.js\
+```\
+\
+### 1. `index.html`\
+\
+```html\
+\u003c!DOCTYPE html\u003e\
+\u003chtml lang=\"en\"\u003e\
+\u003chead\u003e\
+  \u003cmeta charset=\"UTF-8\"\u003e\
+  \u003cmeta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\"\u003e\
+\
+  \u003ctitle\u003eMediMind AI - Health Assistant\u003c/title\u003e\
+\
+  \u003clink rel=\"stylesheet\" href=\"style.css\"\u003e\
+\
+  \u003clink rel=\"preconnect\" href=\"https://fonts.googleapis.com\"\u003e\
+  \u003clink rel=\"preconnect\" href=\"https://fonts.gstatic.com\" crossorigin\u003e\
+  \u003clink href=\"https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800\u0026display=swap\" rel=\"stylesheet\"\u003e\
+\u003c/head\u003e\
+\
+\u003cbody\u003e\
+\
+\u003cdiv class=\"app\"\u003e\
+\
+  \u003c!-- SIDEBAR --\u003e\
+  \u003caside class=\"sidebar\"\u003e\
+\
+    \u003cdiv class=\"logo\"\u003e\
+      \u003cdiv class=\"logo-icon\"\u003e✚\u003c/div\u003e\
+      \u003cdiv\u003e\
+        \u003ch2\u003eMediMind\u003c/h2\u003e\
+        \u003cspan\u003eAI Health Assistant\u003c/span\u003e\
+      \u003c/div\u003e\
+    \u003c/div\u003e\
+\
+    \u003cbutton class=\"new-chat\" onclick=\"newChat()\"\u003e\
+      ＋ New conversation\
+    \u003c/button\u003e\
+\
+    \u003cnav\u003e\
+      \u003cbutton class=\"nav-item active\" onclick=\"showSection('chat')\"\u003e\
+        💬 \u003cspan\u003eAI Chat\u003c/span\u003e\
+      \u003c/button\u003e\
+\
+      \u003cbutton class=\"nav-item\" onclick=\"showSection('reports')\"\u003e\
+        📄 \u003cspan\u003eReports\u003c/span\u003e\
+      \u003c/button\u003e\
+\
+      \u003cbutton class=\"nav-item\" onclick=\"showSection('dashboard')\"\u003e\
+        📊 \u003cspan\u003eHealth Dashboard\u003c/span\u003e\
+      \u003c/button\u003e\
+\
+      \u003cbutton class=\"nav-item\" onclick=\"showSection('medications')\"\u003e\
+        💊 \u003cspan\u003eMedications\u003c/span\u003e\
+      \u003c/button\u003e\
+\
+      \u003cbutton class=\"nav-item\" onclick=\"showSection('mood')\"\u003e\
+        ❤️ \u003cspan\u003eMood \u0026 Symptoms\u003c/span\u003e\
+      \u003c/button\u003e\
+    \u003c/nav\u003e\
+\
+    \u003cdiv class=\"privacy\"\u003e\
+      \u003cdiv\u003e🔐\u003c/div\u003e\
+      \u003cdiv\u003e\
+        \u003cstrong\u003ePrivacy first\u003c/strong\u003e\
+        \u003cp\u003eYour health data should be handled securely.\u003c/p\u003e\
+      \u003c/div\u003e\
+    \u003c/div\u003e\
+\
+  \u003c/aside\u003e\
+\
+\
+  \u003c!-- MAIN --\u003e\
+  \u003cmain class=\"main\"\u003e\
+\
+    \u003c!-- TOP BAR --\u003e\
+    \u003cheader class=\"topbar\"\u003e\
+\
+      \u003cdiv\u003e\
+        \u003ch1 id=\"pageTitle\"\u003eAI Health Assistant\u003c/h1\u003e\
+        \u003cp id=\"pageSubtitle\"\u003eTell me what you're experiencing.\u003c/p\u003e\
+      \u003c/div\u003e\
+\
+      \u003cdiv class=\"status\"\u003e\
+        \u003cspan class=\"status-dot\"\u003e\u003c/span\u003e\
+        AI Online\
+      \u003c/div\u003e\
+\
+    \u003c/header\u003e\
+\
+\
+    \u003c!-- CHAT SECTION --\u003e\
+    \u003csection id=\"chat\" class=\"section active\"\u003e\
+\
+      \u003cdiv class=\"chat-layout\"\u003e\
+\
+        \u003cdiv class=\"chat-card\"\u003e\
+\
+          \u003cdiv id=\"messages\" class=\"messages\"\u003e\
+\
+            \u003cdiv class=\"message ai\"\u003e\
+\
+              \u003cdiv class=\"avatar\"\u003e✚\u003c/div\u003e\
+\
+              \u003cdiv class=\"bubble\"\u003e\
+\
+                \u003cstrong\u003eMediMind AI\u003c/strong\u003e\
+\
+                \u003cp\u003e\
+                  Hi! I'm MediMind, your health information assistant.\
+                  Tell me about your symptoms or upload a health report.\
+                \u003c/p\u003e\
+\
+                \u003cdiv class=\"warning\"\u003e\
+                  ⚠️ I provide health information, not a medical diagnosis\
+                  or prescription.\
+                \u003c/div\u003e\
+\
+              \u003c/div\u003e\
+\
+            \u003c/div\u003e\
+\
+          \u003c/div\u003e\
+\
+\
+          \u003c!-- QUICK ACTIONS --\u003e\
+          \u003cdiv class=\"quick-actions\"\u003e\
+\
+            \u003cbutton onclick=\"quickMessage('I have fever and headache')\"\u003e\
+              🌡️ Fever\
+            \u003c/button\u003e\
+\
+            \u003cbutton onclick=\"quickMessage('I have stomach pain')\"\u003e\
+              🤕 Pain\
+            \u003c/button\u003e\
+\
+            \u003cbutton onclick=\"quickMessage('I am feeling anxious')\"\u003e\
+              ❤️ Emotional support\
+            \u003c/button\u003e\
+\
+            \u003cbutton onclick=\"showSection('reports')\"\u003e\
+              📄 Analyze report\
+            \u003c/button\u003e\
+\
+          \u003c/div\u003e\
+\
+\
+          \u003c!-- INPUT --\u003e\
+          \u003cdiv class=\"input-area\"\u003e\
+\
+            \u003clabel class=\"upload-btn\"\u003e\
+\
+              📎\
+\
+              \u003cinput\
+                type=\"file\"\
+                id=\"fileInput\"\
+                accept=\".pdf,.png,.jpg,.jpeg,.txt\"\
+                hidden\
+                onchange=\"handleFile(event)\"\
+              \u003e\
+\
+            \u003c/label\u003e\
+\
+            \u003ctextarea\
+              id=\"userInput\"\
+              placeholder=\"Describe your symptoms...\"\
+              rows=\"1\"\
+              onkeydown=\"handleEnter(event)\"\
+            \u003e\u003c/textarea\u003e\
+\
+            \u003cbutton class=\"send-btn\" onclick=\"sendMessage()\"\u003e\
+              ➤\
+            \u003c/button\u003e\
+\
+          \u003c/div\u003e\
+\
+          \u003cdiv id=\"fileStatus\"\u003e\u003c/div\u003e\
+\
+        \u003c/div\u003e\
+\
+\
+        \u003c!-- RIGHT PANEL --\u003e\
+        \u003caside class=\"right-panel\"\u003e\
+\
+          \u003cdiv class=\"card\"\u003e\
+\
+            \u003ch3\u003e🩺 Today's health\u003c/h3\u003e\
+\
+            \u003cdiv class=\"health-score\"\u003e\
+              \u003cdiv class=\"score-circle\"\u003e\
+                \u003cspan\u003e78\u003c/span\u003e\
+              \u003c/div\u003e\
+\
+              \u003cdiv\u003e\
+                \u003cstrong\u003eGood\u003c/strong\u003e\
+                \u003cp\u003eBased on your tracked data\u003c/p\u003e\
+              \u003c/div\u003e\
+            \u003c/div\u003e\
+\
+          \u003c/div\u003e\
+\
+\
+          \u003cdiv class=\"card\"\u003e\
+\
+            \u003ch3\u003e🚨 Safety check\u003c/h3\u003e\
+\
+            \u003cp class=\"small\"\u003e\
+              If you have severe symptoms or an emergency,\
+              seek immediate medical help.\
+            \u003c/p\u003e\
+\
+            \u003cbutton class=\"emergency-btn\" onclick=\"emergencyHelp()\"\u003e\
+              Emergency guidance\
+            \u003c/button\u003e\
+\
+          \u003c/div\u003e\
+\
+\
+          \u003cdiv class=\"card\"\u003e\
+\
+            \u003ch3\u003e💡 Suggested\u003c/h3\u003e\
+\
+            \u003cbutton class=\"suggestion\" onclick=\"quickMessage('Explain my symptoms')\"\u003e\
+              Explain my symptoms\
+            \u003c/button\u003e\
+\
+            \u003cbutton class=\"suggestion\" onclick=\"showSection('reports')\"\u003e\
+              Analyze a report\
+            \u003c/button\u003e\
+\
+            \u003cbutton class=\"suggestion\" onclick=\"showSection('mood')\"\u003e\
+              Track my mood\
+            \u003c/button\u003e\
+\
+          \u003c/div\u003e\
+\
+        \u003c/aside\u003e\
+\
+      \u003c/div\u003e\
+\
+    \u003c/section\u003e\
+\
+\
+    \u003c!-- REPORTS --\u003e\
+    \u003csection id=\"reports\" class=\"section\"\u003e\
+\
+      \u003cdiv class=\"page-card\"\u003e\
+\
+        \u003cdiv class=\"section-heading\"\u003e\
+\
+          \u003cdiv\u003e\
+            \u003ch2\u003e📄 Health Report Analyzer\u003c/h2\u003e\
+\
+            \u003cp\u003e\
+              Upload a PDF, image or text report for\
+              structured health-information extraction.\
+            \u003c/p\u003e\
+          \u003c/div\u003e\
+\
+          \u003clabel class=\"primary-btn\"\u003e\
+\
+            Upload Report\
+\
+            \u003cinput\
+              type=\"file\"\
+              accept=\".pdf,.png,.jpg,.jpeg,.txt\"\
+              hidden\
+              onchange=\"analyzeReport(event)\"\
+            \u003e\
+\
+          \u003c/label\u003e\
+\
+        \u003c/div\u003e\
+\
+\
+        \u003cdiv id=\"reportResult\" class=\"report-result\"\u003e\
+\
+          \u003cdiv class=\"empty-state\"\u003e\
+            \u003cdiv\u003e📑\u003c/div\u003e\
+            \u003ch3\u003eNo report uploaded\u003c/h3\u003e\
+            \u003cp\u003e\
+              Upload a laboratory report to see extracted values,\
+              reference ranges and questions to discuss with a clinician.\
+            \u003c/p\u003e\
+          \u003c/div\u003e\
+\
+        \u003c/div\u003e\
+\
+      \u003c/div\u003e\
+\
+    \u003c/section\u003e\
+\
+\
+    \u003c!-- DASHBOARD --\u003e\
+    \u003csection id=\"dashboard\" class=\"section\"\u003e\
+\
+      \u003cdiv class=\"page-card\"\u003e\
+\
+        \u003ch2\u003e📊 Health Dashboard\u003c/h2\u003e\
+\
+        \u003cp\u003eYour tracked health information.\u003c/p\u003e\
+\
+        \u003cdiv class=\"stats-grid\"\u003e\
+\
+          \u003cdiv class=\"stat\"\u003e\
+            \u003cspan\u003e❤️ Heart Rate\u003c/span\u003e\
+            \u003cstrong\u003e76 BPM\u003c/strong\u003e\
+          \u003c/div\u003e\
+\
+          \u003cdiv class=\"stat\"\u003e\
+            \u003cspan\u003e💧 Water\u003c/span\u003e\
+            \u003cstrong\u003e5 / 8 glasses\u003c/strong\u003e\
+          \u003c/div\u003e\
+\
+          \u003cdiv class=\"stat\"\u003e\
+            \u003cspan\u003e😴 Sleep\u003c/span\u003e\
+            \u003cstrong\u003e7h 20m\u003c/strong\u003e\
+          \u003c/div\u003e\
+\
+          \u003cdiv class=\"stat\"\u003e\
+            \u003cspan\u003e😊 Mood\u003c/span\u003e\
+            \u003cstrong\u003eGood\u003c/strong\u003e\
+          \u003c/div\u003e\
+\
+        \u003c/div\u003e\
+\
+        \u003cdiv class=\"chart\"\u003e\
+\
+          \u003ch3\u003eHealth trend\u003c/h3\u003e\
+\
+          \u003cdiv class=\"bars\"\u003e\
+\
+            \u003cspan style=\"height:40%\"\u003e\u003c/span\u003e\
+            \u003cspan style=\"height:55%\"\u003e\u003c/span\u003e\
+            \u003cspan style=\"height:48%\"\u003e\u003c/span\u003e\
+            \u003cspan style=\"height:70%\"\u003e\u003c/span\u003e\
+            \u003cspan style=\"height:65%\"\u003e\u003c/span\u003e\
+            \u003cspan style=\"height:80%\"\u003e\u003c/span\u003e\
+            \u003cspan style=\"height:72%\"\u003e\u003c/span\u003e\
+\
+          \u003c/div\u003e\
+\
+        \u003c/div\u003e\
+\
+      \u003c/div\u003e\
+\
+    \u003c/section\u003e\
+\
+\
+    \u003c!-- MEDICATIONS --\u003e\
+    \u003csection id=\"medications\" class=\"section\"\u003e\
+\
+      \u003cdiv class=\"page-card\"\u003e\
+\
+        \u003ch2\u003e💊 Medication Tracker\u003c/h2\u003e\
+\
+        \u003cp\u003e\
+          Track medicines prescribed by your healthcare professional.\
+        \u003c/p\u003e\
+\
+        \u003cdiv class=\"medicine-form\"\u003e\
+\
+          \u003cinput id=\"medicineName\" placeholder=\"Medicine name\"\u003e\
+\
+          \u003cinput id=\"medicineTime\" type=\"time\"\u003e\
+\
+          \u003cbutton onclick=\"addMedicine()\"\u003e\
+            Add\
+          \u003c/button\u003e\
+\
+        \u003c/div\u003e\
+\
+        \u003cdiv id=\"medicineList\"\u003e\u003c/div\u003e\
+\
+        \u003cdiv class=\"medicine-warning\"\u003e\
+\
+          ⚠️ MediMind does not independently prescribe medicines.\
+          Always verify medicines, doses and timing with a qualified\
+          healthcare professional.\
+\
+        \u003c/div\u003e\
+\
+      \u003c/div\u003e\
+\
+    \u003c/section\u003e\
+\
+\
+    \u003c!-- MOOD --\u003e\
+    \u003csection id=\"mood\" class=\"section\"\u003e\
+\
+      \u003cdiv class=\"page-card\"\u003e\
+\
+        \u003ch2\u003e❤️ Mood \u0026 Symptom Tracker\u003c/h2\u003e\
+\
+        \u003cp\u003e\
+          Tracking patterns can help you discuss changes with a clinician.\
+        \u003c/p\u003e\
+\
+        \u003cdiv class=\"moods\"\u003e\
+\
+          \u003cbutton onclick=\"selectMood('😊 Happy')\"\u003e😊\u003c/button\u003e\
+          \u003cbutton onclick=\"selectMood('🙂 Okay')\"\u003e🙂\u003c/button\u003e\
+          \u003cbutton onclick=\"selectMood('😐 Neutral')\"\u003e😐\u003c/button\u003e\
+          \u003cbutton onclick=\"selectMood('😟 Worried')\"\u003e😟\u003c/button\u003e\
+          \u003cbutton onclick=\"selectMood('😔 Sad')\"\u003e😔\u003c/button\u003e\
+\
+        \u003c/div\u003e\
+\
+        \u003cdiv id=\"selectedMood\" class=\"selected-mood\"\u003e\
+          Select how you feel today.\
+        \u003c/div\u003e\
+\
+      \u003c/div\u003e\
+\
+    \u003c/section\u003e\
+\
+  \u003c/main\u003e\
+\
+\u003c/div\u003e\
+\
+\u003cscript src=\"script.js\"\u003e\u003c/script\u003e\
+\
+\u003c/body\u003e\
+\u003c/html\u003e\
+```\
+\
+### 2. `style.css`\
+\
+```css\
+* {\
+  box-sizing: border-box;\
+  margin: 0;\
+  padding: 0;\
+}\
+\
+:root {\
+  --bg: #f5f8fc;\
+  --card: #ffffff;\
+  --primary: #1769ff;\
+  --primary-dark: #0d4dcc;\
+  --text: #172033;\
+  --muted: #718096;\
+  --border: #e5eaf1;\
+  --green: #16a36a;\
+  --danger: #e5484d;\
+}\
+\
+body {\
+  font-family: \"Inter\", sans-serif;\
+  background: var(--bg);\
+  color: var(--text);\
+}\
+\
+button,\
+input,\
+textarea {\
+  font-family: inherit;\
+}\
+\
+\
+/* APP */\
+\
+.app {\
+  display: flex;\
+  min-height: 100vh;\
+}\
+\
+\
+/* SIDEBAR */\
+\
+.sidebar {\
+  width: 260px;\
+  background: #fff;\
+  border-right: 1px solid var(--border);\
+  padding: 25px 18px;\
+  display: flex;\
+  flex-direction: column;\
+}\
+\
+.logo {\
+  display: flex;\
+  align-items: center;\
+  gap: 12px;\
+  margin-bottom: 30px;\
+}\
+\
+.logo-icon {\
+  width: 45px;\
+  height: 45px;\
+  background: var(--primary);\
+  color: white;\
+  border-radius: 13px;\
+  display: flex;\
+  align-items: center;\
+  justify-content: center;\
+  font-size: 23px;\
+  font-weight: bold;\
+}\
+\
+.logo h2 {\
+  font-size: 19px;\
+}\
+\
+.logo span {\
+  font-size: 10px;\
+  color: var(--muted);\
+}\
+\
+.new-chat {\
+  border: none;\
+  background: #edf4ff;\
+  color: var(--primary);\
+  padding: 13px;\
+  border-radius: 10px;\
+  font-weight: 600;\
+  cursor: pointer;\
+  margin-bottom: 20px;\
+}\
+\
+nav {\
+  display: flex;\
+  flex-direction: column;\
+  gap: 6px;\
+}\
+\
+.nav-item {\
+  border: none;\
+  background: transparent;\
+  padding: 13px;\
+  text-align: left;\
+  border-radius: 10px;\
+  cursor: pointer;\
+  color: #526071;\
+  font-size: 14px;\
+}\
+\
+.nav-item:hover,\
+.nav-item.active {\
+  background: #edf4ff;\
+  color: var(--primary);\
+}\
+\
+.privacy {\
+  margin-top: auto;\
+  background: #f4faf7;\
+  padding: 13px;\
+  border-radius: 12px;\
+  display: flex;\
+  gap: 9px;\
+  font-size: 11px;\
+}\
+\
+.privacy p {\
+  color: var(--muted);\
+  margin-top: 4px;\
+}\
+\
+\
+/* MAIN */\
+\
+.main {\
+  flex: 1;\
+  min-width: 0;\
+}\
+\
+.topbar {\
+  height: 82px;\
+  background: white;\
+  border-bottom: 1px solid var(--border);\
+  display: flex;\
+  align-items: center;\
+  justify-content: space-between;\
+  padding: 0 30px;\
+}\
+\
+.topbar h1 {\
+  font-size: 21px;\
+}\
+\
+.topbar p {\
+  font-size: 12px;\
+  color: var(--muted);\
+  margin-top: 5px;\
+}\
+\
+.status {\
+  font-size: 12px;\
+  color: var(--green);\
+  display: flex;\
+  align-items: center;\
+  gap: 6px;\
+}\
+\
+.status-dot {\
+  width: 8px;\
+  height: 8px;\
+  background: var(--green);\
+  border-radius: 50%;\
+}\
+\
+\
+/* SECTIONS */\
+\
+.section {\
+  display: none;\
+  padding: 25px;\
+}\
+\
+.section.active {\
+  display: block;\
+}\
+\
+\
+/* CHAT */\
+\
+.chat-layout {\
+  display: grid;\
+  grid-template-columns: minmax(0, 1fr) 290px;\
+  gap: 20px;\
+}\
+\
+.chat-card {\
+  background: white;\
+  border: 1px solid var(--border);\
+  border-radius: 18px;\
+  min-height: calc(100vh - 132px);\
+  display: flex;\
+  flex-direction: column;\
+}\
+\
+.messages {\
+  flex: 1;\
+  padding: 25px;\
+  overflow-y: auto;\
+}\
+\
+.message {\
+  display: flex;\
+  gap: 12px;\
+  margin-bottom: 20px;\
+}\
+\
+.avatar {\
+  min-width: 37px;\
+  height: 37px;\
+  border-radius: 11px;\
+  background: var(--primary);\
+  color: white;\
+  display: flex;\
+  align-items: center;\
+  justify-content: center;\
+}\
+\
+.message.user {\
+  justify-content: flex-end;\
+}\
+\
+.message.user .avatar {\
+  order: 2;\
+  background: #dce8ff;\
+  color: var(--primary);\
+}\
+\
+.bubble {\
+  max-width: 75%;\
+  background: #f6f8fb;\
+  padding: 14px 16px;\
+  border-radius: 15px;\
+  font-size: 14px;\
+  line-height: 1.6;\
+}\
+\
+.message.user .bubble {\
+  background: var(--primary);\
+  color: white;\
+}\
+\
+.bubble strong {\
+  font-size: 12px;\
+}\
+\
+.warning {\
+  margin-top: 10px;\
+  padding: 9px;\
+  background: #fff7df;\
+  color: #806000;\
+  border-radius: 8px;\
+  font-size: 11px;\
+}\
+\
+\
+/* QUICK ACTIONS */\
+\
+.quick-actions {\
+  display: flex;\
+  gap: 8px;\
+  padding: 12px 20px;\
+  border-top: 1px solid var(--border);\
+  overflow-x: auto;\
+}\
+\
+.quick-actions button,\
+.suggestion {\
+  white-space: nowrap;\
+  border: 1px solid var(--border);\
+  background: white;\
+  padding: 9px 12px;\
+  border-radius: 20px;\
+  cursor: pointer;\
+  font-size: 11px;\
+}\
+\
+.quick-actions button:hover,\
+.suggestion:hover {\
+  border-color: var(--primary);\
+  color: var(--primary);\
+}\
+\
+\
+/* INPUT */\
+\
+.input-area {\
+  display: flex;\
+  gap: 10px;\
+  padding: 15px 20px;\
+  border-top: 1px solid var(--border);\
+  align-items: center;\
+}\
+\
+.input-area textarea {\
+  flex: 1;\
+  border: none;\
+  outline: none;\
+  resize: none;\
+  font-size: 14px;\
+  min-height: 40px;\
+  padding: 11px;\
+}\
+\
+.upload-btn {\
+  cursor: pointer;\
+  font-size: 20px;\
+}\
+\
+.send-btn {\
+  width: 43px;\
+  height: 43px;\
+  border: none;\
+  background: var(--primary);\
+  color: white;\
+  border-radius: 12px;\
+  cursor: pointer;\
+}\
+\
+#fileStatus {\
+  padding: 0 20px 10px;\
+  font-size: 11px;\
+  color: var(--muted);\
+}\
+\
+\
+/* RIGHT PANEL */\
+\
+.right-panel {\
+  display: flex;\
+  flex-direction: column;\
+  gap: 15px;\
+}\
+\
+.card,\
+.page-card {\
+  background: white;\
+  border: 1px solid var(--border);\
+  border-radius: 16px;\
+  padding: 20px;\
+}\
+\
+.card h3 {\
+  font-size: 14px;\
+  margin-bottom: 15px;\
+}\
+\
+.health-score {\
+  display: flex;\
+  align-items: center;\
+  gap: 12px;\
+}\
+\
+.score-circle {\
+  width: 65px;\
+  height: 65px;\
+  border-radius: 50%;\
+  background: #eaf3ff;\
+  color: var(--primary);\
+  display: flex;\
+  justify-content: center;\
+  align-items: center;\
+  font-size: 20px;\
+  font-weight: bold;\
+}\
+\
+.small {\
+  font-size: 11px;\
+  color: var(--muted);\
+  line-height: 1.5;\
+}\
+\
+.emergency-btn {\
+  width: 100%;\
+  border: none;\
+  background: #fff0f0;\
+  color: var(--danger);\
+  padding: 10px;\
+  border-radius: 9px;\
+  margin-top: 12px;\
+  cursor: pointer;\
+}\
+\
+.suggestion {\
+  width: 100%;\
+  margin-bottom: 8px;\
+  text-align: left;\
+}\
+\
+\
+/* PAGE */\
+\
+.page-card {\
+  max-width: 1100px;\
+  margin: auto;\
+}\
+\
+.page-card h2 {\
+  margin-bottom: 7px;\
+}\
+\
+.page-card \u003e p {\
+  color: var(--muted);\
+  font-size: 13px;\
+  margin-bottom: 25px;\
+}\
+\
+.section-heading {\
+  display: flex;\
+  align-items: center;\
+  justify-content: space-between;\
+}\
+\
+.primary-btn {\
+  background: var(--primary);\
+  color: white;\
+  padding: 11px 16px;\
+  border-radius: 9px;\
+  cursor: pointer;\
+  font-size: 12px;\
+}\
+\
+\
+/* REPORT */\
+\
+.report-result {\
+  border: 1px dashed #ccd5e3;\
+  border-radius: 14px;\
+  min-height: 280px;\
+  padding: 30px;\
+}\
+\
+.empty-state {\
+  text-align: center;\
+  color: var(--muted);\
+  padding: 50px 20px;\
+}\
+\
+.empty-state div {\
+  font-size: 40px;\
+}\
+\
+.empty-state h3 {\
+  color: var(--text);\
+  margin: 12px 0 5px;\
+}\
+\
+.report-table {\
+  width: 100%;\
+  border-collapse: collapse;\
+  margin-top: 20px;\
+}\
+\
+.report-table th,\
+.report-table td {\
+  padding: 12px;\
+  border-bottom: 1px solid var(--border);\
+  text-align: left;\
+  font-size: 12px;\
+}\
+\
+.report-table th {\
+  background: #f7f9fc;\
+}\
+\
+\
+/* DASHBOARD */\
+\
+.stats-grid {\
+  display: grid;\
+  grid-template-columns: repeat(4, 1fr);\
+  gap: 15px;\
+}\
+\
+.stat {\
+  padding: 18px;\
+  background: #f7f9fc;\
+  border-radius: 12px;\
+}\
+\
+.stat span {\
+  display: block;\
+  font-size: 11px;\
+  color: var(--muted);\
+  margin-bottom: 10px;\
+}\
+\
+.stat strong {\
+  font-size: 17px;\
+}\
+\
+.chart {\
+  margin-top: 30px;\
+}\
+\
+.bars {\
+  height: 220px;\
+  display: flex;\
+  align-items: end;\
+  gap: 20px;\
+  padding: 20px;\
+  background: #f7f9fc;\
+  border-radius: 12px;\
+  margin-top: 15px;\
+}\
+\
+.bars span {\
+  flex: 1;\
+  background: var(--primary);\
+  border-radius: 8px 8px 0 0;\
+}\
+\
+\
+/* MEDICATION */\
+\
+.medicine-form {\
+  display: flex;\
+  gap: 10px;\
+  margin-bottom: 20px;\
+}\
+\
+.medicine-form input {\
+  flex: 1;\
+  border: 1px solid var(--border);\
+  padding: 12px;\
+  border-radius: 9px;\
+  outline: none;\
+}\
+\
+.medicine-form button {\
+  border: none;\
+  background: var(--primary);\
+  color: white;\
+  padding: 0 20px;\
+  border-radius: 9px;\
+  cursor: pointer;\
+}\
+\
+.medicine {\
+  display: flex;\
+  justify-content: space-between;\
+  padding: 15px;\
+  background: #f7f9fc;\
+  border-radius: 10px;\
+  margin-bottom: 8px;\
+}\
+\
+.medicine-warning {\
+  margin-top: 20px;\
+  padding: 15px;\
+  background: #fff7df;\
+  border-radius: 10px;\
+  color: #806000;\
+  font-size: 12px;\
+}\
+\
+\
+/* MOOD */\
+\
+.moods {\
+  display: flex;\
+  gap: 15px;\
+}\
+\
+.moods button {\
+  width: 60px;\
+  height: 60px;\
+  border: 1px solid var(--border);\
+  background: white;\
+  border-radius: 15px;\
+  font-size: 25px;\
+  cursor: pointer;\
+}\
+\
+.selected-mood {\
+  margin-top: 25px;\
+  padding: 15px;\
+  background: #f7f9fc;\
+  border-radius: 10px;\
+}\
+\
+\
+/* MOBILE */\
+\
+@media (max-width: 850px) {\
+\
+  .sidebar {\
+    width: 70px;\
+    padding: 15px 8px;\
+  }\
+\
+  .logo div:not(.logo-icon),\
+  .new-chat,\
+  .nav-item span,\
+  .privacy {\
+    display: none;\
+  }\
+\
+  .logo {\
+    justify-content: center;\
+  }\
+\
+  .nav-item {\
+    text-align: center;\
+    font-size: 20px;\
+  }\
+\
+  .chat-layout {\
+    grid-template-columns: 1fr;\
+  }\
+\
+  .right-panel {\
+    display: none;\
+  }\
+\
+  .stats-grid {\
+    grid-template-columns: 1fr 1fr;\
+  }\
+\
+}\
+\
+@media (max-width: 600px) {\
+\
+  .topbar {\
+    padding: 0 15px;\
+  }\
+\
+  .section {\
+    padding: 12px;\
+  }\
+\
+  .messages {\
+    padding: 15px;\
+  }\
+\
+  .bubble {\
+    max-width: 88%;\
+  }\
+\
+  .stats-grid {\
+    grid-template-columns: 1fr;\
+  }\
+\
+  .section-heading {\
+    flex-direction: column;\
+    align-items: flex-start;\
+    gap: 15px;\
+  }\
+\
+  .medicine-form {\
+    flex-direction: column;\
+  }\
+\
+  .medicine-form button {\
+    padding: 12px;\
+  }\
+\
+}\
+```\
+\
+### 3. `script.js`\
+\
+```javascript\
+const messages = document.getElementById(\"messages\\

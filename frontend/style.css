@@ -1414,3 +1414,137 @@ hr {
     background: #fee2e2;
     color: #991b1b;
 }
+
+/* ================= PASSWORD TOGGLE & REGISTRATION MODAL ================= */
+
+.password-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+    width: 100%;
+    margin-bottom: 18px;
+}
+
+.password-wrapper input {
+    width: 100%;
+    padding-right: 44px;
+    margin-bottom: 0 !important;
+}
+
+.toggle-password-btn {
+    position: absolute;
+    right: 10px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 18px;
+    line-height: 1;
+    padding: 6px;
+    color: #64748b;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    user-select: none;
+    transition: opacity 0.2s;
+}
+
+.toggle-password-btn:hover {
+    opacity: 0.7;
+}
+
+.register-prompt {
+    margin-top: 14px;
+    font-size: 14px;
+    color: #64748b;
+    text-align: center;
+}
+
+.register-prompt .link-btn {
+    background: none;
+    border: none;
+    color: #078e98;
+    font-weight: bold;
+    cursor: pointer;
+    font-size: 14px;
+    text-decoration: underline;
+    padding: 0;
+}
+
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(15, 23, 42, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 200;
+    padding: 16px;
+    backdrop-filter: blur(3px);
+}
+
+.modal-card {
+    background: white;
+    border-radius: 14px;
+    width: 100%;
+    max-width: 440px;
+    padding: 24px;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+    animation: modalScale 0.2s ease-out;
+}
+
+@keyframes modalScale {
+    from {
+        opacity: 0;
+        transform: scale(0.95);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+.modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+}
+
+.modal-header h2 {
+    font-size: 20px;
+    color: #0f172a;
+}
+
+.close-modal {
+    background: none;
+    border: none;
+    font-size: 18px;
+    cursor: pointer;
+    color: #64748b;
+    padding: 4px;
+}
+
+.close-modal:hover {
+    color: #0f172a;
+}
+
+.modal-body label {
+    display: block;
+    font-size: 13px;
+    font-weight: bold;
+    color: #334155;
+    margin-bottom: 6px;
+    margin-top: 12px;
+}
+
+.modal-body input {
+    width: 100%;
+    padding: 11px 13px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    font-size: 14px;
+}
+

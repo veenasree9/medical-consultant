@@ -364,6 +364,49 @@ app.post("/api/auth/password-login", async (req, res) => {
     }
 });
 
+// Patient Self-Registration in PostgreSQL
+app.post("/api/auth/register-patient", async (req, res) => {
+    try {
+        const { fullName, phone, password, age, gender, bloodGroup, email, address, guardianName, guardianPhone } = req.body;
+        if (!fullName || !password) {
+            return res.status(400).json({
+                success: false,
+                message: "Full Name and Password are required."
+            });
+        }
+
+        const newPatient = await db.registerPatient({
+            fullName,
+            phone,
+            password,
+            age,
+            gender,
+            bloodGroup,
+            email,
+            address,
+            guardianName,
+            guardianPhone
+        });
+
+        await db.insertAuditLog(newPatient.patientId, "patient_registration", newPatient.patientId, {
+            fullName: newPatient.fullName,
+            phone: newPatient.phone
+        });
+
+        res.json({
+            success: true,
+            patientId: newPatient.patientId,
+            message: `Registration successful! Your Patient ID is ${newPatient.patientId}. Please log in.`
+        });
+    } catch (err) {
+        console.error("Patient registration error:", err.message);
+        res.status(500).json({
+            success: false,
+            message: "Registration failed: " + err.message
+        });
+    }
+});
+
 // Patient Profile from PostgreSQL
 app.get("/api/patient/me", auth("patient"), async (req, res) => {
     try {

@@ -146,163 +146,56 @@
                 Patient Login
             </h1>
 
-            <p id="loginSubtitle">
-                Verify your mobile number with OTP.
-            </p>
-
-
-            <!-- PATIENT OTP -->
-
-            <div id="patientLogin">
-
-                <label>
-                    10-digit Indian mobile number
-                </label>
-
-                <div class="phone-row">
-
-                    <span>+91</span>
-
-                    <input
-                        id="phone"
-                        type="text"
-                        maxlength="10"
-                        inputmode="numeric"
-                        placeholder="9876543210">
-
-                </div>
-
-
-                <button
-                    id="sendOtpBtn"
-                    class="primary full"
-                    onclick="sendOTP()">
-
-                    Send Verification Code
-
-                </button>
-
-
-                <!-- OTP -->
-
-                <div
-                    id="otpSection"
-                    class="otp-section hidden">
-
-                    <label>
-                        6-digit verification code
-                    </label>
-
-                    <input
-                        id="otp"
-                        type="text"
-                        maxlength="6"
-                        inputmode="numeric"
-                        placeholder="123456">
-
-
-                    <button
-                        id="verifyOtpBtn"
-                        class="primary full"
-                        onclick="verifyOTP()">
-
-                        Verify Code
-
-                    </button>
-
-
-                    <button
-                        id="resendBtn"
-                        class="link-btn"
-                        onclick="sendOTP(true)"
-                        disabled>
-
-                        Resend Code
-                        <span id="timer"></span>
-
-                    </button>
-
-                </div>
-
-
-                <div class="divider">
-                    <span>OR</span>
-                </div>
-
-            </div>
-
-
-            <!-- PASSWORD LOGIN -->
-
             <label id="credentialLabel">
                 Patient ID
             </label>
 
             <input
                 id="username"
-                placeholder="PAT1001">
-
+                type="text"
+                placeholder="Enter your Patient ID"
+                autocomplete="username">
 
             <label>
                 Password
             </label>
 
-            <input
-                id="password"
-                type="password"
-                placeholder="Password">
+            <div class="password-wrapper">
+                <input
+                    id="password"
+                    type="password"
+                    placeholder="Enter your password"
+                    autocomplete="current-password">
 
+                <button
+                    type="button"
+                    id="togglePasswordBtn"
+                    class="toggle-password-btn"
+                    onclick="togglePasswordVisibility()"
+                    aria-label="Show or hide password"
+                    title="Show or hide password">
+                    👁️
+                </button>
+            </div>
 
             <button
+                id="loginBtn"
                 class="primary full"
                 onclick="passwordLogin()">
 
-                Log In with Password
+                Log In
 
             </button>
 
-
-            <button
-                class="secondary full"
-                onclick="createUser()">
-
-                Create New User
-
-            </button>
-
+            <div id="registerPrompt" class="register-prompt">
+                <span>New patient? </span>
+                <button type="button" class="link-btn" onclick="openRegisterModal()">Register here</button>
+            </div>
 
             <p
                 id="loginMessage"
                 class="error">
-
             </p>
-
-
-            <div class="demo-box">
-
-                <b>Demo Login</b>
-
-                <br><br>
-
-                Doctor:
-                <code>doctor</code>
-                /
-                <code>1234</code>
-
-                <br>
-
-                Patient:
-                <code>PAT1001</code>
-                /
-                <code>1234</code>
-
-                <br><br>
-
-                <small>
-                    Real SMS OTP requires Twilio configuration.
-                </small>
-
-            </div>
 
         </div>
 
@@ -1053,6 +946,40 @@
 
     </div>
 
+</div>
+
+
+<!-- ================= PATIENT REGISTRATION MODAL ================= -->
+
+<div id="registerModal" class="modal-overlay hidden">
+    <div class="modal-card">
+        <div class="modal-header">
+            <h2>Patient Registration</h2>
+            <button class="close-modal" onclick="closeRegisterModal()">✕</button>
+        </div>
+        <p style="color: #64748b; font-size: 14px; margin-bottom: 12px;">
+            Register in PostgreSQL to receive your unique Patient ID.
+        </p>
+        <div class="modal-body">
+            <label>Full Name *</label>
+            <input id="regName" type="text" placeholder="e.g. Priya Sharma">
+
+            <label>Contact Phone</label>
+            <input id="regPhone" type="text" placeholder="e.g. 9876543210">
+
+            <label>Password *</label>
+            <input id="regPassword" type="password" placeholder="Create a password">
+
+            <label>Blood Group</label>
+            <input id="regBlood" type="text" placeholder="e.g. O+, A+, B+">
+
+            <p id="regMessage" class="error" style="margin-top: 10px;"></p>
+
+            <button class="primary full" style="margin-top: 14px;" onclick="submitRegistration()">
+                Complete Registration
+            </button>
+        </div>
+    </div>
 </div>
 
 

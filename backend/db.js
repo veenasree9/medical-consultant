@@ -439,6 +439,68 @@ async function getRecentAuditLogs(limit = 25) {
     }));
 }
 
+// Register new patient directly in PostgreSQL
+async function registerPatient({ fullName, phone, password, age, gender, bloodGroup, email, address, guardianName, guardianPhone }) {
+    const client = await pool.connect();
+    try {
+        await client.query("BEGIN");
+
+        const countRes = await client.query("SELECT COUNT(*) FROM patients");
+        const nextNum = 1000 + parseInt(countRes.rows[0].count, 10) + 1;
+        const newPatientId = "PAT" + nextNum;
+        const newUserId = "USR_" + newPatientId;
+
+        const passwordHash = await bcrypt.hash(password || "1234", 10);
+
+        await client.query(
+            `INSERT INTO users (user_id, full_name, phone, password_hash, role)
+             VALUES ($1, $2, $3, $4, $5)`,
+            [newUserId, fullName || "Patient", phone || null, passwordHash, "patient"]
+        );
+
+        await client.query(
+            `INSERT INTO patients (user_id, patient_id, full_name, date_of_birth, gender, blood_group, phone, email, address)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+            [
+                newUserId,
+                newPatientId,
+                fullName || "Patient",
+                age ? String(age) : "",
+                gender || "Other",
+                bloodGroup || "",
+                phone || "",
+                email || "",
+                address || ""
+            ]
+        );
+
+        await client.query(
+            `INSERT INTO guardians (patient_id, guardian_name, guardian_phone, relationship)
+             VALUES ($1, $2, $3, $4)`,
+            [newPatientId, guardianName || "", guardianPhone || "", ""]
+        );
+
+        await client.query(
+            `INSERT INTO medical_records (patient_id, medical_history, notes)
+             VALUES ($1, $2, $3)`,
+            [newPatientId, "", ""]
+        );
+
+        await client.query("COMMIT");
+
+        return {
+            patientId: newPatientId,
+            fullName,
+            phone
+        };
+    } catch (err) {
+        await client.query("ROLLBACK");
+        throw err;
+    } finally {
+        client.release();
+    }
+}
+
 module.exports = {
     pool,
     initializeDatabase,
@@ -446,6 +508,7 @@ module.exports = {
     getPatientDetails,
     findOrCreatePatientByPhone,
     updatePatientDetails,
+    registerPatient,
     verifyDoctorUser,
     verifyPatientUser,
     insertAuditLog,
