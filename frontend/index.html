@@ -53,14 +53,6 @@
                 and healthcare helpers.
             </p>
 
-            <button
-                class="primary large"
-                onclick="openLogin('patient')">
-
-                Patient Login
-
-            </button>
-
         </div>
 
 
@@ -76,7 +68,7 @@
                 class="role doctor"
                 onclick="openLogin('doctor')">
 
-                👨‍⚕️ Login as Doctor
+                👨⚕️ Login as Doctor
 
             </button>
 
@@ -84,7 +76,7 @@
                 class="role helper"
                 onclick="openLogin('helper')">
 
-                🧑‍💼 Login as Helper
+                🧑⚕️ Login as Helper
 
             </button>
 
@@ -92,7 +84,7 @@
                 class="role patient"
                 onclick="openLogin('patient')">
 
-                🧑 Login as Patient
+                👨🦰 Login as Patient
 
             </button>
 
@@ -299,13 +291,6 @@
 
                 <br>
 
-                Helper:
-                <code>helper</code>
-                /
-                <code>1234</code>
-
-                <br>
-
                 Patient:
                 <code>PAT1001</code>
                 /
@@ -483,6 +468,30 @@
                 </div>
 
 
+                <div>
+
+                    <label>Guardian Name</label>
+
+                    <input
+                        id="pGuardianName"
+                        placeholder="e.g. Suresh Kumar (Father)"
+                        disabled>
+
+                </div>
+
+
+                <div>
+
+                    <label>Guardian Emergency Phone</label>
+
+                    <input
+                        id="pGuardianPhone"
+                        placeholder="+919876543211"
+                        disabled>
+
+                </div>
+
+
                 <div class="full">
 
                     <label>Address</label>
@@ -646,7 +655,7 @@
 
 
 
-<!-- ================= HELPER DASHBOARD ================= -->
+<!-- ================= HELPER: EMERGENCY ACCIDENT IDENTIFICATION ================= -->
 
 <section
     id="helperDashboard"
@@ -655,14 +664,14 @@
     <nav class="dashboard-nav">
 
         <div class="brand">
-            🧑‍💼 MediCare Helper
+            🏥 MediCare Emergency Portal
         </div>
 
         <button
             class="logout"
-            onclick="logout()">
+            onclick="exitHelperMode()">
 
-            Logout
+            ← Back to Home
 
         </button>
 
@@ -671,62 +680,313 @@
 
     <main class="dashboard-content">
 
-        <div class="welcome">
+        <div class="emergency-header">
 
-            <p class="eyebrow">
-                HELPER PORTAL
-            </p>
+            <div class="emergency-badge">
+                🚨 Emergency First-Responder Mode
+            </div>
 
-            <h1>
-                Helper Dashboard
+            <h1 id="helperTitle">
+                Emergency Patient Identification
             </h1>
 
-            <p>
-                Assist patients with basic portal tasks.
+            <p class="emergency-desc">
+                Use the camera to capture the accident person's face and identify a registered patient.
             </p>
 
         </div>
 
 
-        <div class="profile-card">
+        <!-- CAMERA & CAPTURE CARD -->
+        <div class="camera-card">
 
-            <h2>
-                Patient Assistance
-            </h2>
+            <!-- Camera Viewport / Preview Box -->
+            <div class="camera-wrapper">
 
-            <p>
-                Manage appointments,
-                patient communication and support.
+                <!-- Live Camera Stream -->
+                <video
+                    id="cameraPreview"
+                    class="camera-video hidden"
+                    autoplay
+                    playsinline
+                    muted>
+                </video>
+
+                <!-- Face Framing Guide Overlay (visible during live camera) -->
+                <div
+                    id="faceGuide"
+                    class="face-guide hidden">
+                </div>
+
+                <!-- Initial Placeholder before camera start -->
+                <div
+                    id="cameraPlaceholder"
+                    class="camera-placeholder">
+
+                    <div class="camera-placeholder-icon">
+                        📷
+                    </div>
+
+                    <b>Camera Inactive</b>
+
+                    <p>
+                        Click "Start Camera" below to request camera permission and capture the individual's face.
+                    </p>
+
+                </div>
+
+                <!-- Captured Still Photo Preview -->
+                <img
+                    id="capturedImage"
+                    class="captured-image hidden"
+                    alt="Captured Person Face">
+
+                <!-- Hidden canvas for capturing video frame -->
+                <canvas
+                    id="captureCanvas"
+                    style="display: none;">
+                </canvas>
+
+            </div>
+
+
+            <!-- Camera Control Buttons -->
+            <div class="camera-controls">
+
+                <!-- Step 1: Start Camera -->
+                <button
+                    id="startCameraBtn"
+                    class="btn-emergency"
+                    onclick="startEmergencyCamera()">
+
+                    📸 Start Camera
+
+                </button>
+
+                <!-- Step 2: Capture Photo (while live) -->
+                <button
+                    id="captureBtn"
+                    class="btn-emergency hidden"
+                    onclick="captureEmergencyPhoto()">
+
+                    ⏺ Capture Photo
+
+                </button>
+
+                <!-- Switch Camera (front/back on phones) -->
+                <button
+                    id="switchCameraBtn"
+                    class="btn-secondary hidden"
+                    onclick="switchCameraFacing()">
+
+                    🔄 Switch Camera
+
+                </button>
+
+                <!-- Retake Photo (after capture) -->
+                <button
+                    id="retakeBtn"
+                    class="btn-secondary hidden"
+                    onclick="retakePhoto()">
+
+                    🔁 Retake Photo
+
+                </button>
+
+                <!-- Step 3: Identify Patient (after capture) -->
+                <button
+                    id="identifyBtn"
+                    class="btn-emergency hidden"
+                    onclick="identifyEmergencyPatient()">
+
+                    🔍 Identify Patient
+
+                </button>
+
+                <!-- Stop Camera -->
+                <button
+                    id="stopCameraBtn"
+                    class="btn-secondary hidden"
+                    onclick="stopEmergencyCamera()">
+
+                    ⏹ Turn Off Camera
+
+                </button>
+
+            </div>
+
+
+            <!-- Identification Processing Status Indicator -->
+            <div
+                id="identifyingSpinner"
+                class="hidden"
+                style="text-align: center; margin-top: 20px; color: #dc2626; font-weight: bold;">
+
+                ⏳ Analyzing face with biometric verification service... Please wait.
+
+            </div>
+
+
+            <!-- IDENTIFICATION RESULT: UNCONFIGURED SERVICE -->
+            <div
+                id="unconfiguredResult"
+                class="result-card result-unconfigured hidden">
+
+                <h3>
+                    ⚠️ Face identification service is not configured yet.
+                </h3>
+
+                <p id="unconfiguredMessage">
+                    Face identification service is not configured yet. A real biometric face-matching service (such as AWS Rekognition or Azure AI Face API) is required for reliable facial matching. MediCare strictly never displays fake or randomly guessed patient matches.
+                </p>
+
+                <div class="config-reqs">
+                    <b>Required Backend Credentials:</b><br>
+                    • <b>AWS Rekognition:</b> <code>AWS_ACCESS_KEY_ID</code>, <code>AWS_SECRET_ACCESS_KEY</code>, <code>AWS_REGION</code><br>
+                    • <b>Azure Face API:</b> <code>AZURE_FACE_API_KEY</code>, <code>AZURE_FACE_ENDPOINT</code>
+                </div>
+
+            </div>
+
+
+            <!-- IDENTIFICATION RESULT: NO RELIABLE MATCH -->
+            <div
+                id="noMatchResult"
+                class="result-card result-nomatch hidden">
+
+                <h3>
+                    ⚠️ No reliable match found
+                </h3>
+
+                <p id="noMatchMessage">
+                    The captured face could not be reliably identified among registered patients. Please ensure adequate lighting, clear face visibility without obstructions, and retake the photo.
+                </p>
+
+            </div>
+
+
+            <!-- IDENTIFICATION RESULT: RELIABLE REGISTERED PATIENT MATCH FOUND -->
+            <!-- STRICT PRIVACY: Displays ONLY Patient ID, Full Name, Blood Group, Guardian Name, Guardian Phone -->
+            <!-- NEVER displays password, email, address, medical history, notes, documents, or full profile -->
+            <div
+                id="matchResult"
+                class="result-card result-success hidden">
+
+                <div class="result-success-header">
+
+                    <h3>
+                        ✅ Registered Patient Identified
+                    </h3>
+
+                    <span class="match-badge">
+                        Verified Match
+                    </span>
+
+                </div>
+
+                <div class="emergency-fields-grid">
+
+                    <div class="emergency-field-item">
+                        <div class="emergency-field-label">Patient / User ID</div>
+                        <div id="resPatientId" class="emergency-field-value">-</div>
+                    </div>
+
+                    <div class="emergency-field-item">
+                        <div class="emergency-field-label">Full Name</div>
+                        <div id="resPatientName" class="emergency-field-value">-</div>
+                    </div>
+
+                    <div class="emergency-field-item">
+                        <div class="emergency-field-label">Blood Group</div>
+                        <div id="resBloodGroup" class="emergency-field-value">
+                            <span id="resBloodGroupBadge" class="blood-group-badge">-</span>
+                        </div>
+                    </div>
+
+                    <div class="emergency-field-item">
+                        <div class="emergency-field-label">Guardian Name</div>
+                        <div id="resGuardianName" class="emergency-field-value">-</div>
+                    </div>
+
+                </div>
+
+                <!-- Guardian Emergency Phone with Direct Call Action -->
+                <div class="guardian-contact-box">
+
+                    <div>
+                        <div class="emergency-field-label">Emergency Guardian Phone</div>
+                        <div id="resGuardianPhone" class="emergency-field-value" style="font-size: 20px; color: #065f46;">
+                            -
+                        </div>
+                    </div>
+
+                    <a
+                        id="resCallGuardianBtn"
+                        class="call-guardian-btn"
+                        href="tel:">
+
+                        📞 Call Guardian Now
+
+                    </a>
+
+                </div>
+
+                <div class="privacy-notice">
+                    🔒 <b>Patient Privacy Protection:</b> Sensitive medical history, diagnosis, prescriptions, address, and personal emails are restricted and protected from emergency helper view.
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <!-- AUDIT LOG SECTION -->
+        <div class="audit-section">
+
+            <div class="audit-header">
+
+                <h3>
+                    📋 Emergency Identification Audit Log
+                </h3>
+
+                <button
+                    class="btn-secondary"
+                    style="padding: 6px 14px; font-size: 13px;"
+                    onclick="loadEmergencyAuditLogs()">
+
+                    🔄 Refresh Log
+
+                </button>
+
+            </div>
+
+            <p style="font-size: 13px; color: #64748b; margin-bottom: 12px;">
+                Every identification attempt is timestamped and recorded for safety and audit compliance. Biometric images and raw templates are never permanently retained.
             </p>
 
+            <div class="audit-table-wrap">
 
-            <div class="helper-actions">
+                <table class="audit-table">
 
-                <button
-                    class="helper-action"
-                    onclick="showToast('Appointments opened')">
+                    <thead>
+                        <tr>
+                            <th>Timestamp</th>
+                            <th>Helper Session</th>
+                            <th>Outcome</th>
+                            <th>Matched Patient ID</th>
+                            <th>Details</th>
+                        </tr>
+                    </thead>
 
-                    📅 Appointments
+                    <tbody id="auditLogTableBody">
+                        <tr>
+                            <td colspan="5" style="text-align: center; color: #94a3b8; padding: 20px;">
+                                No identification events recorded yet in this session.
+                            </td>
+                        </tr>
+                    </tbody>
 
-                </button>
-
-
-                <button
-                    class="helper-action"
-                    onclick="showToast('Patient list opened')">
-
-                    👥 Patient List
-
-                </button>
-
-
-                <button
-                    class="helper-action"
-                    onclick="showToast('Messages opened')">
-
-                    💬 Messages
-
-                </button>
+                </table>
 
             </div>
 

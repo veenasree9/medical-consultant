@@ -48,6 +48,12 @@ function hideAll() {
 
 function openLogin(type) {
 
+    // Helper uses emergency camera identification without username/password login
+    if (type === "helper") {
+        openHelperEmergency();
+        return;
+    }
+
     selectedLogin = type;
 
     hideAll();
@@ -78,24 +84,6 @@ function openLogin(type) {
 
     }
 
-
-    else if (type === "helper") {
-
-        $("loginTitle").textContent =
-            "Helper Login";
-
-        $("loginSubtitle").textContent =
-            "Use your helper username and password.";
-
-        $("credentialLabel").textContent =
-            "Helper Username";
-
-        $("username").placeholder =
-            "helper";
-
-    }
-
-
     else {
 
         $("loginTitle").textContent =
@@ -117,6 +105,8 @@ function openLogin(type) {
 /* ================= HOME ================= */
 
 function goHome() {
+
+    stopEmergencyCamera();
 
     hideAll();
 
@@ -515,22 +505,6 @@ async function passwordLogin() {
 
         }
 
-
-        else if (data.role === "helper") {
-
-            localStorage.setItem(
-                "helperToken",
-                data.token
-            );
-
-            hideAll();
-
-            $("helperDashboard")
-                .classList
-                .remove("hidden");
-
-        }
-
     }
 
 
@@ -623,6 +597,12 @@ async function loadPatientDashboard() {
     $("pAddress").value =
         p.address || "";
 
+    $("pGuardianName").value =
+        p.guardianName || "";
+
+    $("pGuardianPhone").value =
+        p.guardianPhone || "";
+
     $("pNotes").value =
         p.notes || "";
 
@@ -645,6 +625,8 @@ function enableUpdate() {
         "pGender",
         "pBlood",
         "pEmail",
+        "pGuardianName",
+        "pGuardianPhone",
         "pAddress",
         "pNotes"
     ].forEach(id => {
@@ -688,6 +670,12 @@ async function saveDetails() {
 
         email:
             $("pEmail").value.trim(),
+
+        guardianName:
+            $("pGuardianName").value.trim(),
+
+        guardianPhone:
+            $("pGuardianPhone").value.trim(),
 
         address:
             $("pAddress").value.trim(),
@@ -874,6 +862,11 @@ async function searchPatient() {
                 </p>
 
                 <p>
+                    <b>Guardian:</b>
+                    ${escapeHTML(p.guardianName || "Not provided")} (${escapeHTML(p.guardianPhone || "No phone")})
+                </p>
+
+                <p>
                     <b>Medical Notes:</b>
                     ${escapeHTML(p.notes || "")}
                 </p>
@@ -937,17 +930,11 @@ function logout() {
         "doctorToken"
     );
 
-    localStorage.removeItem(
-        "helperToken"
-    );
-
-
     patientToken = null;
 
     clearInterval(
         resendTimer
     );
-
 
     goHome();
 }
@@ -1052,3 +1039,327 @@ $("otp").addEventListener(
 
     }
 );
+
+
+/* ================= EMERGENCY HELPER IDENTIFICATION ================= */
+
+let emergencyCameraStream = null;
+let currentFacingMode = "environment"; // default to rear camera for scanning another person
+let capturedImageData = null;
+let emergencySessionId =
+    sessionStorage.getItem("emergencyHelperSession") ||
+    ("session-" + Math.random().toString(36).substring(2, 9));
+
+sessionStorage.setItem("emergencyHelperSession", emergencySessionId);
+
+
+function openHelperEmergency() {
+    hideAll();
+    $("helperDashboard").classList.remove("hidden");
+    resetEmergencyCameraUI();
+    loadEmergencyAuditLogs();
+}
+
+function exitHelperMode() {
+    stopEmergencyCamera();
+    goHome();
+}
+
+function resetEmergencyCameraUI() {
+    stopEmergencyCamera();
+    capturedImageData = null;
+
+    $("cameraPreview").classList.add("hidden");
+    $("faceGuide").classList.add("hidden");
+    $("cameraPlaceholder").classList.remove("hidden");
+    $("capturedImage").classList.add("hidden");
+
+    $("startCameraBtn").classList.remove("hidden");
+    $("captureBtn").classList.add("hidden");
+    $("switchCameraBtn").classList.add("hidden");
+    $("retakeBtn").classList.add("hidden");
+    $("identifyBtn").classList.add("hidden");
+    $("stopCameraBtn").classList.add("hidden");
+
+    $("identifyingSpinner").classList.add("hidden");
+    $("unconfiguredResult").classList.add("hidden");
+    $("noMatchResult").classList.add("hidden");
+    $("matchResult").classList.add("hidden");
+}
+
+async function startEmergencyCamera() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        showToast("Camera API is not supported in this browser.");
+        return;
+    }
+
+    try {
+        const startBtn = $("startCameraBtn");
+        startBtn.textContent = "Connecting Camera...";
+        startBtn.disabled = true;
+
+        let stream;
+        try {
+            stream = await navigator.mediaDevices.getUserMedia({
+                video: {
+                    facingMode: currentFacingMode,
+                    width: { ideal: 1280 },
+                    height: { ideal: 720 }
+                },
+                audio: false
+            });
+        } catch (facingErr) {
+            // Fallback without facingMode constraint
+            stream = await navigator.mediaDevices.getUserMedia({
+                video: true,
+                audio: false
+            });
+        }
+
+        emergencyCameraStream = stream;
+        const video = $("cameraPreview");
+        video.srcObject = stream;
+        await video.play();
+
+        video.classList.remove("hidden");
+        $("faceGuide").classList.remove("hidden");
+        $("cameraPlaceholder").classList.add("hidden");
+        $("capturedImage").classList.add("hidden");
+
+        startBtn.classList.add("hidden");
+        startBtn.disabled = false;
+        startBtn.textContent = "📸 Start Camera";
+
+        $("captureBtn").classList.remove("hidden");
+        $("switchCameraBtn").classList.remove("hidden");
+        $("stopCameraBtn").classList.remove("hidden");
+        $("retakeBtn").classList.add("hidden");
+        $("identifyBtn").classList.add("hidden");
+
+        // Hide previous results
+        $("unconfiguredResult").classList.add("hidden");
+        $("noMatchResult").classList.add("hidden");
+        $("matchResult").classList.add("hidden");
+
+        showToast("Camera started. Align the face inside the guide.");
+    } catch (err) {
+        console.error("Camera access error:", err);
+        $("startCameraBtn").disabled = false;
+        $("startCameraBtn").textContent = "📸 Start Camera";
+        showToast("Camera access denied or unavailable: " + err.message);
+    }
+}
+
+function stopEmergencyCamera() {
+    if (emergencyCameraStream) {
+        emergencyCameraStream.getTracks().forEach(track => track.stop());
+        emergencyCameraStream = null;
+    }
+
+    const video = $("cameraPreview");
+    if (video) {
+        video.srcObject = null;
+        video.classList.add("hidden");
+    }
+
+    $("faceGuide").classList.add("hidden");
+
+    if (!capturedImageData) {
+        $("cameraPlaceholder").classList.remove("hidden");
+        $("startCameraBtn").classList.remove("hidden");
+    }
+
+    $("captureBtn").classList.add("hidden");
+    $("switchCameraBtn").classList.add("hidden");
+    $("stopCameraBtn").classList.add("hidden");
+}
+
+function switchCameraFacing() {
+    currentFacingMode = currentFacingMode === "environment" ? "user" : "environment";
+    stopEmergencyCamera();
+    startEmergencyCamera();
+}
+
+function captureEmergencyPhoto() {
+    const video = $("cameraPreview");
+    const canvas = $("captureCanvas");
+
+    if (!video || !emergencyCameraStream) {
+        showToast("Camera is not running.");
+        return;
+    }
+
+    const width = video.videoWidth || 640;
+    const height = video.videoHeight || 480;
+
+    canvas.width = width;
+    canvas.height = height;
+
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(video, 0, 0, width, height);
+
+    capturedImageData = canvas.toDataURL("image/jpeg", 0.92);
+
+    // Display captured still photo
+    const capturedImg = $("capturedImage");
+    capturedImg.src = capturedImageData;
+    capturedImg.classList.remove("hidden");
+
+    // Stop live stream to save battery and freeze frame
+    stopEmergencyCamera();
+
+    $("cameraPlaceholder").classList.add("hidden");
+    $("startCameraBtn").classList.add("hidden");
+    $("captureBtn").classList.add("hidden");
+    $("switchCameraBtn").classList.add("hidden");
+    $("stopCameraBtn").classList.add("hidden");
+
+    $("retakeBtn").classList.remove("hidden");
+    $("identifyBtn").classList.remove("hidden");
+
+    showToast("Photo captured! Click 'Identify Patient'.");
+}
+
+function retakePhoto() {
+    capturedImageData = null;
+    $("capturedImage").classList.add("hidden");
+    $("unconfiguredResult").classList.add("hidden");
+    $("noMatchResult").classList.add("hidden");
+    $("matchResult").classList.add("hidden");
+
+    startEmergencyCamera();
+}
+
+async function identifyEmergencyPatient() {
+    if (!capturedImageData) {
+        showToast("Please capture a photo first.");
+        return;
+    }
+
+    const identifyBtn = $("identifyBtn");
+    identifyBtn.disabled = true;
+    identifyBtn.textContent = "⏳ Identifying...";
+
+    $("identifyingSpinner").classList.remove("hidden");
+    $("unconfiguredResult").classList.add("hidden");
+    $("noMatchResult").classList.add("hidden");
+    $("matchResult").classList.add("hidden");
+
+    try {
+        const response = await fetch(`${API_URL}/api/helper/identify-person`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-Helper-Session": emergencySessionId
+            },
+            body: JSON.stringify({
+                image: capturedImageData,
+                sessionId: emergencySessionId
+            })
+        });
+
+        const data = await response.json();
+
+        $("identifyingSpinner").classList.add("hidden");
+        identifyBtn.disabled = false;
+        identifyBtn.textContent = "🔍 Identify Patient";
+
+        // 1. Service Unconfigured State
+        if (data.configured === false) {
+            $("unconfiguredResult").classList.remove("hidden");
+            if (data.message) {
+                $("unconfiguredMessage").textContent = data.message;
+            }
+            showToast("Face identification service is not configured.");
+        }
+        // 2. No Reliable Match Found State
+        else if (data.matched === false) {
+            $("noMatchResult").classList.remove("hidden");
+            if (data.message) {
+                $("noMatchMessage").textContent = data.message;
+            }
+            showToast("No reliable registered patient match found.");
+        }
+        // 3. Reliable Registered Patient Match Found
+        // Displays ONLY: Patient ID, Full Name, Blood Group, Guardian Name, Guardian Phone Number
+        // Never displays password, email, address, medical history, notes, documents, or full profile
+        else if (data.matched === true && data.patient) {
+            const p = data.patient;
+
+            $("resPatientId").textContent = p.id || "-";
+            $("resPatientName").textContent = p.name || "-";
+            $("resBloodGroupBadge").textContent = p.bloodGroup || p.blood || "N/A";
+            $("resGuardianName").textContent = p.guardianName || "Not Provided";
+
+            const guardianPhone = p.guardianPhone || "Not Provided";
+            $("resGuardianPhone").textContent = guardianPhone;
+
+            const cleanPhone = String(guardianPhone).replace(/[^\d+]/g, "");
+            $("resCallGuardianBtn").href = cleanPhone ? `tel:${cleanPhone}` : "javascript:void(0)";
+
+            $("matchResult").classList.remove("hidden");
+            showToast("Registered patient successfully identified!");
+        }
+
+        // Refresh audit logs to show the new event
+        loadEmergencyAuditLogs();
+    } catch (err) {
+        console.error("Identification error:", err);
+        $("identifyingSpinner").classList.add("hidden");
+        identifyBtn.disabled = false;
+        identifyBtn.textContent = "🔍 Identify Patient";
+        showToast("Error processing identification: " + err.message);
+    }
+}
+
+async function loadEmergencyAuditLogs() {
+    const tbody = $("auditLogTableBody");
+    if (!tbody) return;
+
+    try {
+        const response = await fetch(`${API_URL}/api/helper/audit-logs`);
+        const data = await response.json();
+
+        if (!response.ok || !data.success || !data.logs || data.logs.length === 0) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="5" style="text-align: center; color: #94a3b8; padding: 20px;">
+                        No identification events recorded yet.
+                    </td>
+                </tr>
+            `;
+            return;
+        }
+
+        tbody.innerHTML = data.logs.map(log => {
+            let statusTagClass = "unconfigured";
+            let statusLabel = "Service Unconfigured";
+
+            if (log.status === "patient_identified" || log.status === "matched") {
+                statusTagClass = "matched";
+                statusLabel = "Match Verified";
+            } else if (log.status === "no_reliable_match" || log.status === "no_match") {
+                statusTagClass = "nomatch";
+                statusLabel = "No Match Found";
+            }
+
+            const formattedTime = new Date(log.timestamp).toLocaleTimeString([], {
+                hour: "2-digit",
+                minute: "2-digit",
+                second: "2-digit"
+            });
+
+            return `
+                <tr>
+                    <td><b>${formattedTime}</b></td>
+                    <td><code>${escapeHTML(log.sessionId || "-")}</code></td>
+                    <td><span class="status-tag ${statusTagClass}">${statusLabel}</span></td>
+                    <td><b>${escapeHTML(log.matchedPatientId || "None")}</b></td>
+                    <td style="color: #64748b;">${escapeHTML(log.message || "-")}</td>
+                </tr>
+            `;
+        }).join("");
+    } catch (err) {
+        console.warn("Failed to load audit logs:", err);
+    }
+}
