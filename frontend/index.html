@@ -256,23 +256,34 @@
         <!-- ================= PRIMARY DETAILS CARD ================= -->
         <div class="profile-card">
 
-            <div class="profile-head">
+            <div class="profile-head" style="justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
 
-                <div class="avatar">
-                    👤
+                <div style="display: flex; align-items: center; gap: 16px;">
+                    <div class="avatar">
+                        👤
+                    </div>
+
+                    <div>
+                        <h2 id="patientName">
+                            Patient
+                        </h2>
+
+                        <p>
+                            Patient ID:
+                            <b id="patientId">-</b>
+                        </p>
+                    </div>
                 </div>
 
-                <div>
-
-                    <h2 id="patientName">
-                        Patient
-                    </h2>
-
-                    <p>
-                        Patient ID:
-                        <b id="patientId">-</b>
-                    </p>
-
+                <div class="export-pdf-actions">
+                    <button
+                        type="button"
+                        id="downloadPdfBtn"
+                        class="btn-pdf-export"
+                        onclick="downloadPatientPdf()"
+                        title="Download medical details and emergency contact data for physical archives">
+                        📥 Download Medical Record (PDF)
+                    </button>
                 </div>
 
             </div>
@@ -285,7 +296,16 @@
                 <h3>
                     📋 Primary Patient Details
                 </h3>
-                <span class="badge-tag">PostgreSQL Stored</span>
+                <div style="display: flex; gap: 8px; align-items: center;">
+                    <button
+                        type="button"
+                        class="btn-export-pdf"
+                        onclick="downloadPatientPdf()"
+                        title="Export physical PDF record">
+                        📄 Export PDF
+                    </button>
+                    <span class="badge-tag">PostgreSQL Stored</span>
+                </div>
             </div>
 
 
@@ -1240,14 +1260,15 @@
 
 
 
-<!-- ================= CHAT ================= -->
+<!-- ================= CHAT BOARD ================= -->
 
 <button
+    id="chatFab"
     class="chat-fab"
-    onclick="toggleChat()">
-
+    onclick="toggleChat()"
+    title="Open MediCare Chat Board">
     💬
-
+    <span id="chatFabUnread" class="chat-fab-unread hidden">0</span>
 </button>
 
 
@@ -1255,43 +1276,138 @@
     id="chatBox"
     class="chat-box hidden">
 
+    <!-- Chat Header -->
     <div class="chat-head">
+        <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 18px;">💬</span>
+            <div>
+                <b>MediCare Chat Board</b>
+                <div id="chatAuthStatus" style="font-size: 11px; opacity: 0.85;">PostgreSQL Connected</div>
+            </div>
+        </div>
 
-        <b>
-            💬 MediCare Support
-        </b>
-
-        <button onclick="toggleChat()">
+        <button class="chat-close-btn" onclick="toggleChat()" title="Close Chat">
             ×
         </button>
-
     </div>
 
+    <!-- Mode Switcher Tabs -->
+    <div class="chat-mode-tabs">
+        <button
+            id="tabDoctorChat"
+            type="button"
+            class="chat-tab active"
+            onclick="switchChatMode('doctor')">
+            👨‍⚕️ Doctor Chat
+        </button>
+        <button
+            id="tabAiAssistant"
+            type="button"
+            class="chat-tab"
+            onclick="switchChatMode('ai')">
+            🤖 AI Health Assistant
+        </button>
+    </div>
 
-    <div
-        id="chatMessages"
-        class="chat-messages">
+    <!-- ================= MODE 1: DOCTOR-PATIENT CHAT ================= -->
+    <div id="doctorChatContainer" class="chat-mode-panel">
 
-        <div class="bot-msg">
+        <!-- Recipient Selector Bar -->
+        <div class="chat-peer-bar">
+            <div id="doctorChatPeerLabel" class="peer-label">Doctor:</div>
+            <select id="chatPeerSelect" onchange="onChatPeerChanged()">
+                <option value="">Loading contacts...</option>
+            </select>
+            <button
+                type="button"
+                class="chat-reload-btn"
+                onclick="loadDoctorChatMessages(true)"
+                title="Refresh messages">
+                🔄
+            </button>
+        </div>
 
-            Hello! 👋
-            How can we help you?
+        <!-- Messages Area -->
+        <div id="doctorChatMessages" class="chat-messages-container">
+            <div class="chat-empty-state">
+                Select a contact to view conversation history.
+            </div>
+        </div>
 
+        <!-- Input Bar -->
+        <div class="chat-input-row">
+            <input
+                id="doctorChatInput"
+                type="text"
+                placeholder="Type a message to your doctor..."
+                autocomplete="off"
+                onkeydown="if(event.key==='Enter') sendDoctorChatMessage()">
+            <button
+                type="button"
+                id="doctorChatSendBtn"
+                class="chat-send-btn"
+                onclick="sendDoctorChatMessage()"
+                title="Send Message">
+                ➤
+            </button>
         </div>
 
     </div>
 
+    <!-- ================= MODE 2: AI HEALTH ASSISTANT ================= -->
+    <div id="aiChatContainer" class="chat-mode-panel hidden">
 
-    <div class="chat-input">
+        <!-- AI Header / Disclaimer Bar -->
+        <div class="ai-banner">
+            <div>
+                <span class="ai-badge">AI Assistant</span>
+                <span style="font-size: 11px; color: #475569;">Educational guidance only</span>
+            </div>
+            <button
+                type="button"
+                class="chat-clear-btn"
+                onclick="clearAiChat()"
+                title="Clear AI conversation history">
+                🗑️ Clear
+            </button>
+        </div>
 
-        <input
-            id="chatInput"
-            placeholder="Type a message..."
-            onkeydown="if(event.key==='Enter') sendMessage()">
+        <!-- AI Messages Area -->
+        <div id="aiChatMessages" class="chat-messages-container">
+            <div class="ai-msg">
+                <b>Hello! 👋 I am your MediCare AI Health Assistant.</b>
+                <p>I can help answer general health questions, explain medical terminology, and help you prepare questions for your doctor.</p>
+                <div class="ai-disclaimer">
+                    ⚠️ <i>I am an educational AI tool, not a doctor. In a medical emergency, call 112/911 or visit the ER immediately.</i>
+                </div>
+            </div>
+        </div>
 
-        <button onclick="sendMessage()">
-            ➤
-        </button>
+        <!-- Typing Indicator -->
+        <div id="aiTypingIndicator" class="ai-typing-indicator hidden">
+            <span class="typing-dot"></span>
+            <span class="typing-dot"></span>
+            <span class="typing-dot"></span>
+            <span style="margin-left: 6px; font-size: 12px; color: #64748b;">AI is thinking...</span>
+        </div>
+
+        <!-- Input Bar -->
+        <div class="chat-input-row">
+            <input
+                id="aiChatInput"
+                type="text"
+                placeholder="Ask a health or wellness question..."
+                autocomplete="off"
+                onkeydown="if(event.key==='Enter') sendAiChatMessage()">
+            <button
+                type="button"
+                id="aiChatSendBtn"
+                class="chat-send-btn ai-send-btn"
+                onclick="sendAiChatMessage()"
+                title="Ask AI Assistant">
+                ➤
+            </button>
+        </div>
 
     </div>
 

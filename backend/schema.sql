@@ -128,6 +128,28 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     metadata JSONB
 );
 
+-- Doctor-Patient Persistent Chat Messages
+CREATE TABLE IF NOT EXISTS chat_messages (
+    id SERIAL PRIMARY KEY,
+    message_id VARCHAR(100) UNIQUE NOT NULL,
+    patient_id VARCHAR(50) NOT NULL REFERENCES patients(patient_id) ON DELETE CASCADE,
+    doctor_id VARCHAR(50) NOT NULL REFERENCES doctors(doctor_id) ON DELETE CASCADE,
+    sender_id VARCHAR(100) NOT NULL,
+    receiver_id VARCHAR(100) NOT NULL,
+    message TEXT NOT NULL,
+    is_read BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- AI Health Assistant Chat History
+CREATE TABLE IF NOT EXISTS ai_chat_messages (
+    id SERIAL PRIMARY KEY,
+    session_id VARCHAR(100) NOT NULL,
+    role VARCHAR(20) NOT NULL, -- 'user' or 'model'
+    message TEXT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- Performance Indexes
 CREATE INDEX IF NOT EXISTS idx_users_phone ON users(phone);
 CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
@@ -140,3 +162,6 @@ CREATE INDEX IF NOT EXISTS idx_medical_records_patient_id ON medical_records(pat
 CREATE INDEX IF NOT EXISTS idx_medical_documents_patient_id ON medical_documents(patient_id);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs(action);
+CREATE INDEX IF NOT EXISTS idx_chat_messages_patient_doctor ON chat_messages(patient_id, doctor_id, created_at ASC);
+CREATE INDEX IF NOT EXISTS idx_chat_messages_receiver_read ON chat_messages(receiver_id, is_read);
+CREATE INDEX IF NOT EXISTS idx_ai_chat_messages_session ON ai_chat_messages(session_id, created_at ASC);

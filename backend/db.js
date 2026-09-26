@@ -787,6 +787,137 @@ async function saveWebAuthnCredential(userId, credentialId, publicKey, counter =
     );
 }
 
+/* ================= CHAT BOARD & MESSAGING METHODS ================= */
+
+// List available doctors for patient chat
+async function getDoctorsList() {
+    await initializeDatabase();
+    const res = await query(
+        `SELECT doctor_id AS "doctorId", full_name AS "name", phone
+         FROM doctors
+         ORDER BY full_name ASC`
+    );
+    return res.rows;
+}
+
+// List patients for doctor chat (with unread counts & last active timestamp)
+async function getDoctorPatientsList(doctorId) {
+    await initializeDatabase();
+    const res = await query(
+        `SELECT p.patient_id AS "patientId", p.full_name AS "name", p.phone, p.blood_group AS "bloodGroup",
+                COALESCE((
+                    SELECT COUNT(*)
+                    FROM chat_messages cm
+                    WHERE cm.patient_id = p.patient_id
+                      AND cm.doctor_id = $1
+                      AND cm.receiver_id = $1
+                      AND cm.is_read = FALSE
+                ), 0) AS "unreadCount",
+                (
+                    SELECT MAX(created_at)
+                    FROM chat_messages cm2
+                    WHERE cm2.patient_id = p.patient_id
+                      AND cm2.doctor_id = $1
+                ) AS "lastMessageTime"
+         FROM patients p
+         ORDER BY "lastMessageTime" DESC NULLS LAST, p.patient_id ASC`,
+        [doctorId]
+    );
+    return res.rows.map(r => ({
+        ...r,
+        unreadCount: parseInt(r.unreadCount, 10) || 0
+    }));
+}
+
+// Fetch chat messages between patient and doctor
+async function getDoctorPatientMessages(patientId, doctorId) {
+    await initializeDatabase();
+    const res = await query(
+        `SELECT message_id AS "messageId",
+                patient_id AS "patientId",
+                doctor_id AS "doctorId",
+                sender_id AS "senderId",
+                receiver_id AS "receiverId",
+                message,
+                is_read AS "isRead",
+                created_at AS "timestamp"
+         FROM chat_messages
+         WHERE UPPER(patient_id) = UPPER($1) AND UPPER(doctor_id) = UPPER($2)
+         ORDER BY created_at ASC`,
+        [patientId, doctorId]
+    );
+    return res.rows;
+}
+
+// Save a doctor-patient chat message
+async function saveChatMessage({ messageId, patientId, doctorId, senderId, receiverId, message }) {
+    await initializeDatabase();
+    const res = await query(
+        `INSERT INTO chat_messages (
+            message_id, patient_id, doctor_id, sender_id, receiver_id, message, is_read, created_at
+         ) VALUES ($1, $2, $3, $4, $5, $6, FALSE, NOW())
+         RETURNING message_id AS "messageId",
+                   patient_id AS "patientId",
+                   doctor_id AS "doctorId",
+                   sender_id AS "senderId",
+                   receiver_id AS "receiverId",
+                   message,
+                   is_read AS "isRead",
+                   created_at AS "timestamp"`,
+        [messageId, patientId, doctorId, senderId, receiverId, message]
+    );
+    return res.rows[0];
+}
+
+// Mark messages as read by reader
+async function markChatMessagesAsRead(patientId, doctorId, readerId) {
+    await initializeDatabase();
+    await query(
+        `UPDATE chat_messages
+         SET is_read = TRUE
+         WHERE UPPER(patient_id) = UPPER($1)
+           AND UPPER(doctor_id) = UPPER($2)
+           AND UPPER(receiver_id) = UPPER($3)
+           AND is_read = FALSE`,
+        [patientId, doctorId, readerId]
+    );
+}
+
+// Save AI Health Assistant message
+async function saveAiChatMessage(sessionId, role, message) {
+    await initializeDatabase();
+    const res = await query(
+        `INSERT INTO ai_chat_messages (session_id, role, message, created_at)
+         VALUES ($1, $2, $3, NOW())
+         RETURNING id, session_id AS "sessionId", role, message, created_at AS "timestamp"`,
+        [sessionId, role, message]
+    );
+    return res.rows[0];
+}
+
+// Get AI chat history for session
+async function getAiChatHistory(sessionId, limit = 50) {
+    await initializeDatabase();
+    const res = await query(
+        `SELECT id, session_id AS "sessionId", role, message, created_at AS "timestamp"
+         FROM ai_chat_messages
+         WHERE session_id = $1
+         ORDER BY created_at ASC
+         LIMIT $2`,
+        [sessionId, limit]
+    );
+    return res.rows;
+}
+
+// Clear AI chat history for session
+async function clearAiChatHistory(sessionId) {
+    await initializeDatabase();
+    await query(
+        `DELETE FROM ai_chat_messages WHERE session_id = $1`,
+        [sessionId]
+    );
+}
+
 module.exports = {
     query,
     initializeDatabase,
@@ -801,5 +932,14 @@ module.exports = {
     verifyPatientUser,
     insertAuditLog,
     getRecentAuditLogs,
-    saveWebAuthnCredential
+    saveWebAuthnCredential,
+    // Chat & AI Exports
+    getDoctorsList,
+    getDoctorPatientsList,
+    getDoctorPatientMessages,
+    saveChatMessage,
+    markChatMessagesAsRead,
+    saveAiChatMessage,
+    getAiChatHistory,
+    clearAiChatHistory
 };

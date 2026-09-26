@@ -5,6 +5,8 @@ const jwt = require("jsonwebtoken");
 const twilio = require("twilio");
 const path = require("path");
 const db = require("./db");
+const { exportPatientPdf } = require("./pdfExport");
+const { generateAiHealthResponse } = require("./aiService");
 
 dotenv.config({ path: path.join(__dirname, "../.env") });
 dotenv.config();
@@ -102,14 +104,20 @@ function auth(requiredRole) {
     return (req, res, next) => {
         try {
             const header = req.headers.authorization || "";
-            if (!header.startsWith("Bearer ")) {
+            let token = "";
+            if (header.startsWith("Bearer ")) {
+                token = header.substring(7);
+            } else if (req.query && req.query.token) {
+                token = req.query.token;
+            }
+
+            if (!token) {
                 return res.status(401).json({
                     success: false,
                     message: "Authentication required."
                 });
             }
 
-            const token = header.substring(7);
             const decoded = jwt.verify(token, JWT_SECRET);
 
             if (requiredRole && decoded.role !== requiredRole) {
@@ -631,6 +639,61 @@ app.get("/api/patient/verification/face-status", auth("patient"), async (req, re
     }
 });
 
+/* ================= EXPORT PATIENT MEDICAL RECORD (PDF) ================= */
+
+// Patient downloading their own physical medical record & emergency contacts
+app.get("/api/patient/export-pdf", auth("patient"), async (req, res) => {
+    try {
+        const patient = await db.getPatientDetails(req.user.patientId);
+        if (!patient) {
+            return res.status(404).json({
+                success: false,
+                message: "Patient record not found in PostgreSQL."
+            });
+        }
+
+        await db.insertAuditLog(req.user.patientId, "export_medical_record_pdf", req.user.patientId, {
+            format: "pdf",
+            type: "physical_record"
+        });
+
+        exportPatientPdf(patient, res);
+    } catch (err) {
+        console.error("PDF export error:", err.message);
+        res.status(500).json({
+            success: false,
+            message: "Failed to generate patient medical PDF: " + err.message
+        });
+    }
+});
+
+// Doctor downloading patient's physical record
+app.get("/api/doctor/patients/:id/export-pdf", auth("doctor"), async (req, res) => {
+    try {
+        const id = String(req.params.id).toUpperCase();
+        const patient = await db.getPatientDetails(id);
+        if (!patient) {
+            return res.status(404).json({
+                success: false,
+                message: "Patient not found in PostgreSQL database."
+            });
+        }
+
+        await db.insertAuditLog(req.user.doctorId, "doctor_export_patient_pdf", id, {
+            format: "pdf",
+            type: "physical_record"
+        });
+
+        exportPatientPdf(patient, res);
+    } catch (err) {
+        console.error("Doctor PDF export error:", err.message);
+        res.status(500).json({
+            success: false,
+            message: "Failed to generate patient PDF: " + err.message
+        });
+    }
+});
+
 /* ================= DOCTOR PATIENT LOOKUP (POSTGRESQL) ================= */
 app.get("/api/doctor/patients/:id", auth("doctor"), async (req, res) => {
     try {
@@ -657,6 +720,236 @@ app.get("/api/doctor/patients/:id", auth("doctor"), async (req, res) => {
             success: false,
             message: "Search failed: " + err.message
         });
+    }
+});
+
+/* ================= CHAT BOARD & MESSAGING SYSTEM (POSTGRESQL) ================= */
+
+// List available doctors for patient chat
+app.get("/api/chat/doctors", auth(), async (req, res) => {
+    try {
+        const doctors = await db.getDoctorsList();
+        res.json({
+            success: true,
+            doctors
+        });
+    } catch (err) {
+        res.status(500).json({ success: false, message: "Failed to load doctors: " + err.message });
+    }
+});
+
+// List patients for doctor chat (with unread counters)
+app.get("/api/chat/patients", auth("doctor"), async (req, res) => {
+    try {
+        const patients = await db.getDoctorPatientsList(req.user.doctorId);
+        res.json({
+            success: true,
+            patients
+        });
+    } catch (err) {
+        res.status(500).json({ success: false, message: "Failed to load patient list: " + err.message });
+    }
+});
+
+// Get messages for conversation (strictly authorized)
+app.get("/api/chat/messages", auth(), async (req, res) => {
+    try {
+        let { patientId, doctorId } = req.query;
+
+        // Strict Backend Role & Identity Enforcements
+        if (req.user.role === "patient") {
+            // Patient can ONLY access their own conversation
+            if (patientId && patientId.toUpperCase() !== req.user.patientId.toUpperCase()) {
+                return res.status(403).json({
+                    success: false,
+                    message: "Unauthorized: You can only access your own conversations."
+                });
+            }
+            patientId = req.user.patientId;
+        } else if (req.user.role === "doctor") {
+            // Doctor can ONLY access conversations with their doctorId
+            if (doctorId && doctorId.toLowerCase() !== req.user.doctorId.toLowerCase()) {
+                return res.status(403).json({
+                    success: false,
+                    message: "Unauthorized: You can only access your own doctor conversations."
+                });
+            }
+            doctorId = req.user.doctorId;
+        } else {
+            return res.status(403).json({ success: false, message: "Access denied." });
+        }
+
+        if (!patientId || !doctorId) {
+            return res.status(400).json({
+                success: false,
+                message: "Both patientId and doctorId are required to load messages."
+            });
+        }
+
+        const messages = await db.getDoctorPatientMessages(patientId, doctorId);
+
+        // Mark incoming messages as read by reader
+        const currentUserId = req.user.role === "patient" ? req.user.patientId : req.user.doctorId;
+        await db.markChatMessagesAsRead(patientId, doctorId, currentUserId);
+
+        res.json({
+            success: true,
+            messages
+        });
+    } catch (err) {
+        res.status(500).json({ success: false, message: "Failed to fetch chat messages: " + err.message });
+    }
+});
+
+// Send message in Doctor-Patient conversation
+app.post("/api/chat/messages", auth(), async (req, res) => {
+    try {
+        let { patientId, doctorId, message } = req.body;
+
+        if (!message || !message.trim()) {
+            return res.status(400).json({ success: false, message: "Message content cannot be empty." });
+        }
+
+        let senderId;
+        let receiverId;
+
+        // Strict Backend Authorization & Identity Assignment
+        if (req.user.role === "patient") {
+            patientId = req.user.patientId;
+            senderId = req.user.patientId;
+            if (!doctorId) {
+                return res.status(400).json({ success: false, message: "Doctor ID is required." });
+            }
+            receiverId = doctorId;
+        } else if (req.user.role === "doctor") {
+            doctorId = req.user.doctorId;
+            senderId = req.user.doctorId;
+            if (!patientId) {
+                return res.status(400).json({ success: false, message: "Patient ID is required." });
+            }
+            receiverId = patientId;
+        } else {
+            return res.status(403).json({ success: false, message: "Only patients and doctors can send chat messages." });
+        }
+
+        const messageId = "MSG-" + Date.now() + "-" + Math.random().toString(36).substring(2, 7).toUpperCase();
+
+        const saved = await db.saveChatMessage({
+            messageId,
+            patientId,
+            doctorId,
+            senderId,
+            receiverId,
+            message: message.trim()
+        });
+
+        await db.insertAuditLog(senderId, "chat_message_sent", receiverId, {
+            messageId,
+            length: message.trim().length
+        });
+
+        res.json({
+            success: true,
+            message: saved
+        });
+    } catch (err) {
+        console.error("Chat send error:", err.message);
+        res.status(500).json({ success: false, message: "Failed to send chat message: " + err.message });
+    }
+});
+
+// Mark messages as read explicitly
+app.post("/api/chat/messages/read", auth(), async (req, res) => {
+    try {
+        let { patientId, doctorId } = req.body;
+        const currentUserId = req.user.role === "patient" ? req.user.patientId : req.user.doctorId;
+
+        if (req.user.role === "patient") {
+            patientId = req.user.patientId;
+        } else if (req.user.role === "doctor") {
+            doctorId = req.user.doctorId;
+        }
+
+        if (patientId && doctorId) {
+            await db.markChatMessagesAsRead(patientId, doctorId, currentUserId);
+        }
+
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ success: false, message: "Failed to update read status: " + err.message });
+    }
+});
+
+/* ================= MODE 2: AI HEALTH ASSISTANT ================= */
+
+// Send prompt to AI Health Assistant
+app.post("/api/chat/ai", auth(), async (req, res) => {
+    try {
+        const { message } = req.body;
+        if (!message || !message.trim()) {
+            return res.status(400).json({ success: false, message: "Message content cannot be empty." });
+        }
+
+        const sessionId = req.user.patientId || req.user.doctorId || req.user.userId;
+
+        // 1. Get recent session history from PostgreSQL
+        const history = await db.getAiChatHistory(sessionId, 10);
+
+        // 2. Persist user message in PostgreSQL
+        await db.saveAiChatMessage(sessionId, "user", message.trim());
+
+        // 3. Call server-side Gemini AI model (gemini-3.8-flash)
+        const aiResponseText = await generateAiHealthResponse(message.trim(), history);
+
+        // 4. Persist AI response in PostgreSQL
+        const savedAiMessage = await db.saveAiChatMessage(sessionId, "model", aiResponseText);
+
+        // 5. Audit log
+        await db.insertAuditLog(sessionId, "ai_health_assistant_interaction", null, {
+            queryLength: message.trim().length,
+            responseLength: aiResponseText.length
+        });
+
+        res.json({
+            success: true,
+            reply: aiResponseText,
+            timestamp: savedAiMessage.timestamp
+        });
+    } catch (err) {
+        console.error("AI Health Assistant error:", err.message);
+        res.status(500).json({
+            success: false,
+            message: "AI Health Assistant error: " + err.message
+        });
+    }
+});
+
+// Load AI Chat history for current authenticated session
+app.get("/api/chat/ai/history", auth(), async (req, res) => {
+    try {
+        const sessionId = req.user.patientId || req.user.doctorId || req.user.userId;
+        const history = await db.getAiChatHistory(sessionId, 50);
+        res.json({
+            success: true,
+            messages: history
+        });
+    } catch (err) {
+        res.status(500).json({ success: false, message: "Failed to load AI history: " + err.message });
+    }
+});
+
+// Clear AI Chat history for current session
+app.delete("/api/chat/ai/history", auth(), async (req, res) => {
+    try {
+        const sessionId = req.user.patientId || req.user.doctorId || req.user.userId;
+        await db.clearAiChatHistory(sessionId);
+        await db.insertAuditLog(sessionId, "ai_health_history_cleared", null);
+        res.json({
+            success: true,
+            message: "AI Health Assistant conversation history cleared from PostgreSQL."
+        });
+    } catch (err) {
+        res.status(500).json({ success: false, message: "Failed to clear AI history: " + err.message });
     }
 });
 

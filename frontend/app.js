@@ -1095,10 +1095,99 @@ async function searchPatient() {
                 </div>
                 <p style="margin-top:10px;"><b>Medical History:</b> ${escapeHTML(p.medicalHistory || "None")}</p>
                 <p><b>Medical Notes:</b> ${escapeHTML(p.notes || "None")}</p>
+
+                <div style="margin-top: 16px; padding-top: 14px; border-top: 1px solid #e2e8f0; display: flex; gap: 10px;">
+                    <button type="button" class="btn-export-pdf" onclick="downloadDoctorPatientPdf('${escapeHTML(p.id)}')">
+                        📥 Export Physical Medical Record (PDF)
+                    </button>
+                </div>
             </div>
         `;
     } catch (error) {
         result.innerHTML = `<p class="error">${escapeHTML(error.message)}</p>`;
+    }
+}
+
+/* ================= DOWNLOAD MEDICAL RECORD (PDF) ================= */
+
+async function downloadPatientPdf() {
+    const btn = $("downloadPdfBtn");
+    const origText = btn ? btn.innerHTML : "";
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = "⏳ Generating Official PDF...";
+    }
+
+    try {
+        showToast("Generating official physical medical record PDF...");
+        const response = await fetch(`${API_URL}/api/patient/export-pdf`, {
+            headers: {
+                Authorization: `Bearer ${patientToken}`
+            }
+        });
+
+        if (!response.ok) {
+            const errData = await response.json().catch(() => ({}));
+            throw new Error(errData.message || "Failed to download medical record PDF.");
+        }
+
+        const blob = await response.blob();
+        const blobUrl = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        const patientId = $("pPatientId") ? $("pPatientId").value : "PAT";
+        a.href = blobUrl;
+        a.download = `MediCare_Medical_Record_${patientId}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(blobUrl);
+
+        showToast("Medical record PDF downloaded successfully for physical records!");
+    } catch (err) {
+        console.error("PDF download error:", err);
+        showToast(err.message || "Could not download medical record PDF.");
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = origText;
+        }
+    }
+}
+
+async function downloadDoctorPatientPdf(patientId) {
+    const token = localStorage.getItem("doctorToken");
+    if (!token) {
+        showToast("Doctor authentication required.");
+        return;
+    }
+
+    try {
+        showToast(`Generating physical medical record PDF for ${patientId}...`);
+        const response = await fetch(`${API_URL}/api/doctor/patients/${encodeURIComponent(patientId)}/export-pdf`, {
+            headers: {
+                Authorization: `Bearer ${token}`
+            }
+        });
+
+        if (!response.ok) {
+            const errData = await response.json().catch(() => ({}));
+            throw new Error(errData.message || "Failed to download patient PDF.");
+        }
+
+        const blob = await response.blob();
+        const blobUrl = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = blobUrl;
+        a.download = `MediCare_Medical_Record_${patientId}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(blobUrl);
+
+        showToast(`Patient ${patientId} physical record PDF exported successfully!`);
+    } catch (err) {
+        console.error("Doctor PDF export error:", err);
+        showToast(err.message || "Could not download patient PDF.");
     }
 }
 
@@ -1209,74 +1298,550 @@ function logout() {
 
 /* ================= CHAT ================= */
 
-function toggleChat() {
+/* ================= UPGRADED CHAT BOARD (DOCTOR CHAT & AI HEALTH ASSISTANT) ================= */
 
-    $("chatBox")
-        .classList
-        .toggle("hidden");
+let currentChatMode = "doctor"; // 'doctor' or 'ai'
+let chatActivePatientId = null;
+let chatActiveDoctorId = null;
+let chatPollingTimer = null;
+
+function getCurrentChatAuth() {
+    const pToken = patientToken || localStorage.getItem("patientToken");
+    const dToken = localStorage.getItem("doctorToken");
+
+    // If currently on doctor page or dashboard, prefer doctor token
+    if (dToken && (!$("doctorDashboard").classList.contains("hidden") || !pToken)) {
+        return { role: "doctor", token: dToken };
+    }
+    if (pToken) {
+        return { role: "patient", token: pToken };
+    }
+    if (dToken) {
+        return { role: "doctor", token: dToken };
+    }
+    return null;
 }
 
+function toggleChat() {
+    const chatBox = $("chatBox");
+    if (!chatBox) return;
 
-function sendMessage() {
+    const isOpening = chatBox.classList.contains("hidden");
+    chatBox.classList.toggle("hidden");
 
-    const input =
-        $("chatInput");
+    if (isOpening) {
+        updateChatAuthUI();
+        if (currentChatMode === "doctor") {
+            initDoctorChat();
+        } else {
+            loadAiChatHistory();
+        }
+        startChatPolling();
+    } else {
+        stopChatPolling();
+    }
+}
 
+function switchChatMode(mode) {
+    currentChatMode = mode;
+    const tabDoc = $("tabDoctorChat");
+    const tabAi = $("tabAiAssistant");
+    const panelDoc = $("doctorChatContainer");
+    const panelAi = $("aiChatContainer");
 
-    const message =
-        input.value.trim();
+    if (mode === "doctor") {
+        if (tabDoc) tabDoc.classList.add("active");
+        if (tabAi) tabAi.classList.remove("active");
+        if (panelDoc) panelDoc.classList.remove("hidden");
+        if (panelAi) panelAi.classList.add("hidden");
+        initDoctorChat();
+    } else {
+        if (tabDoc) tabDoc.classList.remove("active");
+        if (tabAi) tabAi.classList.add("active");
+        if (panelDoc) panelDoc.classList.add("hidden");
+        if (panelAi) panelAi.classList.remove("hidden");
+        loadAiChatHistory();
+    }
+}
 
+function updateChatAuthUI() {
+    const authInfo = getCurrentChatAuth();
+    const statusElem = $("chatAuthStatus");
+    if (!statusElem) return;
 
-    if (!message) return;
+    if (!authInfo) {
+        statusElem.textContent = "Guest (Login required to chat)";
+    } else if (authInfo.role === "patient") {
+        const patId = $("pPatientId") ? $("pPatientId").value : "Patient";
+        statusElem.textContent = `Patient: ${patId}`;
+    } else if (authInfo.role === "doctor") {
+        statusElem.textContent = "Attending Physician";
+    }
+}
 
+function startChatPolling() {
+    stopChatPolling();
+    chatPollingTimer = setInterval(() => {
+        const chatBox = $("chatBox");
+        if (chatBox && !chatBox.classList.contains("hidden") && currentChatMode === "doctor") {
+            loadDoctorChatMessages(false);
+        }
+    }, 4500);
+}
 
-    const chat =
-        $("chatMessages");
+function stopChatPolling() {
+    if (chatPollingTimer) {
+        clearInterval(chatPollingTimer);
+        chatPollingTimer = null;
+    }
+}
 
+/* ================= MODE 1: DOCTOR-PATIENT CHAT LOGIC ================= */
 
-    const user =
-        document.createElement("div");
+async function initDoctorChat() {
+    const authInfo = getCurrentChatAuth();
+    const peerLabel = $("doctorChatPeerLabel");
+    const peerSelect = $("chatPeerSelect");
+    const msgContainer = $("doctorChatMessages");
 
+    if (!authInfo) {
+        if (msgContainer) {
+            msgContainer.innerHTML = `
+                <div class="chat-empty-state">
+                    🔒 Please log in as a Patient or Doctor to access secure conversations.
+                </div>
+            `;
+        }
+        if (peerSelect) {
+            peerSelect.innerHTML = `<option value="">Login Required</option>`;
+        }
+        return;
+    }
 
-    user.className =
-        "user-msg";
+    try {
+        if (authInfo.role === "patient") {
+            if (peerLabel) peerLabel.textContent = "Doctor:";
+            const res = await fetch(`${API_URL}/api/chat/doctors`, {
+                headers: { Authorization: `Bearer ${authInfo.token}` }
+            });
+            const data = await res.json();
+            if (!res.ok || !data.success) {
+                throw new Error(data.message || "Failed to load doctors.");
+            }
 
+            if (peerSelect) {
+                if (data.doctors.length === 0) {
+                    peerSelect.innerHTML = `<option value="">No doctors available</option>`;
+                } else {
+                    peerSelect.innerHTML = data.doctors.map(d => `
+                        <option value="${escapeHTML(d.doctorId)}">
+                            👨‍⚕️ ${escapeHTML(d.name)} (${escapeHTML(d.doctorId)})
+                        </option>
+                    `).join("");
+                }
+            }
 
-    user.textContent =
-        message;
+            chatActivePatientId = $("pPatientId") ? $("pPatientId").value : "PAT1001";
+            chatActiveDoctorId = peerSelect ? peerSelect.value : null;
 
+        } else if (authInfo.role === "doctor") {
+            if (peerLabel) peerLabel.textContent = "Patient:";
+            const res = await fetch(`${API_URL}/api/chat/patients`, {
+                headers: { Authorization: `Bearer ${authInfo.token}` }
+            });
+            const data = await res.json();
+            if (!res.ok || !data.success) {
+                throw new Error(data.message || "Failed to load patients.");
+            }
 
-    chat.appendChild(user);
+            if (peerSelect) {
+                if (data.patients.length === 0) {
+                    peerSelect.innerHTML = `<option value="">No patients available</option>`;
+                } else {
+                    peerSelect.innerHTML = data.patients.map(p => {
+                        const unreadTxt = p.unreadCount > 0 ? ` [${p.unreadCount} NEW]` : "";
+                        return `
+                            <option value="${escapeHTML(p.patientId)}">
+                                👤 ${escapeHTML(p.name)} (${escapeHTML(p.patientId)})${unreadTxt}
+                            </option>
+                        `;
+                    }).join("");
+                }
+            }
 
+            chatActiveDoctorId = "doctor";
+            chatActivePatientId = peerSelect ? peerSelect.value : null;
+        }
+
+        await loadDoctorChatMessages(false);
+    } catch (err) {
+        console.error("Chat init error:", err);
+        if (msgContainer) {
+            msgContainer.innerHTML = `<div class="chat-empty-state error">⚠️ ${escapeHTML(err.message)}</div>`;
+        }
+    }
+}
+
+function onChatPeerChanged() {
+    const peerSelect = $("chatPeerSelect");
+    const authInfo = getCurrentChatAuth();
+    if (!peerSelect || !authInfo) return;
+
+    if (authInfo.role === "patient") {
+        chatActiveDoctorId = peerSelect.value;
+    } else {
+        chatActivePatientId = peerSelect.value;
+    }
+
+    loadDoctorChatMessages(false);
+}
+
+async function loadDoctorChatMessages(isManualRefresh = false) {
+    const authInfo = getCurrentChatAuth();
+    const msgContainer = $("doctorChatMessages");
+    const peerSelect = $("chatPeerSelect");
+    if (!authInfo || !peerSelect) return;
+
+    let patientId;
+    let doctorId;
+
+    if (authInfo.role === "patient") {
+        patientId = $("pPatientId") ? $("pPatientId").value : "PAT1001";
+        doctorId = peerSelect.value;
+    } else {
+        doctorId = "doctor";
+        patientId = peerSelect.value;
+    }
+
+    if (!patientId || !doctorId) {
+        if (msgContainer) {
+            msgContainer.innerHTML = `<div class="chat-empty-state">Select a contact to view conversation history.</div>`;
+        }
+        return;
+    }
+
+    try {
+        const res = await fetch(`${API_URL}/api/chat/messages?patientId=${encodeURIComponent(patientId)}&doctorId=${encodeURIComponent(doctorId)}`, {
+            headers: { Authorization: `Bearer ${authInfo.token}` }
+        });
+        const data = await res.json();
+
+        if (!res.ok || !data.success) {
+            throw new Error(data.message || "Failed to load messages.");
+        }
+
+        if (!msgContainer) return;
+
+        if (data.messages.length === 0) {
+            msgContainer.innerHTML = `
+                <div class="chat-empty-state">
+                    💬 No messages yet. Send a message to start this consultation.
+                </div>
+            `;
+            return;
+        }
+
+        const currentUserId = authInfo.role === "patient" ? patientId.toUpperCase() : doctorId.toLowerCase();
+
+        msgContainer.innerHTML = data.messages.map(m => {
+            const isOutgoing = (m.senderId || "").toUpperCase() === currentUserId.toUpperCase();
+            const timeStr = formatChatTime(m.timestamp);
+            const senderLabel = isOutgoing
+                ? "You"
+                : (authInfo.role === "patient" ? "Doctor" : "Patient");
+            const readIcon = isOutgoing
+                ? `<span class="msg-read-status ${m.isRead ? 'read' : ''}" title="${m.isRead ? 'Read' : 'Delivered'}">${m.isRead ? '✓✓' : '✓'}</span>`
+                : "";
+
+            return `
+                <div class="chat-msg ${isOutgoing ? 'outgoing' : 'incoming'}">
+                    <span class="msg-sender">${senderLabel}</span>
+                    <span class="msg-text">${escapeHTML(m.message)}</span>
+                    <div class="msg-meta">
+                        <span>${timeStr}</span>
+                        ${readIcon}
+                    </div>
+                </div>
+            `;
+        }).join("");
+
+        msgContainer.scrollTop = msgContainer.scrollHeight;
+
+        if (isManualRefresh) {
+            showToast("Chat messages updated.");
+        }
+    } catch (err) {
+        console.error("Load messages error:", err);
+    }
+}
+
+async function sendDoctorChatMessage() {
+    const input = $("doctorChatInput");
+    const btn = $("doctorChatSendBtn");
+    const peerSelect = $("chatPeerSelect");
+    const authInfo = getCurrentChatAuth();
+
+    if (!input || !peerSelect || !authInfo) return;
+    const text = input.value.trim();
+    if (!text) return;
+
+    let patientId;
+    let doctorId;
+
+    if (authInfo.role === "patient") {
+        patientId = $("pPatientId") ? $("pPatientId").value : "PAT1001";
+        doctorId = peerSelect.value;
+    } else {
+        doctorId = "doctor";
+        patientId = peerSelect.value;
+    }
+
+    if (!patientId || !doctorId) {
+        showToast("Please select a recipient first.");
+        return;
+    }
+
+    input.value = "";
+    if (btn) btn.disabled = true;
+
+    try {
+        const res = await fetch(`${API_URL}/api/chat/messages`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${authInfo.token}`
+            },
+            body: JSON.stringify({
+                patientId,
+                doctorId,
+                message: text
+            })
+        });
+
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+            throw new Error(data.message || "Failed to send message.");
+        }
+
+        await loadDoctorChatMessages(false);
+    } catch (err) {
+        showToast(err.message);
+    } finally {
+        if (btn) btn.disabled = false;
+        input.focus();
+    }
+}
+
+/* ================= MODE 2: AI HEALTH ASSISTANT LOGIC ================= */
+
+async function loadAiChatHistory() {
+    const authInfo = getCurrentChatAuth();
+    const msgContainer = $("aiChatMessages");
+    if (!msgContainer) return;
+
+    if (!authInfo) {
+        msgContainer.innerHTML = `
+            <div class="ai-msg">
+                <b>Welcome to MediCare AI Health Assistant 👋</b>
+                <p>Please log in as a Patient or Doctor to begin asking health and wellness questions.</p>
+            </div>
+        `;
+        return;
+    }
+
+    try {
+        const res = await fetch(`${API_URL}/api/chat/ai/history`, {
+            headers: { Authorization: `Bearer ${authInfo.token}` }
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+            throw new Error(data.message || "Failed to load AI history.");
+        }
+
+        if (data.messages.length === 0) {
+            msgContainer.innerHTML = `
+                <div class="ai-msg">
+                    <b>Hello! 👋 I am your MediCare AI Health Assistant.</b>
+                    <p>I can help answer general health questions, clarify complex medical terms, and suggest questions to discuss with your doctor.</p>
+                    <div class="ai-disclaimer">
+                        ⚠️ <i>I am an educational AI tool, not a doctor. In a medical emergency, call 112/911 or visit the ER immediately.</i>
+                    </div>
+                </div>
+            `;
+            return;
+        }
+
+        msgContainer.innerHTML = data.messages.map(m => {
+            if (m.role === "user") {
+                return `
+                    <div class="ai-user-msg">
+                        ${escapeHTML(m.message)}
+                    </div>
+                `;
+            } else {
+                return `
+                    <div class="ai-msg">
+                        ${formatAiResponse(m.message)}
+                    </div>
+                `;
+            }
+        }).join("");
+
+        msgContainer.scrollTop = msgContainer.scrollHeight;
+    } catch (err) {
+        console.error("AI history error:", err);
+    }
+}
+
+async function sendAiChatMessage() {
+    const input = $("aiChatInput");
+    const btn = $("aiChatSendBtn");
+    const typing = $("aiTypingIndicator");
+    const msgContainer = $("aiChatMessages");
+    const authInfo = getCurrentChatAuth();
+
+    if (!input || !authInfo) {
+        showToast("Please log in first to use the AI Health Assistant.");
+        return;
+    }
+
+    const text = input.value.trim();
+    if (!text) return;
 
     input.value = "";
 
+    // Append User Message to UI immediately
+    if (msgContainer) {
+        const userDiv = document.createElement("div");
+        userDiv.className = "ai-user-msg";
+        userDiv.textContent = text;
+        msgContainer.appendChild(userDiv);
+        msgContainer.scrollTop = msgContainer.scrollHeight;
+    }
 
-    chat.scrollTop =
-        chat.scrollHeight;
+    // Show Typing Indicator
+    if (typing) typing.classList.remove("hidden");
+    if (btn) btn.disabled = true;
 
+    try {
+        const res = await fetch(`${API_URL}/api/chat/ai`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${authInfo.token}`
+            },
+            body: JSON.stringify({ message: text })
+        });
 
-    setTimeout(() => {
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+            throw new Error(data.message || "AI Health Assistant is temporarily unavailable.");
+        }
 
-        const bot =
-            document.createElement("div");
+        // Append AI Response
+        if (msgContainer) {
+            const aiDiv = document.createElement("div");
+            aiDiv.className = "ai-msg";
+            aiDiv.innerHTML = formatAiResponse(data.reply);
+            msgContainer.appendChild(aiDiv);
+            msgContainer.scrollTop = msgContainer.scrollHeight;
+        }
+    } catch (err) {
+        if (msgContainer) {
+            const errDiv = document.createElement("div");
+            errDiv.className = "ai-msg";
+            errDiv.style.borderColor = "#fca5a5";
+            errDiv.style.background = "#fef2f2";
+            errDiv.innerHTML = `
+                <b style="color:#b91c1c;">Notice:</b> ${escapeHTML(err.message)}
+            `;
+            msgContainer.appendChild(errDiv);
+            msgContainer.scrollTop = msgContainer.scrollHeight;
+        }
+    } finally {
+        if (typing) typing.classList.add("hidden");
+        if (btn) btn.disabled = false;
+        input.focus();
+    }
+}
 
+async function clearAiChat() {
+    const authInfo = getCurrentChatAuth();
+    if (!authInfo) return;
 
-        bot.className =
-            "bot-msg";
+    if (!confirm("Clear your AI Health Assistant chat history?")) return;
 
+    try {
+        const res = await fetch(`${API_URL}/api/chat/ai/history`, {
+            method: "DELETE",
+            headers: { Authorization: `Bearer ${authInfo.token}` }
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+            throw new Error(data.message || "Failed to clear history.");
+        }
 
-        bot.textContent =
-            "Thanks for contacting MediCare. A healthcare assistant can respond shortly.";
+        const msgContainer = $("aiChatMessages");
+        if (msgContainer) {
+            msgContainer.innerHTML = `
+                <div class="ai-msg">
+                    <b>Conversation cleared.</b>
+                    <p>How can I assist you with your health education today?</p>
+                </div>
+            `;
+        }
+        showToast("AI chat history cleared.");
+    } catch (err) {
+        showToast(err.message);
+    }
+}
 
+function formatChatTime(dateString) {
+    if (!dateString) return "";
+    try {
+        const d = new Date(dateString);
+        return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    } catch {
+        return "";
+    }
+}
 
-        chat.appendChild(bot);
+function formatAiResponse(rawText) {
+    if (!rawText) return "";
+    let safe = escapeHTML(rawText);
 
+    // Convert bold **text** to <b>text</b>
+    safe = safe.replace(/\*\*(.*?)\*\*/g, "<b>$1</b>");
 
-        chat.scrollTop =
-            chat.scrollHeight;
+    // Convert bullet lines
+    const lines = safe.split("\n");
+    let inList = false;
+    let html = "";
 
-    }, 600);
+    lines.forEach(line => {
+        const trimmed = line.trim();
+        if (trimmed.startsWith("* ") || trimmed.startsWith("- ")) {
+            if (!inList) {
+                html += "<ul style='margin: 6px 0; padding-left: 20px;'>";
+                inList = true;
+            }
+            html += `<li>${trimmed.substring(2)}</li>`;
+        } else {
+            if (inList) {
+                html += "</ul>";
+                inList = false;
+            }
+            if (trimmed) {
+                html += `<p style='margin: 4px 0;'>${trimmed}</p>`;
+            }
+        }
+    });
+
+    if (inList) {
+        html += "</ul>";
+    }
+
+    return html || safe;
 }
 
 
