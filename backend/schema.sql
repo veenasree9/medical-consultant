@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS patients (
     email VARCHAR(150),
     address TEXT,
     profile_photo TEXT,
+    profile_completed BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -40,7 +41,7 @@ CREATE TABLE IF NOT EXISTS guardians (
     CONSTRAINT uq_patient_guardian_order UNIQUE (patient_id, guardian_order)
 );
 
--- Structured Health Information (Structured Booleans)
+-- Structured Health Information (Booleans in PostgreSQL)
 CREATE TABLE IF NOT EXISTS health_information (
     id SERIAL PRIMARY KEY,
     patient_id VARCHAR(50) UNIQUE REFERENCES patients(patient_id) ON DELETE CASCADE,
@@ -54,6 +55,7 @@ CREATE TABLE IF NOT EXISTS health_information (
     chronic_condition BOOLEAN NOT NULL DEFAULT FALSE,
     drug_reaction BOOLEAN NOT NULL DEFAULT FALSE,
     emergency_condition BOOLEAN NOT NULL DEFAULT FALSE,
+    is_completed BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -85,15 +87,61 @@ CREATE TABLE IF NOT EXISTS medical_records (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Medical Documents with metadata & file reference
 CREATE TABLE IF NOT EXISTS medical_documents (
     id SERIAL PRIMARY KEY,
+    document_id VARCHAR(100) UNIQUE NOT NULL,
     patient_id VARCHAR(50) REFERENCES patients(patient_id) ON DELETE CASCADE,
     original_filename VARCHAR(255) NOT NULL,
     file_type VARCHAR(100),
     file_size INTEGER,
-    storage_reference TEXT,
-    uploaded_by VARCHAR(100),
+    storage_reference TEXT NOT NULL,
+    uploaded_by VARCHAR(100) DEFAULT 'patient',
+    extracted_text TEXT,
+    uploaded_at TIMESTAMPTZ DEFAULT NOW(),
     created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Medications Table
+CREATE TABLE IF NOT EXISTS medications (
+    id SERIAL PRIMARY KEY,
+    patient_id VARCHAR(50) NOT NULL REFERENCES patients(patient_id) ON DELETE CASCADE,
+    name VARCHAR(255) NOT NULL,
+    dosage VARCHAR(100),
+    frequency VARCHAR(100),
+    start_date DATE,
+    notes TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Mood Entries Table
+CREATE TABLE IF NOT EXISTS mood_entries (
+    id SERIAL PRIMARY KEY,
+    patient_id VARCHAR(50) NOT NULL REFERENCES patients(patient_id) ON DELETE CASCADE,
+    mood VARCHAR(50) NOT NULL,
+    score INTEGER,
+    notes TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Symptom Entries Table
+CREATE TABLE IF NOT EXISTS symptom_entries (
+    id SERIAL PRIMARY KEY,
+    patient_id VARCHAR(50) NOT NULL REFERENCES patients(patient_id) ON DELETE CASCADE,
+    symptom VARCHAR(255) NOT NULL,
+    severity VARCHAR(50),
+    notes TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Health Metrics Table
+CREATE TABLE IF NOT EXISTS health_metrics (
+    id SERIAL PRIMARY KEY,
+    patient_id VARCHAR(50) NOT NULL REFERENCES patients(patient_id) ON DELETE CASCADE,
+    metric_type VARCHAR(50) NOT NULL,
+    metric_value NUMERIC NOT NULL,
+    unit VARCHAR(50),
+    recorded_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- Verification Status Records (Face, Passkey, Camera, Liveness)
@@ -141,6 +189,15 @@ CREATE TABLE IF NOT EXISTS chat_messages (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- AI Chat Sessions
+CREATE TABLE IF NOT EXISTS ai_chat_sessions (
+    session_id VARCHAR(100) PRIMARY KEY,
+    patient_id VARCHAR(50) NOT NULL REFERENCES patients(patient_id) ON DELETE CASCADE,
+    title VARCHAR(255) DEFAULT 'Health Consultation',
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- AI Health Assistant Chat History
 CREATE TABLE IF NOT EXISTS ai_chat_messages (
     id SERIAL PRIMARY KEY,
@@ -160,6 +217,11 @@ CREATE INDEX IF NOT EXISTS idx_health_info_patient_id ON health_information(pati
 CREATE INDEX IF NOT EXISTS idx_verifications_patient_id ON verification_records(patient_id);
 CREATE INDEX IF NOT EXISTS idx_medical_records_patient_id ON medical_records(patient_id);
 CREATE INDEX IF NOT EXISTS idx_medical_documents_patient_id ON medical_documents(patient_id);
+CREATE INDEX IF NOT EXISTS idx_medications_patient_id ON medications(patient_id);
+CREATE INDEX IF NOT EXISTS idx_mood_entries_patient_id ON mood_entries(patient_id);
+CREATE INDEX IF NOT EXISTS idx_symptom_entries_patient_id ON symptom_entries(patient_id);
+CREATE INDEX IF NOT EXISTS idx_health_metrics_patient_id ON health_metrics(patient_id);
+CREATE INDEX IF NOT EXISTS idx_ai_chat_sessions_patient ON ai_chat_sessions(patient_id);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs(action);
 CREATE INDEX IF NOT EXISTS idx_chat_messages_patient_doctor ON chat_messages(patient_id, doctor_id, created_at ASC);

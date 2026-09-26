@@ -9,7 +9,6 @@
     "build": "node -e \"console.log('Build complete')\""
   },
   "dependencies": {
-    "@electric-sql/pglite": "^0.5.8",
     "@google/genai": "^2.24.0",
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.5",

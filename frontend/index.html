@@ -253,21 +253,31 @@
         </div>
 
 
-        <!-- ================= PRIMARY DETAILS CARD ================= -->
-        <div class="profile-card">
+        <!-- ================= PATIENT DASHBOARD QUICKNAV ================= -->
+        <div class="dashboard-quicknav">
+            <button type="button" onclick="scrollToCard('profileCard')">📋 Profile</button>
+            <button type="button" onclick="showProfileEdit()">✏️ Edit Profile</button>
+            <button type="button" onclick="scrollToCard('secondaryDetailsCard')">🛡️ Secondary Details</button>
+            <button type="button" onclick="showSecondaryEdit()">✏️ Edit Secondary Details</button>
+            <button type="button" onclick="scrollToCard('healthInfoCard')">🩺 Health Information</button>
+            <button type="button" onclick="showHealthEdit()">✏️ Edit Health Information</button>
+            <button type="button" onclick="openFileUploadModal()">📁 Add New Medical File</button>
+            <button type="button" onclick="openDoctorChatMode()">👨‍⚕️ Doctor Chat</button>
+            <button type="button" onclick="openAiChatMode()">🤖 AI Health Assistant</button>
+        </div>
+
+        <!-- ================= 1. PATIENT PROFILE CARD ================= -->
+        <div id="profileCard" class="profile-card">
 
             <div class="profile-head" style="justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
-
                 <div style="display: flex; align-items: center; gap: 16px;">
                     <div class="avatar">
                         👤
                     </div>
-
                     <div>
                         <h2 id="patientName">
                             Patient
                         </h2>
-
                         <p>
                             Patient ID:
                             <b id="patientId">-</b>
@@ -275,7 +285,7 @@
                     </div>
                 </div>
 
-                <div class="export-pdf-actions">
+                <div class="export-pdf-actions" style="display: flex; gap: 8px;">
                     <button
                         type="button"
                         id="downloadPdfBtn"
@@ -285,410 +295,391 @@
                         📥 Download Medical Record (PDF)
                     </button>
                 </div>
-
             </div>
 
+            <hr style="margin: 20px 0;">
 
-            <hr>
+            <!-- PROFILE SUMMARY VIEW (DEFAULT) -->
+            <div id="profileSummaryView">
+                <div class="summary-card-header">
+                    <h3>📋 Patient Profile</h3>
+                    <div style="display: flex; gap: 8px;">
+                        <button type="button" class="btn-small primary" onclick="showProfileEdit()">
+                            ✏️ Edit Profile
+                        </button>
+                        <button type="button" class="btn-small secondary" onclick="downloadPatientPdf()">
+                            📄 Export PDF
+                        </button>
+                    </div>
+                </div>
 
+                <div class="summary-grid">
+                    <div class="summary-item">
+                        <span class="s-label">Patient ID</span>
+                        <b id="sumPatientId">-</b>
+                    </div>
+                    <div class="summary-item">
+                        <span class="s-label">Full Name</span>
+                        <b id="sumName">-</b>
+                    </div>
+                    <div class="summary-item">
+                        <span class="s-label">Age / Date of Birth</span>
+                        <b id="sumAge">-</b>
+                    </div>
+                    <div class="summary-item">
+                        <span class="s-label">Gender</span>
+                        <b id="sumGender">-</b>
+                    </div>
+                    <div class="summary-item">
+                        <span class="s-label">Blood Group</span>
+                        <b id="sumBlood">-</b>
+                    </div>
+                    <div class="summary-item">
+                        <span class="s-label">Phone</span>
+                        <b id="sumPhone">-</b>
+                    </div>
+                    <div class="summary-item">
+                        <span class="s-label">Email</span>
+                        <b id="sumEmail">-</b>
+                    </div>
+                    <div class="summary-item full">
+                        <span class="s-label">Address</span>
+                        <b id="sumAddress">-</b>
+                    </div>
+                    <div class="summary-item full">
+                        <span class="s-label">Primary Guardian (Emergency Contact 1)</span>
+                        <b id="sumGuardian">-</b>
+                    </div>
+                    <div class="summary-item full">
+                        <span class="s-label">Second Guardian (Emergency Contact 2)</span>
+                        <b id="sumGuardian2">-</b>
+                    </div>
+                </div>
+            </div>
 
-            <div class="section-title-row">
-                <h3>
-                    📋 Primary Patient Details
-                </h3>
-                <div style="display: flex; gap: 8px; align-items: center;">
-                    <button
-                        type="button"
-                        class="btn-export-pdf"
-                        onclick="downloadPatientPdf()"
-                        title="Export physical PDF record">
-                        📄 Export PDF
-                    </button>
+            <!-- PROFILE EDIT VIEW (ONLY SHOWN WHEN 'EDIT PROFILE' CLICKED OR INCOMPLETE) -->
+            <div id="profileEditView" class="hidden">
+                <div class="summary-card-header">
+                    <h3>✏️ Edit Patient Profile</h3>
                     <span class="badge-tag">PostgreSQL Stored</span>
                 </div>
-            </div>
 
+                <p style="color: #64748b; font-size: 13px; margin-bottom: 16px;">
+                    Update your primary personal details, contact information, and primary & secondary emergency guardians.
+                </p>
 
-            <div class="details-grid">
+                <div class="details-grid">
+                    <div>
+                        <label>Patient ID</label>
+                        <input id="pPatientId" class="input-readonly" readonly>
+                    </div>
 
-                <div>
+                    <div>
+                        <label>Full Name *</label>
+                        <input id="pName" placeholder="Enter full name">
+                    </div>
 
-                    <label>Patient ID</label>
+                    <div>
+                        <label>Date of Birth / Age</label>
+                        <input id="pAge" placeholder="e.g. 28 or 1998-04-12">
+                    </div>
 
-                    <input
-                        id="pPatientId"
-                        class="input-readonly"
-                        readonly>
+                    <div>
+                        <label>Gender *</label>
+                        <select id="pGender">
+                            <option value="Male">Male</option>
+                            <option value="Female">Female</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </div>
 
+                    <div>
+                        <label>Blood Group *</label>
+                        <select id="pBlood">
+                            <option value="A+">A+</option>
+                            <option value="A-">A-</option>
+                            <option value="B+">B+</option>
+                            <option value="B-">B-</option>
+                            <option value="AB+">AB+</option>
+                            <option value="AB-">AB-</option>
+                            <option value="O+">O+</option>
+                            <option value="O-">O-</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label>Phone *</label>
+                        <input id="pPhone" placeholder="+919876543210">
+                    </div>
+
+                    <div>
+                        <label>Email</label>
+                        <input id="pEmail" type="email" placeholder="patient@example.com">
+                    </div>
+
+                    <div class="full">
+                        <label>Address</label>
+                        <textarea id="pAddress" placeholder="Residential address"></textarea>
+                    </div>
+
+                    <!-- PRIMARY GUARDIAN -->
+                    <div class="full guardian-subhead">
+                        <h4>Primary Guardian Details (Emergency Contact 1)</h4>
+                    </div>
+
+                    <div>
+                        <label>Guardian Name *</label>
+                        <input id="pGuardianName" placeholder="Primary guardian full name">
+                    </div>
+
+                    <div>
+                        <label>Guardian Phone Number *</label>
+                        <input id="pGuardianPhone" placeholder="Primary guardian phone">
+                    </div>
+
+                    <div>
+                        <label>Guardian Relationship *</label>
+                        <input id="pGuardianRelationship" placeholder="e.g. Father, Mother, Spouse">
+                    </div>
+
+                    <!-- SECOND GUARDIAN -->
+                    <div class="full guardian-subhead">
+                        <h4>Second Guardian Details (Emergency Contact 2)</h4>
+                    </div>
+
+                    <div>
+                        <label>Second Guardian Name</label>
+                        <input id="pGuardian2Name" placeholder="Second guardian full name">
+                    </div>
+
+                    <div>
+                        <label>Second Guardian Phone Number</label>
+                        <input id="pGuardian2Phone" placeholder="Second guardian phone">
+                    </div>
+
+                    <div>
+                        <label>Second Guardian Relationship</label>
+                        <input id="pGuardian2Relationship" placeholder="e.g. Mother, Sibling, Relative">
+                    </div>
+
+                    <div class="full">
+                        <label>Medical History</label>
+                        <textarea id="pMedicalHistory" placeholder="Past medical illnesses, chronic diagnosis, family history"></textarea>
+                    </div>
+
+                    <div class="full">
+                        <label>Medical Notes</label>
+                        <textarea id="pNotes" placeholder="Physician notes, allergies summary, daily instructions"></textarea>
+                    </div>
                 </div>
 
-
-                <div>
-
-                    <label>Full Name *</label>
-
-                    <input
-                        id="pName"
-                        disabled
-                        placeholder="Enter full name">
-
+                <div class="button-row" style="margin-top: 20px;">
+                    <button type="button" class="success" onclick="saveDetails()">
+                        💾 Save Profile
+                    </button>
+                    <button type="button" class="secondary" onclick="hideProfileEdit()">
+                        Cancel
+                    </button>
                 </div>
-
-
-                <div>
-
-                    <label>Date of Birth / Age</label>
-
-                    <input
-                        id="pAge"
-                        disabled
-                        placeholder="e.g. 28 or 1998-04-12">
-
-                </div>
-
-
-                <div>
-
-                    <label>Gender *</label>
-
-                    <select
-                        id="pGender"
-                        disabled>
-
-                        <option value="Male">Male</option>
-                        <option value="Female">Female</option>
-                        <option value="Other">Other</option>
-
-                    </select>
-
-                </div>
-
-
-                <div>
-
-                    <label>Blood Group *</label>
-
-                    <select
-                        id="pBlood"
-                        disabled>
-
-                        <option value="A+">A+</option>
-                        <option value="A-">A-</option>
-                        <option value="B+">B+</option>
-                        <option value="B-">B-</option>
-                        <option value="AB+">AB+</option>
-                        <option value="AB-">AB-</option>
-                        <option value="O+">O+</option>
-                        <option value="O-">O-</option>
-
-                    </select>
-
-                </div>
-
-
-                <div>
-
-                    <label>Phone *</label>
-
-                    <input
-                        id="pPhone"
-                        disabled
-                        placeholder="+919876543210">
-
-                </div>
-
-
-                <div>
-
-                    <label>Email</label>
-
-                    <input
-                        id="pEmail"
-                        type="email"
-                        disabled
-                        placeholder="patient@example.com">
-
-                </div>
-
-
-                <div class="full">
-
-                    <label>Address</label>
-
-                    <textarea
-                        id="pAddress"
-                        disabled
-                        placeholder="Residential address">
-                    </textarea>
-
-                </div>
-
-
-                <!-- PRIMARY GUARDIAN -->
-                <div class="full guardian-subhead">
-                    <h4>Primary Guardian Details (Emergency Contact 1)</h4>
-                </div>
-
-
-                <div>
-
-                    <label>Guardian Name *</label>
-
-                    <input
-                        id="pGuardianName"
-                        placeholder="Guardian full name"
-                        disabled>
-
-                </div>
-
-
-                <div>
-
-                    <label>Guardian Phone Number *</label>
-
-                    <input
-                        id="pGuardianPhone"
-                        placeholder="Guardian phone number"
-                        disabled>
-
-                </div>
-
-
-                <div>
-
-                    <label>Relationship *</label>
-
-                    <input
-                        id="pGuardianRelationship"
-                        placeholder="e.g. Father, Mother, Spouse"
-                        disabled>
-
-                </div>
-
-
-                <div class="full">
-
-                    <label>Medical History</label>
-
-                    <textarea
-                        id="pMedicalHistory"
-                        disabled
-                        placeholder="Past medical illnesses, chronic diagnosis, family history">
-                    </textarea>
-
-                </div>
-
-
-                <div class="full">
-
-                    <label>Medical Notes</label>
-
-                    <textarea
-                        id="pNotes"
-                        disabled
-                        placeholder="Physician notes, allergies summary, daily instructions">
-                    </textarea>
-
-                </div>
-
-            </div>
-
-
-            <div class="button-row">
-
-                <button
-                    id="updateBtn"
-                    class="primary"
-                    onclick="enableUpdate()">
-
-                    ✏️ Update Details
-
-                </button>
-
-
-                <button
-                    id="saveBtn"
-                    class="success hidden"
-                    onclick="saveDetails()">
-
-                    💾 Save Changes
-
-                </button>
-
-
-                <button
-                    id="cancelBtn"
-                    class="secondary hidden"
-                    onclick="cancelUpdate()">
-
-                    Cancel
-
-                </button>
-
             </div>
 
         </div>
 
 
-        <!-- ================= SEPARATE SECONDARY DETAILS CARD ================= -->
-        <div id="secondaryDetailsCard" class="profile-card secondary-card">
+        <!-- ================= 2. SECONDARY DETAILS CARD ================= -->
+        <div id="secondaryDetailsCard" class="profile-card secondary-card" style="margin-top: 25px;">
 
-            <div class="section-title-row">
-                <h2>
-                    🛡️ Secondary Details
-                </h2>
-                <span class="badge-tag">Separated Profile Records</span>
+            <!-- SECONDARY SUMMARY VIEW (DEFAULT) -->
+            <div id="secondarySummaryView">
+                <div class="summary-card-header">
+                    <h3>🛡️ Secondary Details</h3>
+                    <div style="display: flex; gap: 8px;">
+                        <button type="button" class="btn-small primary" onclick="showSecondaryEdit()">
+                            ✏️ Edit Secondary Details
+                        </button>
+                        <button type="button" class="btn-small secondary" onclick="showVerificationManage()">
+                            ⚙️ Manage Verification
+                        </button>
+                    </div>
+                </div>
+
+                <p style="color: #64748b; font-size: 14px; margin-bottom: 16px;">
+                    Advanced identity credentials, backup emergency contact, and structured health records saved in PostgreSQL.
+                </p>
+
+                <div class="summary-checklist">
+                    <div class="checklist-item">
+                        <span>✓ Face Verification: <b id="sumFaceStatus">Not configured</b></span>
+                    </div>
+                    <div class="checklist-item">
+                        <span>✓ Passkey / Fingerprint: <b id="sumPasskeyStatus">Not configured</b></span>
+                    </div>
+                    <div class="checklist-item">
+                        <span>✓ Guardian Information: <b id="sumGuardianStatus">Saved (Primary & Backup)</b></span>
+                    </div>
+                    <div class="checklist-item">
+                        <span>✓ Health Information: <b id="sumHealthStatus">Completed</b></span>
+                    </div>
+                </div>
             </div>
 
-            <p style="color: #64748b; font-size: 14px; margin-bottom: 24px;">
-                Manage advanced biometric identity credentials, secondary emergency contact, and structured emergency health questions.
-            </p>
-
-
-            <!-- PART A: IDENTITY & VERIFICATION -->
-            <div class="secondary-subpanel">
-
-                <div class="subpanel-header">
-                    <h3>A. Identity & Verification</h3>
-                    <p>Real-time cryptographic and visual verification status.</p>
-                </div>
-
-                <div class="verif-grid">
-
-                    <!-- Face Verification -->
-                    <div class="verif-item">
-                        <div class="verif-header">
-                            <span class="verif-icon">👤</span>
-                            <div>
-                                <b>Face Verification / Recognition</b>
-                                <div class="verif-desc">Biometric facial verification using configured cloud vision services.</div>
-                            </div>
-                        </div>
-                        <div class="verif-actions">
-                            <span id="verifFaceBadge" class="status-badge status-unconfigured">Not configured</span>
-                            <button type="button" class="btn-small secondary" onclick="checkFaceVerification()">
-                                Set Up Face Verification
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- Passkey / Fingerprint -->
-                    <div class="verif-item">
-                        <div class="verif-header">
-                            <span class="verif-icon">🔑</span>
-                            <div>
-                                <b>Fingerprint / Passkey Verification</b>
-                                <div class="verif-desc">FIDO2 WebAuthn biometric passkey (fingerprint, TouchID, FaceID, or hardware key).</div>
-                            </div>
-                        </div>
-                        <div class="verif-actions">
-                            <span id="verifPasskeyBadge" class="status-badge status-unconfigured">Not configured</span>
-                            <button type="button" class="btn-small primary" onclick="setupPasskey()">
-                                Set Up Passkey
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- Live Camera Verification -->
-                    <div class="verif-item">
-                        <div class="verif-header">
-                            <span class="verif-icon">📷</span>
-                            <div>
-                                <b>Live Camera Verification</b>
-                                <div class="verif-desc">Direct live camera presence verification session.</div>
-                            </div>
-                        </div>
-                        <div class="verif-actions">
-                            <span id="verifCameraBadge" class="status-badge status-unconfigured">Not configured</span>
-                            <button type="button" class="btn-small primary" onclick="openCameraVerificationModal()">
-                                Start Camera Verification
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- Liveness Verification -->
-                    <div class="verif-item">
-                        <div class="verif-header">
-                            <span class="verif-icon">👁️</span>
-                            <div>
-                                <b>Liveness Verification</b>
-                                <div class="verif-desc">Anti-spoofing presentation check to ensure physical person presence.</div>
-                            </div>
-                        </div>
-                        <div class="verif-actions">
-                            <span id="verifLivenessBadge" class="status-badge status-unconfigured">Not configured</span>
-                            <button type="button" class="btn-small secondary" onclick="checkLivenessVerification()">
-                                Check Liveness Service
-                            </button>
-                        </div>
-                    </div>
-
-                </div>
-
-            </div>
-
-
-            <hr style="margin: 28px 0;">
-
-
-            <!-- PART B: SECONDARY GUARDIAN DETAILS -->
-            <div class="secondary-subpanel">
-
-                <div class="subpanel-header">
-                    <h3>B. Secondary Guardian Details</h3>
-                    <p>Backup emergency contact saved directly to PostgreSQL.</p>
-                </div>
-
-                <div class="details-grid">
-
-                    <div>
-                        <label>Guardian 2 Name</label>
-                        <input
-                            id="pGuardian2Name"
-                            placeholder="Second guardian full name">
-                    </div>
-
-                    <div>
-                        <label>Guardian 2 Phone Number</label>
-                        <input
-                            id="pGuardian2Phone"
-                            placeholder="Second guardian phone">
-                    </div>
-
-                    <div>
-                        <label>Guardian 2 Relationship</label>
-                        <input
-                            id="pGuardian2Relationship"
-                            placeholder="e.g. Mother, Sibling, Uncle">
-                    </div>
-
-                </div>
-
-                <div style="margin-top: 16px;">
-                    <button
-                        type="button"
-                        class="btn-small success"
-                        onclick="saveSecondaryGuardian()">
-                        💾 Save Secondary Guardian
+            <!-- SECONDARY EDIT VIEW (SHOWN ONLY ON EDIT) -->
+            <div id="secondaryEditView" class="hidden">
+                <div class="summary-card-header">
+                    <h3>🛡️ Edit Secondary Details & Verification</h3>
+                    <button type="button" class="btn-small secondary" onclick="hideSecondaryEdit()">
+                        Done / Return to Summary
                     </button>
                 </div>
 
-            </div>
+                <!-- PART A: IDENTITY & VERIFICATION -->
+                <div class="secondary-subpanel">
+                    <div class="subpanel-header">
+                        <h3>A. Identity & Biometric Verification</h3>
+                        <p>Actual cryptographic and facial verification status. (No raw fingerprints stored; passkeys use FIDO2/WebAuthn).</p>
+                    </div>
 
+                    <div class="verif-grid">
+                        <!-- Face Verification -->
+                        <div class="verif-item">
+                            <div class="verif-header">
+                                <span class="verif-icon">👤</span>
+                                <div>
+                                    <b>Face Verification</b>
+                                    <div class="verif-desc">Biometric facial verification using configured cloud vision services.</div>
+                                </div>
+                            </div>
+                            <div class="verif-actions">
+                                <span id="verifFaceBadge" class="status-badge status-unconfigured">Not configured</span>
+                                <button type="button" class="btn-small secondary" onclick="checkFaceVerification()">
+                                    Manage Face Verification
+                                </button>
+                            </div>
+                        </div>
 
-            <hr style="margin: 28px 0;">
+                        <!-- Passkey / Fingerprint -->
+                        <div class="verif-item">
+                            <div class="verif-header">
+                                <span class="verif-icon">🔑</span>
+                                <div>
+                                    <b>Passkey / Fingerprint</b>
+                                    <div class="verif-desc">FIDO2 WebAuthn cryptographic passkey (TouchID, FaceID, device fingerprint, or security key).</div>
+                                </div>
+                            </div>
+                            <div class="verif-actions">
+                                <span id="verifPasskeyBadge" class="status-badge status-unconfigured">Not configured</span>
+                                <button type="button" class="btn-small primary" onclick="setupPasskey()">
+                                    Manage Passkey
+                                </button>
+                            </div>
+                        </div>
 
+                        <!-- Live Camera Verification -->
+                        <div class="verif-item">
+                            <div class="verif-header">
+                                <span class="verif-icon">📷</span>
+                                <div>
+                                    <b>Live Camera Presence</b>
+                                    <div class="verif-desc">Direct live camera presence verification session.</div>
+                                </div>
+                            </div>
+                            <div class="verif-actions">
+                                <span id="verifCameraBadge" class="status-badge status-unconfigured">Not configured</span>
+                                <button type="button" class="btn-small primary" onclick="openCameraVerificationModal()">
+                                    Start Camera Verification
+                                </button>
+                            </div>
+                        </div>
 
-            <!-- PART C: HEALTH INFORMATION -->
-            <div class="secondary-subpanel">
-
-                <div class="subpanel-header">
-                    <h3>C. Health Information</h3>
-                    <p>Clinical emergency questions stored as structured boolean values in PostgreSQL (no large free-text).</p>
+                        <!-- Liveness Verification -->
+                        <div class="verif-item">
+                            <div class="verif-header">
+                                <span class="verif-icon">👁️</span>
+                                <div>
+                                    <b>Liveness Verification</b>
+                                    <div class="verif-desc">Anti-spoofing presentation check to ensure physical person presence.</div>
+                                </div>
+                            </div>
+                            <div class="verif-actions">
+                                <span id="verifLivenessBadge" class="status-badge status-unconfigured">Not configured</span>
+                                <button type="button" class="btn-small secondary" onclick="checkLivenessVerification()">
+                                    Check Liveness Service
+                                </button>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
-                <div class="health-questions-table">
+                <hr style="margin: 24px 0;">
 
+                <!-- PART B: SECONDARY GUARDIAN DETAILS -->
+                <div class="secondary-subpanel">
+                    <div class="subpanel-header">
+                        <h3>B. Secondary Guardian Details</h3>
+                        <p>Backup emergency contact saved directly to PostgreSQL.</p>
+                    </div>
+
+                    <div class="details-grid">
+                        <div>
+                            <label>Second Guardian Name</label>
+                            <input id="secGuardian2Name" placeholder="Second guardian full name">
+                        </div>
+
+                        <div>
+                            <label>Second Guardian Phone</label>
+                            <input id="secGuardian2Phone" placeholder="Second guardian phone">
+                        </div>
+
+                        <div>
+                            <label>Second Guardian Relationship</label>
+                            <input id="secGuardian2Relationship" placeholder="e.g. Mother, Sibling, Uncle">
+                        </div>
+                    </div>
+
+                    <div style="margin-top: 16px;">
+                        <button type="button" class="btn-small success" onclick="saveSecondaryDetailsFromPanel()">
+                            💾 Save Secondary Details
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+
+        <!-- ================= 3. HEALTH INFORMATION CARD ================= -->
+        <div id="healthInfoCard" class="profile-card" style="margin-top: 25px;">
+
+            <!-- HEALTH INFORMATION SUMMARY VIEW (DEFAULT) -->
+            <div id="healthSummaryView">
+                <div class="summary-card-header">
+                    <h3>🩺 Health Information</h3>
+                    <button type="button" class="btn-small primary" onclick="showHealthEdit()">
+                        ✏️ Edit Health Information
+                    </button>
+                </div>
+
+                <div id="healthCompletedBanner" class="checklist-item" style="margin-bottom: 16px;">
+                    <span>✓ Health questionnaire completed</span>
+                </div>
+
+                <div id="healthSummaryGrid" class="health-summary-grid">
+                    <!-- Populated dynamically via updateHealthUI -->
+                </div>
+            </div>
+
+            <!-- HEALTH INFORMATION EDIT VIEW (SHOWN ONLY WHEN EDIT CLICKED) -->
+            <div id="healthEditView" class="hidden">
+                <div class="summary-card-header">
+                    <h3>🩺 Clinical Health Questionnaire</h3>
+                    <span class="badge-tag">PostgreSQL Stored</span>
+                </div>
+
+                <p style="color: #64748b; font-size: 14px; margin-bottom: 20px;">
+                    Please answer the emergency health questions below. Each response is saved as structured boolean data in the PostgreSQL database.
+                </p>
+
+                <div class="health-questions-table">
                     <div class="health-q-row">
                         <div class="health-q-label">
                             <span class="q-idx">1.</span>
@@ -798,21 +789,60 @@
                             <button type="button" class="yn-btn active" data-val="false" onclick="setHealthValue('emergency_condition', false)">No</button>
                         </div>
                     </div>
-
                 </div>
 
-                <div style="margin-top: 24px;">
-                    <button
-                        type="button"
-                        id="saveHealthBtn"
-                        class="primary"
-                        onclick="saveHealthInformation()">
-                        💾 Save Health Information to PostgreSQL
+                <div class="button-row" style="margin-top: 24px;">
+                    <button type="button" id="saveHealthBtn" class="primary" onclick="saveHealthInformation()">
+                        💾 Save Health Information
+                    </button>
+                    <button type="button" class="secondary" onclick="hideHealthEdit()">
+                        Cancel
                     </button>
                 </div>
-
             </div>
 
+        </div>
+
+
+        <!-- ================= 4. MEDICAL FILES CARD ================= -->
+        <div id="medicalFilesCard" class="profile-card" style="margin-top: 25px;">
+            <div class="summary-card-header">
+                <h3>📁 Medical Files</h3>
+                <button type="button" class="btn-small primary" onclick="openFileUploadModal()">
+                    + Add New Medical File
+                </button>
+            </div>
+
+            <p style="color: #64748b; font-size: 14px; margin-bottom: 14px;">
+                Securely upload and store your health records, blood reports, prescriptions, or scans (PDF, JPG, JPEG, PNG, DOC, DOCX).
+                Metadata is stored in PostgreSQL and files can be analyzed directly with the <b>AI Health Assistant</b>.
+            </p>
+
+            <div id="medicalFilesContainer" class="files-container">
+                <!-- Dynamically populated via renderPatientDocuments -->
+            </div>
+        </div>
+
+
+        <!-- ================= 5. CHAT BOARD CARD ================= -->
+        <div id="chatBoardCard" class="profile-card" style="margin-top: 25px;">
+            <div class="summary-card-header">
+                <h3>💬 MediCare Chat Board</h3>
+                <span class="badge-tag">Patient Consultation</span>
+            </div>
+
+            <p style="color: #64748b; font-size: 14px; margin-bottom: 20px;">
+                Access your doctor consultations and AI health insights in one integrated workspace.
+            </p>
+
+            <div style="display: flex; flex-wrap: wrap; gap: 14px;">
+                <button type="button" class="primary" style="padding: 12px 24px; font-size: 15px;" onclick="openDoctorChatMode()">
+                    👨‍⚕️ Doctor Chat
+                </button>
+                <button type="button" class="primary" style="padding: 12px 24px; font-size: 15px; background: #0d9488;" onclick="openAiChatMode()">
+                    🤖 AI Health Assistant
+                </button>
+            </div>
         </div>
 
     </main>
@@ -1264,7 +1294,7 @@
 
 <button
     id="chatFab"
-    class="chat-fab"
+    class="chat-fab hidden"
     onclick="toggleChat()"
     title="Open MediCare Chat Board">
     💬
@@ -1282,7 +1312,7 @@
             <span style="font-size: 18px;">💬</span>
             <div>
                 <b>MediCare Chat Board</b>
-                <div id="chatAuthStatus" style="font-size: 11px; opacity: 0.85;">PostgreSQL Connected</div>
+                <div id="chatAuthStatus" style="font-size: 11px; opacity: 0.85;">Patient Mode</div>
             </div>
         </div>
 
@@ -1330,7 +1360,7 @@
         <!-- Messages Area -->
         <div id="doctorChatMessages" class="chat-messages-container">
             <div class="chat-empty-state">
-                Select a contact to view conversation history.
+                Select a doctor to view conversation history.
             </div>
         </div>
 
@@ -1359,9 +1389,9 @@
 
         <!-- AI Header / Disclaimer Bar -->
         <div class="ai-banner">
-            <div>
-                <span class="ai-badge">AI Assistant</span>
-                <span style="font-size: 11px; color: #475569;">Educational guidance only</span>
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <span class="ai-badge">🤖 MediMind AI</span>
+                <span id="aiStatusIndicator" style="font-size: 11px; font-weight: 600; color: #16a34a;">● AI Online</span>
             </div>
             <button
                 type="button"
@@ -1370,6 +1400,19 @@
                 title="Clear AI conversation history">
                 🗑️ Clear
             </button>
+        </div>
+
+        <!-- Config Alert (Shown if AI service is not configured) -->
+        <div id="aiConfigAlert" class="hidden" style="margin: 8px 12px; padding: 8px 12px; background: #fef2f2; border: 1px solid #f87171; border-radius: 8px; color: #991b1b; font-size: 12px; line-height: 1.4;">
+            ⚠️ AI service is not configured. Please configure the required AI API key.
+        </div>
+
+        <!-- Quick Action Prompt Chips -->
+        <div class="chat-quick-actions">
+            <button type="button" class="quick-chip" onclick="quickAiPrompt('I have a fever. What should I monitor?')">🌡️ Fever</button>
+            <button type="button" class="quick-chip" onclick="quickAiPrompt('I have a headache. What are common causes?')">🤕 Headache</button>
+            <button type="button" class="quick-chip" onclick="quickAiPrompt('I feel anxious and stressed. Can you provide calming tips?')">❤️ Support</button>
+            <button type="button" class="quick-chip" onclick="quickAiPrompt('What questions should I ask my doctor at my visit?')">📋 Doctor Prep</button>
         </div>
 
         <!-- AI Messages Area -->
@@ -1493,6 +1536,40 @@
     </div>
 </div>
 
+
+<!-- ================= MEDICAL FILE UPLOAD MODAL ================= -->
+<div id="fileUploadModal" class="modal-backdrop hidden">
+    <div class="modal-box">
+        <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+            <h3 style="margin: 0; font-size: 18px; color: #0f172a;">📁 Upload Medical Document</h3>
+            <button type="button" class="close-modal" onclick="closeFileUploadModal()" style="background: none; border: none; font-size: 20px; cursor: pointer; color: #64748b;">✕</button>
+        </div>
+        <div class="modal-body">
+            <p style="color: #64748b; font-size: 13px; margin-bottom: 14px;">
+                Upload a blood report, lab investigation, prescription, or clinical summary. Supported formats: <b>PDF, JPG, JPEG, PNG, DOC, DOCX</b> (max 10MB).
+            </p>
+            <div class="file-dropzone" onclick="$('docFileInput').click()">
+                <div style="font-size: 32px; margin-bottom: 8px;">📄</div>
+                <div style="font-weight: 600; color: #0284c7;">Click to select file</div>
+                <div style="font-size: 12px; color: #64748b; margin-top: 4px;">PDF, JPG, JPEG, PNG, DOC, DOCX</div>
+                <input type="file" id="docFileInput" style="display: none;" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" onchange="handleFileSelected(event)">
+            </div>
+            <div id="selectedFileInfo" class="hidden" style="margin-bottom: 14px; padding: 10px 14px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;">
+                <div style="font-weight: 600; color: #0f172a; font-size: 13px;" id="selectedFileName">-</div>
+                <div style="font-size: 12px; color: #64748b;" id="selectedFileSize">-</div>
+            </div>
+            <p id="uploadErrorMessage" class="error hidden" style="font-size: 13px; color: #dc2626; margin-bottom: 12px;"></p>
+            <div class="button-row" style="display: flex; gap: 10px; justify-content: flex-end;">
+                <button type="button" class="secondary" onclick="closeFileUploadModal()">
+                    Cancel
+                </button>
+                <button type="button" id="confirmUploadBtn" class="primary" onclick="submitFileUpload()" disabled>
+                    ⬆️ Upload to PostgreSQL
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 
 <script src="config.js"></script>
 <script src="app.js"></script>

@@ -37,10 +37,11 @@ function hideAll() {
         "doctorDashboard",
         "helperDashboard"
     ].forEach(id => {
-
-        $(id).classList.add("hidden");
-
+        const el = $(id);
+        if (el) el.classList.add("hidden");
     });
+
+    hideChatBoard();
 }
 
 
@@ -509,8 +510,8 @@ async function passwordLogin() {
 
         if (data.role === "patient") {
 
-            patientToken =
-                data.token;
+            localStorage.removeItem("doctorToken");
+            patientToken = data.token;
 
             localStorage.setItem(
                 "patientToken",
@@ -518,19 +519,22 @@ async function passwordLogin() {
             );
 
             await loadPatientDashboard();
+            showChatBoardForPatient();
 
         }
 
-
         else if (data.role === "doctor") {
+
+            localStorage.removeItem("patientToken");
+            patientToken = null;
 
             localStorage.setItem(
                 "doctorToken",
                 data.token
             );
 
+            hideChatBoard();
             hideAll();
-
             $("doctorDashboard")
                 .classList
                 .remove("hidden");
@@ -653,6 +657,7 @@ async function loadPatientDashboard() {
 
     hideAll();
     $("patientDashboard").classList.remove("hidden");
+    showChatBoardForPatient();
 }
 
 function updateVerifBadge(badgeId, status) {
@@ -1292,37 +1297,59 @@ function logout() {
         resendTimer
     );
 
+    hideChatBoard();
     goHome();
 }
 
 
 /* ================= CHAT ================= */
 
-/* ================= UPGRADED CHAT BOARD (DOCTOR CHAT & AI HEALTH ASSISTANT) ================= */
+/* ================= UPGRADED CHAT BOARD (PATIENT-ONLY: DOCTOR CHAT & AI HEALTH ASSISTANT) ================= */
 
 let currentChatMode = "doctor"; // 'doctor' or 'ai'
 let chatActivePatientId = null;
 let chatActiveDoctorId = null;
 let chatPollingTimer = null;
 
+function hideChatBoard() {
+    stopChatPolling();
+    const chatFab = $("chatFab");
+    const chatBox = $("chatBox");
+    if (chatFab) chatFab.classList.add("hidden");
+    if (chatBox) chatBox.classList.add("hidden");
+}
+
+function showChatBoardForPatient() {
+    const pToken = patientToken || localStorage.getItem("patientToken");
+    const patientDash = $("patientDashboard");
+    const isPatientView = patientDash && !patientDash.classList.contains("hidden");
+
+    if (pToken && isPatientView) {
+        const chatFab = $("chatFab");
+        if (chatFab) chatFab.classList.remove("hidden");
+    } else {
+        hideChatBoard();
+    }
+}
+
 function getCurrentChatAuth() {
     const pToken = patientToken || localStorage.getItem("patientToken");
-    const dToken = localStorage.getItem("doctorToken");
+    const patientDash = $("patientDashboard");
+    const isPatientView = patientDash && !patientDash.classList.contains("hidden");
 
-    // If currently on doctor page or dashboard, prefer doctor token
-    if (dToken && (!$("doctorDashboard").classList.contains("hidden") || !pToken)) {
-        return { role: "doctor", token: dToken };
-    }
-    if (pToken) {
+    // Chat Board is strictly available ONLY to authenticated patients
+    if (pToken && isPatientView) {
         return { role: "patient", token: pToken };
-    }
-    if (dToken) {
-        return { role: "doctor", token: dToken };
     }
     return null;
 }
 
 function toggleChat() {
+    const authInfo = getCurrentChatAuth();
+    if (!authInfo || authInfo.role !== "patient") {
+        hideChatBoard();
+        return;
+    }
     const chatBox = $("chatBox");
     if (!chatBox) return;
 
@@ -1334,6 +1361,7 @@ function toggleChat() {
         if (currentChatMode === "doctor") {
             initDoctorChat();
         } else {
+            checkAiStatus();
             loadAiChatHistory();
         }
         startChatPolling();
@@ -1360,6 +1388,7 @@ function switchChatMode(mode) {
         if (tabAi) tabAi.classList.add("active");
         if (panelDoc) panelDoc.classList.add("hidden");
         if (panelAi) panelAi.classList.remove("hidden");
+        checkAiStatus();
         loadAiChatHistory();
     }
 }
@@ -1370,13 +1399,59 @@ function updateChatAuthUI() {
     if (!statusElem) return;
 
     if (!authInfo) {
-        statusElem.textContent = "Guest (Login required to chat)";
-    } else if (authInfo.role === "patient") {
+        statusElem.textContent = "Login Required";
+    } else {
         const patId = $("pPatientId") ? $("pPatientId").value : "Patient";
         statusElem.textContent = `Patient: ${patId}`;
-    } else if (authInfo.role === "doctor") {
-        statusElem.textContent = "Attending Physician";
     }
+}
+
+async function checkAiStatus() {
+    const indicator = $("aiStatusIndicator");
+    const alertBox = $("aiConfigAlert");
+    const authInfo = getCurrentChatAuth();
+
+    if (!indicator) return;
+
+    if (!authInfo) {
+        indicator.textContent = "● Login Required";
+        indicator.style.color = "#94a3b8";
+        if (alertBox) alertBox.classList.add("hidden");
+        return;
+    }
+
+    try {
+        const res = await fetch(`${API_URL}/api/chat/ai/status`, {
+            headers: { Authorization: `Bearer ${authInfo.token}` }
+        });
+        const data = await res.json();
+        if (res.ok && data.success && data.configured) {
+            indicator.textContent = "● AI Online";
+            indicator.style.color = "#16a34a";
+            if (alertBox) alertBox.classList.add("hidden");
+        } else {
+            indicator.textContent = "● AI Unavailable";
+            indicator.style.color = "#dc2626";
+            if (alertBox) {
+                alertBox.classList.remove("hidden");
+                alertBox.textContent = data.message || "AI service is not configured. Please configure the required AI API key.";
+            }
+        }
+    } catch (_) {
+        indicator.textContent = "● AI Offline";
+        indicator.style.color = "#dc2626";
+        if (alertBox) {
+            alertBox.classList.remove("hidden");
+            alertBox.textContent = "AI service is temporarily unreachable.";
+        }
+    }
+}
+
+function quickAiPrompt(promptText) {
+    const input = $("aiChatInput");
+    if (!input) return;
+    input.value = promptText;
+    sendAiChatMessage();
 }
 
 function startChatPolling() {
@@ -1700,8 +1775,8 @@ async function sendAiChatMessage() {
     const msgContainer = $("aiChatMessages");
     const authInfo = getCurrentChatAuth();
 
-    if (!input || !authInfo) {
-        showToast("Please log in first to use the AI Health Assistant.");
+    if (!input || !authInfo || authInfo.role !== "patient") {
+        showToast("Please log in as a patient to use the AI Health Assistant.");
         return;
     }
 
@@ -1735,10 +1810,23 @@ async function sendAiChatMessage() {
 
         const data = await res.json();
         if (!res.ok || !data.success) {
-            throw new Error(data.message || "AI Health Assistant is temporarily unavailable.");
+            const errorMsg = data.message || "AI Health Assistant is temporarily unavailable.";
+            if (errorMsg.includes("not configured")) {
+                const alertBox = $("aiConfigAlert");
+                if (alertBox) {
+                    alertBox.classList.remove("hidden");
+                    alertBox.textContent = errorMsg;
+                }
+                const indicator = $("aiStatusIndicator");
+                if (indicator) {
+                    indicator.textContent = "● AI Unavailable";
+                    indicator.style.color = "#dc2626";
+                }
+            }
+            throw new Error(errorMsg);
         }
 
-        // Append AI Response
+        // Append Real AI Response
         if (msgContainer) {
             const aiDiv = document.createElement("div");
             aiDiv.className = "ai-msg";

@@ -1,100 +1,107 @@
 const { Pool } = require("pg");
-const { PGlite } = require("@electric-sql/pglite");
 const bcrypt = require("bcryptjs");
 const fs = require("fs");
 const path = require("path");
+const { execSync } = require("child_process");
 
-/* ================= DATABASE CLIENT SETUP ================= */
-// Persistent PostgreSQL directory
-const pgDataDir = path.join(__dirname, "data", "pgdata");
-fs.mkdirSync(pgDataDir, { recursive: true });
-
-let pgliteInstance = null;
+/* ================= POSTGRESQL CONNECTION POOL SETUP ================= */
 let pgPoolInstance = null;
-let activeEngine = "pglite"; // 'pool' or 'pglite'
 
-function shouldAttemptExternalPostgres() {
-    if (process.env.SQL_HOST) {
-        if (process.env.SQL_HOST.startsWith("/cloudsql/")) {
-            return fs.existsSync(process.env.SQL_HOST);
+function ensureLocalPostgresRunning() {
+    try {
+        const isLocalHost = !process.env.SQL_HOST || !fs.existsSync(process.env.SQL_HOST);
+        const dbUrl = process.env.DATABASE_URL || "";
+        const isUrlLocal = !dbUrl || dbUrl.includes("localhost") || dbUrl.includes("127.0.0.1");
+
+        if (isLocalHost && isUrlLocal && fs.existsSync("/var/lib/postgresql/data")) {
+            try {
+                execSync("pg_isready -h 127.0.0.1 -p 5432", { stdio: "ignore" });
+            } catch {
+                console.log("Local PostgreSQL not running. Starting PostgreSQL server...");
+                execSync("su - postgres -c 'pg_ctl -D /var/lib/postgresql/data -l /var/lib/postgresql/logfile start'", { stdio: "ignore" });
+            }
         }
-        return true;
+    } catch (err) {
+        console.warn("Notice checking local PostgreSQL status:", err.message);
     }
-    if (process.env.DATABASE_URL) {
-        if (process.env.DATABASE_URL.includes("localhost") || process.env.DATABASE_URL.includes("127.0.0.1")) {
-            return false;
-        }
-        return true;
-    }
-    return false;
 }
 
-// Unified query wrapper
-async function query(sql, params = []) {
-    if (activeEngine === "pool" && pgPoolInstance) {
-        try {
-            return await pgPoolInstance.query(sql, params);
-        } catch (err) {
-            console.warn("External PostgreSQL query failed, using PGlite engine:", err.message);
-            activeEngine = "pglite";
-        }
+function getPostgresPoolConfig() {
+    // 1. Google Cloud SQL Auth Proxy Unix Socket
+    if (process.env.SQL_HOST && fs.existsSync(process.env.SQL_HOST)) {
+        return {
+            host: process.env.SQL_HOST,
+            user: process.env.SQL_USER,
+            password: process.env.SQL_PASSWORD,
+            database: process.env.SQL_DB_NAME,
+            max: 10,
+            connectionTimeoutMillis: 5000
+        };
     }
 
-    if (!pgliteInstance) {
-        pgliteInstance = new PGlite(pgDataDir);
+    // 2. Direct PostgreSQL connection URL (e.g. Supabase, Neon, AWS RDS, or local)
+    if (process.env.DATABASE_URL) {
+        const url = process.env.DATABASE_URL;
+        const isLocal = url.includes("localhost") || url.includes("127.0.0.1");
+        return {
+            connectionString: url,
+            ssl: isLocal ? false : { rejectUnauthorized: false },
+            max: 10,
+            connectionTimeoutMillis: 5000
+        };
     }
 
-    const res = await pgliteInstance.query(sql, params);
+    // 3. PostgreSQL environment variables or local instance defaults
     return {
-        rows: res.rows || [],
-        rowCount: res.rowCount !== undefined ? res.rowCount : (res.rows ? res.rows.length : 0)
+        host: process.env.PGHOST || "127.0.0.1",
+        port: parseInt(process.env.PGPORT || "5432", 10),
+        user: process.env.PGUSER || "user",
+        password: process.env.PGPASSWORD || "password",
+        database: process.env.PGDATABASE || "medicare",
+        max: 10,
+        connectionTimeoutMillis: 5000
     };
+}
+
+function getPool() {
+    if (!pgPoolInstance) {
+        ensureLocalPostgresRunning();
+        const config = getPostgresPoolConfig();
+        pgPoolInstance = new Pool(config);
+
+        pgPoolInstance.on("error", (err) => {
+            console.error("Unexpected error on idle PostgreSQL client:", err.message);
+        });
+    }
+    return pgPoolInstance;
+}
+
+// Unified query wrapper executing against real PostgreSQL pool
+async function query(sql, params = []) {
+    const pool = getPool();
+    return await pool.query(sql, params);
 }
 
 /* ================= INITIALIZATION & SCHEMA MIGRATION ================= */
 let initPromise = null;
 
 async function runInitialization() {
-    // 1. Attempt external pool if configured and reachable
-    if (shouldAttemptExternalPostgres()) {
-        try {
-            const config = process.env.DATABASE_URL
-                ? { connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false }, connectionTimeoutMillis: 2500 }
-                : {
-                    host: process.env.SQL_HOST,
-                    user: process.env.SQL_USER,
-                    password: process.env.SQL_PASSWORD,
-                    database: process.env.SQL_DB_NAME,
-                    connectionTimeoutMillis: 2500
-                };
-            const testPool = new Pool(config);
-            const client = await Promise.race([
-                testPool.connect(),
-                new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 2500))
-            ]);
-            await client.query("SELECT 1");
-            client.release();
-            pgPoolInstance = testPool;
-            activeEngine = "pool";
-            console.log("Connected to External PostgreSQL database successfully.");
-        } catch (err) {
-            console.warn("External PostgreSQL unavailable (" + err.message + "). Using persistent PostgreSQL (PGlite) engine.");
-            activeEngine = "pglite";
-        }
-    } else {
-        activeEngine = "pglite";
+    ensureLocalPostgresRunning();
+    const pool = getPool();
+
+    // Verify connectivity with real PostgreSQL database
+    const client = await pool.connect();
+    try {
+        await client.query("SELECT 1");
+        console.log("Connected to PostgreSQL database successfully.");
+    } finally {
+        client.release();
     }
 
-    // Ensure PGlite instance is ready if active
-    if (activeEngine === "pglite" && !pgliteInstance) {
-        pgliteInstance = new PGlite(pgDataDir);
-    }
-
-    // 2. Read and apply schema
+    // Read and apply schema
     const schemaPath = path.join(__dirname, "schema.sql");
     if (fs.existsSync(schemaPath)) {
         const schemaSql = fs.readFileSync(schemaPath, "utf8");
-        // Split statements or execute directly
         const statements = schemaSql
             .split(";")
             .map(s => s.trim())
@@ -109,7 +116,7 @@ async function runInitialization() {
         }
     }
 
-    // 3. Ensure columns and constraints exist (migrations if upgrading old schema)
+    // Ensure columns and constraints exist
     try {
         await query(`
             DO $$
@@ -123,7 +130,6 @@ async function runInitialization() {
             END $$;
         `);
     } catch (_) {
-        // Fallback for engines without DO block
         try {
             await query("ALTER TABLE guardians ADD COLUMN IF NOT EXISTS guardian_order INTEGER NOT NULL DEFAULT 1");
         } catch (e) {
@@ -131,12 +137,29 @@ async function runInitialization() {
         }
     }
 
-    // 4. Seed initial records if users table is empty
+    try {
+        await query(`
+            ALTER TABLE patients ADD COLUMN IF NOT EXISTS profile_completed BOOLEAN NOT NULL DEFAULT TRUE;
+            ALTER TABLE health_information ADD COLUMN IF NOT EXISTS is_completed BOOLEAN NOT NULL DEFAULT FALSE;
+            ALTER TABLE medical_documents ADD COLUMN IF NOT EXISTS document_id VARCHAR(100);
+            ALTER TABLE medical_documents ADD COLUMN IF NOT EXISTS uploaded_at TIMESTAMPTZ DEFAULT NOW();
+            ALTER TABLE medical_documents ADD COLUMN IF NOT EXISTS extracted_text TEXT;
+        `);
+        await query(`
+            UPDATE medical_documents 
+            SET document_id = 'DOC_' || id 
+            WHERE document_id IS NULL;
+        `);
+    } catch (migErr) {
+        console.warn("Schema column migration notice:", migErr.message);
+    }
+
+    // Seed initial records if users table is empty
     const userCountRes = await query("SELECT COUNT(*) AS count FROM users");
     const count = parseInt(userCountRes.rows[0].count, 10);
 
     if (count === 0) {
-        console.log("Seeding initial PostgreSQL records into persistent database...");
+        console.log("Seeding initial records into PostgreSQL database...");
         const defaultDoctorHash = await bcrypt.hash(process.env.DOCTOR_PASSWORD || "1234", 10);
         const defaultPatientHash = await bcrypt.hash(process.env.PATIENT_DEMO_PASSWORD || "1234", 10);
 
@@ -203,7 +226,7 @@ async function runInitialization() {
             ["PAT1001", false, false, false, false, false, false, false, false, false, false]
         );
 
-        // Initial Verification Records (Strictly 'not_configured' by default)
+        // Initial Verification Records
         const verifTypes = ["face", "passkey", "camera_live", "liveness"];
         for (const vType of verifTypes) {
             await query(
@@ -248,10 +271,13 @@ async function initializeDatabase() {
 
 /* ================= QUERY METHODS ================= */
 
-// Health check
+// Health check executing SELECT NOW(); on real PostgreSQL
 async function testDbConnection() {
     await initializeDatabase();
-    const res = await query("SELECT NOW() AS now, 'PostgreSQL 16 (Persistent)' AS version, 'medicare' AS database");
+    const res = await query("SELECT NOW() AS now, version() AS version, current_database() AS database, current_user AS user");
+    if (!res || !res.rows || res.rows.length === 0) {
+        throw new Error("PostgreSQL query returned no results for SELECT NOW();");
+    }
     return res.rows[0];
 }
 
@@ -263,7 +289,7 @@ async function getPatientDetails(patientId) {
     const patientRes = await query(
         `SELECT p.id, p.user_id, p.patient_id, p.full_name, p.date_of_birth,
                 p.gender, p.blood_group, p.phone, p.email, p.address,
-                p.created_at, p.updated_at,
+                p.profile_completed, p.created_at, p.updated_at,
                 m.medical_history, m.notes
          FROM patients p
          LEFT JOIN medical_records m ON m.patient_id = p.patient_id
@@ -309,7 +335,7 @@ async function getPatientDetails(patientId) {
     const healthRes = await query(
         `SELECT allergies, diabetes, hypertension, asthma, heart_condition,
                 major_surgery, regular_medication, chronic_condition,
-                drug_reaction, emergency_condition, updated_at
+                drug_reaction, emergency_condition, is_completed, updated_at
          FROM health_information
          WHERE UPPER(patient_id) = UPPER($1)`,
         [cleanId]
@@ -325,7 +351,8 @@ async function getPatientDetails(patientId) {
         regular_medication: false,
         chronic_condition: false,
         drug_reaction: false,
-        emergency_condition: false
+        emergency_condition: false,
+        is_completed: false
     };
 
     // Get Verification Records
@@ -349,7 +376,7 @@ async function getPatientDetails(patientId) {
 
     // Get Documents
     const docsRes = await query(
-        `SELECT id, original_filename, file_type, file_size, storage_reference, uploaded_by, created_at
+        `SELECT id, document_id, original_filename, file_type, file_size, storage_reference, uploaded_by, uploaded_at, created_at
          FROM medical_documents
          WHERE UPPER(patient_id) = UPPER($1)
          ORDER BY created_at DESC`,
@@ -369,6 +396,7 @@ async function getPatientDetails(patientId) {
         address: row.address || "",
         notes: row.notes || "",
         medicalHistory: row.medical_history || "",
+        profileCompleted: row.profile_completed !== false,
         // Guardian 1 (Primary)
         guardianName: guardian1.name,
         guardianPhone: guardian1.phone,
@@ -388,7 +416,8 @@ async function getPatientDetails(patientId) {
             regular_medication: Boolean(health.regular_medication),
             chronic_condition: Boolean(health.chronic_condition),
             drug_reaction: Boolean(health.drug_reaction),
-            emergency_condition: Boolean(health.emergency_condition)
+            emergency_condition: Boolean(health.emergency_condition),
+            isCompleted: Boolean(health.is_completed)
         },
         // Verifications
         verifications,
@@ -411,6 +440,7 @@ async function updatePatientDetails(patientId, fields) {
              email = COALESCE($5, email),
              address = COALESCE($6, address),
              phone = COALESCE($7, phone),
+             profile_completed = TRUE,
              updated_at = NOW()
          WHERE UPPER(patient_id) = UPPER($8)`,
         [
@@ -483,7 +513,6 @@ async function updatePatientDetails(patientId, fields) {
         );
     }
 
-    // Return refreshed record directly from PostgreSQL
     return getPatientDetails(cleanId);
 }
 
@@ -497,8 +526,8 @@ async function updateHealthInformation(patientId, health) {
             patient_id, allergies, diabetes, hypertension, asthma,
             heart_condition, major_surgery, regular_medication,
             chronic_condition, drug_reaction, emergency_condition,
-            updated_at
-         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW())
+            is_completed, updated_at
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, TRUE, NOW())
          ON CONFLICT (patient_id)
          DO UPDATE SET
              allergies = EXCLUDED.allergies,
@@ -511,6 +540,7 @@ async function updateHealthInformation(patientId, health) {
              chronic_condition = EXCLUDED.chronic_condition,
              drug_reaction = EXCLUDED.drug_reaction,
              emergency_condition = EXCLUDED.emergency_condition,
+             is_completed = TRUE,
              updated_at = NOW()`,
         [
             cleanId,
@@ -556,7 +586,98 @@ async function updateVerificationRecord(patientId, verificationType, status, met
     return getPatientDetails(cleanId);
 }
 
-// Find patient by phone (for OTP verification)
+/* ================= MEDICAL DOCUMENTS (POSTGRESQL METADATA & STORAGE) ================= */
+
+async function saveMedicalDocument(patientId, doc) {
+    await initializeDatabase();
+    const cleanId = String(patientId || "").trim().toUpperCase();
+    const documentId = doc.documentId || ("DOC_" + Date.now() + "_" + Math.random().toString(36).substring(2, 8).toUpperCase());
+    const res = await query(
+        `INSERT INTO medical_documents (
+            document_id, patient_id, original_filename, file_type, file_size, storage_reference, uploaded_by, extracted_text, uploaded_at, created_at
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
+         RETURNING id, document_id, patient_id, original_filename, file_type, file_size, storage_reference, uploaded_by, uploaded_at, created_at`,
+        [
+            documentId,
+            cleanId,
+            doc.originalFilename,
+            doc.fileType,
+            doc.fileSize,
+            doc.storageReference,
+            doc.uploadedBy || "patient",
+            doc.extractedText || null
+        ]
+    );
+    return res.rows[0];
+}
+
+async function getPatientDocuments(patientId) {
+    await initializeDatabase();
+    const cleanId = String(patientId || "").trim().toUpperCase();
+    const res = await query(
+        `SELECT id, document_id, patient_id, original_filename, file_type, file_size, storage_reference, uploaded_by, uploaded_at, created_at
+         FROM medical_documents
+         WHERE UPPER(patient_id) = UPPER($1)
+         ORDER BY created_at DESC`,
+        [cleanId]
+    );
+    return res.rows;
+}
+
+async function getMedicalDocument(patientId, documentId) {
+    await initializeDatabase();
+    const cleanId = String(patientId || "").trim().toUpperCase();
+    const res = await query(
+        `SELECT * FROM medical_documents
+         WHERE UPPER(patient_id) = UPPER($1) AND (document_id = $2 OR CAST(id AS VARCHAR) = $2)`,
+        [cleanId, documentId]
+    );
+    return res.rows[0] || null;
+}
+
+async function deleteMedicalDocument(patientId, documentId) {
+    await initializeDatabase();
+    const cleanId = String(patientId || "").trim().toUpperCase();
+    const res = await query(
+        `DELETE FROM medical_documents
+         WHERE UPPER(patient_id) = UPPER($1) AND (document_id = $2 OR CAST(id AS VARCHAR) = $2)
+         RETURNING *`,
+        [cleanId, documentId]
+    );
+    return res.rows[0] || null;
+}
+
+async function findDocumentForPrompt(patientId, promptText, documentId = null) {
+    await initializeDatabase();
+    const cleanId = String(patientId || "").trim().toUpperCase();
+    if (documentId) {
+        return getMedicalDocument(cleanId, documentId);
+    }
+    const docs = await getPatientDocuments(cleanId);
+    if (!docs || docs.length === 0) return null;
+
+    const lowerPrompt = (promptText || "").toLowerCase();
+    // 1. Check if user explicitly mentioned a filename
+    for (const d of docs) {
+        const fn = (d.original_filename || "").toLowerCase();
+        const baseName = fn.split(".")[0];
+        if (lowerPrompt.includes(fn) || (baseName.length > 3 && lowerPrompt.includes(baseName))) {
+            return d;
+        }
+    }
+
+    // 2. Check if prompt refers to report/document/test/blood/file
+    const docKeywords = ["report", "blood", "test", "file", "document", "pdf", "scan", "lab", "result", "prescription"];
+    const hasKeyword = docKeywords.some(kw => lowerPrompt.includes(kw));
+    if (hasKeyword) {
+        // Return most recently uploaded document
+        return docs[0];
+    }
+
+    return null;
+}
+
+// Find or create patient by phone
 async function findOrCreatePatientByPhone(phone) {
     await initializeDatabase();
     const existing = await query("SELECT patient_id FROM patients WHERE phone = $1", [phone]);
@@ -564,122 +685,166 @@ async function findOrCreatePatientByPhone(phone) {
         return getPatientDetails(existing.rows[0].patient_id);
     }
 
-    const countRes = await query("SELECT COUNT(*) AS count FROM patients");
-    const newId = "PAT" + (1000 + parseInt(countRes.rows[0].count, 10) + 1);
-    const userId = "USR_" + newId;
+    const client = await getPool().connect();
+    try {
+        await client.query("BEGIN");
 
-    await query(
-        `INSERT INTO users (user_id, full_name, phone, role)
-         VALUES ($1, $2, $3, 'patient')
-         ON CONFLICT (user_id) DO NOTHING`,
-        [userId, "New Patient", phone]
-    );
+        const countRes = await client.query("SELECT COUNT(*) AS count FROM patients");
+        const newId = "PAT" + (1000 + parseInt(countRes.rows[0].count, 10) + 1);
+        const userId = "USR_" + newId;
 
-    await query(
-        `INSERT INTO patients (user_id, patient_id, full_name, phone, gender, blood_group)
-         VALUES ($1, $2, $3, $4, 'Other', 'O+')`,
-        [userId, newId, "New Patient", phone]
-    );
+        await client.query(
+            `INSERT INTO users (user_id, full_name, phone, role)
+             VALUES ($1, $2, $3, 'patient')
+             ON CONFLICT (user_id) DO NOTHING`,
+            [userId, "New Patient", phone]
+        );
 
-    await query(
-        `INSERT INTO guardians (patient_id, guardian_order, guardian_name, guardian_phone, relationship)
-         VALUES ($1, 1, '', '', ''), ($1, 2, '', '', '')`,
-        [newId]
-    );
+        await client.query(
+            `INSERT INTO patients (user_id, patient_id, full_name, phone, gender, blood_group, profile_completed)
+             VALUES ($1, $2, $3, $4, 'Other', 'O+', FALSE)`,
+            [userId, newId, "New Patient", phone]
+        );
 
-    await query(
-        `INSERT INTO health_information (patient_id)
-         VALUES ($1)
-         ON CONFLICT (patient_id) DO NOTHING`,
-        [newId]
-    );
+        await client.query(
+            `INSERT INTO guardians (patient_id, guardian_order, guardian_name, guardian_phone, relationship)
+             VALUES ($1, 1, '', '', ''), ($1, 2, '', '', '')`,
+            [newId]
+        );
 
-    await query(
-        `INSERT INTO medical_records (patient_id, medical_history, notes)
-         VALUES ($1, '', '')`,
-        [newId]
-    );
+        await client.query(
+            `INSERT INTO health_information (patient_id)
+             VALUES ($1)
+             ON CONFLICT (patient_id) DO NOTHING`,
+            [newId]
+        );
 
-    return getPatientDetails(newId);
+        await client.query(
+            `INSERT INTO medical_records (patient_id, medical_history, notes)
+             VALUES ($1, '', '')`,
+            [newId]
+        );
+
+        await client.query("COMMIT");
+        return getPatientDetails(newId);
+    } catch (err) {
+        await client.query("ROLLBACK").catch(() => {});
+        throw err;
+    } finally {
+        client.release();
+    }
 }
 
-// Register a new patient
-async function registerPatient({ fullName, phone, password, age, gender, bloodGroup, email, address, guardianName, guardianPhone, guardianRelationship, guardian2Name, guardian2Phone, guardian2Relationship }) {
+// Register a new patient in PostgreSQL (Atomic Transaction)
+async function registerPatient({
+    fullName,
+    phone,
+    password,
+    age,
+    gender,
+    bloodGroup,
+    email,
+    address,
+    guardianName,
+    guardianPhone,
+    guardianRelationship,
+    guardian2Name,
+    guardian2Phone,
+    guardian2Relationship
+}) {
     await initializeDatabase();
-    const countRes = await query("SELECT COUNT(*) AS count FROM patients");
-    const nextNum = 1000 + parseInt(countRes.rows[0].count, 10) + 1;
-    const newPatientId = "PAT" + nextNum;
-    const newUserId = "USR_" + newPatientId;
+    const client = await getPool().connect();
+    try {
+        await client.query("BEGIN");
 
-    const passwordHash = await bcrypt.hash(password || "1234", 10);
-    const validBloodGroup = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"].includes(bloodGroup)
-        ? bloodGroup
-        : "O+";
+        const countRes = await client.query("SELECT COUNT(*) AS count FROM patients");
+        const nextNum = 1000 + parseInt(countRes.rows[0].count, 10) + 1;
+        const newPatientId = "PAT" + nextNum;
+        const newUserId = "USR_" + newPatientId;
 
-    await query(
-        `INSERT INTO users (user_id, full_name, phone, password_hash, role)
-         VALUES ($1, $2, $3, $4, 'patient')`,
-        [newUserId, fullName || "Patient", phone || null, passwordHash]
-    );
+        const passwordHash = await bcrypt.hash(password || "1234", 10);
+        const validBloodGroup = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"].includes(bloodGroup)
+            ? bloodGroup
+            : "O+";
 
-    await query(
-        `INSERT INTO patients (user_id, patient_id, full_name, date_of_birth, gender, blood_group, phone, email, address)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-        [
-            newUserId,
-            newPatientId,
-            fullName || "Patient",
-            age ? String(age) : "",
-            gender || "Other",
-            validBloodGroup,
-            phone || "",
-            email || "",
-            address || ""
-        ]
-    );
-
-    // Primary Guardian
-    await query(
-        `INSERT INTO guardians (patient_id, guardian_order, guardian_name, guardian_phone, relationship)
-         VALUES ($1, 1, $2, $3, $4)`,
-        [newPatientId, guardianName || "", guardianPhone || "", guardianRelationship || ""]
-    );
-
-    // Secondary Guardian
-    await query(
-        `INSERT INTO guardians (patient_id, guardian_order, guardian_name, guardian_phone, relationship)
-         VALUES ($1, 2, $2, $3, $4)`,
-        [newPatientId, guardian2Name || "", guardian2Phone || "", guardian2Relationship || ""]
-    );
-
-    // Health information default
-    await query(
-        `INSERT INTO health_information (patient_id)
-         VALUES ($1)`,
-        [newPatientId]
-    );
-
-    // Verification records
-    const verifTypes = ["face", "passkey", "camera_live", "liveness"];
-    for (const vType of verifTypes) {
-        await query(
-            `INSERT INTO verification_records (patient_id, verification_type, status)
-             VALUES ($1, $2, 'not_configured')`,
-            [newPatientId, vType]
+        // 1. Insert into users
+        await client.query(
+            `INSERT INTO users (user_id, full_name, phone, password_hash, role)
+             VALUES ($1, $2, $3, $4, 'patient')`,
+            [newUserId, fullName || "Patient", phone || null, passwordHash]
         );
+
+        // 2. Insert into patients
+        await client.query(
+            `INSERT INTO patients (user_id, patient_id, full_name, date_of_birth, gender, blood_group, phone, email, address)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+            [
+                newUserId,
+                newPatientId,
+                fullName || "Patient",
+                age ? String(age) : "",
+                gender || "Other",
+                validBloodGroup,
+                phone || "",
+                email || "",
+                address || ""
+            ]
+        );
+
+        // 3. Primary Guardian
+        await client.query(
+            `INSERT INTO guardians (patient_id, guardian_order, guardian_name, guardian_phone, relationship)
+             VALUES ($1, 1, $2, $3, $4)`,
+            [newPatientId, guardianName || "", guardianPhone || "", guardianRelationship || "Primary Guardian"]
+        );
+
+        // 4. Secondary Guardian (order 2)
+        await client.query(
+            `INSERT INTO guardians (patient_id, guardian_order, guardian_name, guardian_phone, relationship)
+             VALUES ($1, 2, $2, $3, $4)`,
+            [newPatientId, guardian2Name || "", guardian2Phone || "", guardian2Relationship || ""]
+        );
+
+        // 5. Health information defaults
+        await client.query(
+            `INSERT INTO health_information (patient_id)
+             VALUES ($1)
+             ON CONFLICT (patient_id) DO NOTHING`,
+            [newPatientId]
+        );
+
+        // 6. Verification records
+        const verifTypes = ["face", "passkey", "camera_live", "liveness"];
+        for (const vType of verifTypes) {
+            await client.query(
+                `INSERT INTO verification_records (patient_id, verification_type, status)
+                 VALUES ($1, $2, 'not_configured')
+                 ON CONFLICT (patient_id, verification_type) DO NOTHING`,
+                [newPatientId, vType]
+            );
+        }
+
+        // 7. Medical records
+        await client.query(
+            `INSERT INTO medical_records (patient_id, medical_history, notes)
+             VALUES ($1, '', '')
+             ON CONFLICT (patient_id) DO NOTHING`,
+            [newPatientId]
+        );
+
+        await client.query("COMMIT");
+
+        return {
+            patientId: newPatientId,
+            fullName,
+            phone
+        };
+    } catch (err) {
+        await client.query("ROLLBACK").catch(() => {});
+        throw err;
+    } finally {
+        client.release();
     }
-
-    await query(
-        `INSERT INTO medical_records (patient_id, medical_history, notes)
-         VALUES ($1, '', '')`,
-        [newPatientId]
-    );
-
-    return {
-        patientId: newPatientId,
-        fullName,
-        phone
-    };
 }
 
 // Doctor password login
@@ -933,6 +1098,12 @@ module.exports = {
     insertAuditLog,
     getRecentAuditLogs,
     saveWebAuthnCredential,
+    // Medical Documents CRUD
+    saveMedicalDocument,
+    getPatientDocuments,
+    getMedicalDocument,
+    deleteMedicalDocument,
+    findDocumentForPrompt,
     // Chat & AI Exports
     getDoctorsList,
     getDoctorPatientsList,

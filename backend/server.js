@@ -3,13 +3,37 @@ const cors = require("cors");
 const dotenv = require("dotenv");
 const jwt = require("jsonwebtoken");
 const twilio = require("twilio");
+const fs = require("fs");
 const path = require("path");
 const db = require("./db");
 const { exportPatientPdf } = require("./pdfExport");
-const { generateAiHealthResponse } = require("./aiService");
+const { generateAiHealthResponse, isAiConfigured, getEffectiveApiKey } = require("./aiService");
 
 dotenv.config({ path: path.join(__dirname, "../.env") });
 dotenv.config();
+
+// Load environment from .dev.env.json if available or if variables are placeholder values
+try {
+    const devEnvPaths = [
+        "/app/.dev.env.json",
+        path.join(__dirname, "../../.dev.env.json"),
+        path.join(__dirname, "../.dev.env.json"),
+        path.join(process.cwd(), ".dev.env.json")
+    ];
+    for (const p of devEnvPaths) {
+        if (fs.existsSync(p)) {
+            const devEnv = JSON.parse(fs.readFileSync(p, "utf8"));
+            for (const [key, val] of Object.entries(devEnv)) {
+                if (!process.env[key] || process.env[key] === "MY_GEMINI_API_KEY" || process.env[key].startsWith("MY_")) {
+                    process.env[key] = val;
+                }
+            }
+            break;
+        }
+    }
+} catch (e) {
+    console.warn("Notice reading .dev.env.json:", e.message);
+}
 
 const app = express();
 const PORT = 3000;
@@ -177,7 +201,8 @@ app.get("/api/health/db", async (req, res) => {
             connected: true,
             timestamp: result.now,
             version: result.version,
-            currentDatabase: result.database
+            currentDatabase: result.database,
+            currentUser: result.user
         });
     } catch (err) {
         console.error("Database health check error:", err.message);
@@ -185,7 +210,15 @@ app.get("/api/health/db", async (req, res) => {
             success: false,
             database: "PostgreSQL",
             connected: false,
-            error: err.message
+            error: err.message,
+            requiredEnvironmentVariables: [
+                "PGHOST (or DATABASE_URL)",
+                "PGPORT (default 5432)",
+                "PGUSER",
+                "PGPASSWORD",
+                "PGDATABASE"
+            ],
+            instructions: "Configure the required PostgreSQL environment variables (PGHOST, PGPORT, PGUSER, PGPASSWORD, PGDATABASE or DATABASE_URL) to connect to a real PostgreSQL database."
         });
     }
 });
@@ -375,7 +408,23 @@ app.post("/api/auth/password-login", async (req, res) => {
 // Patient Self-Registration in PostgreSQL
 app.post("/api/auth/register-patient", async (req, res) => {
     try {
-        const { fullName, phone, password, age, gender, bloodGroup, email, address, guardianName, guardianPhone } = req.body;
+        const {
+            fullName,
+            phone,
+            password,
+            age,
+            gender,
+            bloodGroup,
+            email,
+            address,
+            guardianName,
+            guardianPhone,
+            guardianRelationship,
+            guardian2Name,
+            guardian2Phone,
+            guardian2Relationship
+        } = req.body;
+
         if (!fullName || !password) {
             return res.status(400).json({
                 success: false,
@@ -393,7 +442,11 @@ app.post("/api/auth/register-patient", async (req, res) => {
             email,
             address,
             guardianName,
-            guardianPhone
+            guardianPhone,
+            guardianRelationship,
+            guardian2Name,
+            guardian2Phone,
+            guardian2Relationship
         });
 
         await db.insertAuditLog(newPatient.patientId, "patient_registration", newPatient.patientId, {
@@ -466,19 +519,167 @@ app.put("/api/patient/me", auth("patient"), async (req, res) => {
     }
 });
 
+// Ensure uploads directory exists
+const uploadDir = path.join(__dirname, "uploads/documents");
+if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir, { recursive: true });
+}
+
 // Patient Medical Documents from PostgreSQL
 app.get("/api/patient/documents", auth("patient"), async (req, res) => {
     try {
-        const patient = await db.getPatientDetails(req.user.patientId);
+        const documents = await db.getPatientDocuments(req.user.patientId);
         res.json({
             success: true,
-            documents: patient ? patient.documents : []
+            documents: documents || []
         });
     } catch (err) {
         res.status(500).json({
             success: false,
             message: "Failed to retrieve documents: " + err.message
         });
+    }
+});
+
+// Upload Medical Document (Patient Only)
+app.post("/api/patient/documents/upload", auth("patient"), async (req, res) => {
+    try {
+        const { filename, fileType, fileData, fileSize } = req.body;
+        if (!filename || !fileData) {
+            return res.status(400).json({ success: false, message: "Filename and fileData are required." });
+        }
+
+        const ext = path.extname(filename).toLowerCase();
+        const allowedExts = [".pdf", ".jpg", ".jpeg", ".png", ".doc", ".docx"];
+        if (!allowedExts.includes(ext)) {
+            return res.status(400).json({
+                success: false,
+                message: `Unsupported file type: ${ext}. Supported types: PDF, JPG, JPEG, PNG, DOC, DOCX.`
+            });
+        }
+
+        const patientId = req.user.patientId;
+        const documentId = "DOC_" + Date.now() + "_" + Math.random().toString(36).substring(2, 8).toUpperCase();
+        const sanitizedFilename = filename.replace(/[^a-zA-Z0-9._-]/g, "_");
+        const safeDiskFilename = `${patientId}_${documentId}_${sanitizedFilename}`;
+        const diskPath = path.join(uploadDir, safeDiskFilename);
+
+        // Clean base64 header if present (e.g. data:application/pdf;base64,...)
+        const base64Data = fileData.replace(/^data:[^;]+;base64,/, "");
+        const fileBuffer = Buffer.from(base64Data, "base64");
+
+        // Save binary file to secure disk storage
+        fs.writeFileSync(diskPath, fileBuffer);
+
+        // Save metadata into PostgreSQL
+        const savedDoc = await db.saveMedicalDocument(patientId, {
+            documentId: documentId,
+            originalFilename: filename,
+            fileType: fileType || (ext === ".pdf" ? "application/pdf" : ext === ".png" ? "image/png" : ext === ".jpg" || ext === ".jpeg" ? "image/jpeg" : "application/octet-stream"),
+            fileSize: fileSize || fileBuffer.length,
+            storageReference: diskPath,
+            uploadedBy: "patient"
+        });
+
+        // Insert audit log
+        await db.insertAuditLog(patientId, "medical_document_uploaded", patientId, {
+            documentId: documentId,
+            filename: filename,
+            size: fileBuffer.length
+        });
+
+        res.json({
+            success: true,
+            document: {
+                id: savedDoc.id,
+                documentId: savedDoc.document_id,
+                originalFilename: savedDoc.original_filename,
+                fileType: savedDoc.file_type,
+                fileSize: savedDoc.file_size,
+                uploadedAt: savedDoc.uploaded_at
+            },
+            message: "Medical document securely uploaded and recorded in PostgreSQL."
+        });
+    } catch (err) {
+        console.error("Document upload error:", err.message);
+        res.status(500).json({
+            success: false,
+            message: "Failed to upload document: " + err.message
+        });
+    }
+});
+
+// Download / View Medical Document (Patient Only)
+app.get("/api/patient/documents/:documentId/download", auth("patient"), async (req, res) => {
+    try {
+        const doc = await db.getMedicalDocument(req.user.patientId, req.params.documentId);
+        if (!doc) {
+            return res.status(404).json({ success: false, message: "Medical document not found or unauthorized." });
+        }
+
+        if (!fs.existsSync(doc.storage_reference)) {
+            return res.status(404).json({ success: false, message: "File missing from secure storage." });
+        }
+
+        res.setHeader("Content-Type", doc.file_type || "application/octet-stream");
+        res.setHeader("Content-Disposition", `inline; filename="${doc.original_filename}"`);
+        const fileStream = fs.createReadStream(doc.storage_reference);
+        fileStream.pipe(res);
+    } catch (err) {
+        res.status(500).json({ success: false, message: "Download failed: " + err.message });
+    }
+});
+
+// Delete Medical Document (Patient Only)
+app.delete("/api/patient/documents/:documentId", auth("patient"), async (req, res) => {
+    try {
+        const doc = await db.getMedicalDocument(req.user.patientId, req.params.documentId);
+        if (!doc) {
+            return res.status(404).json({ success: false, message: "Medical document not found or unauthorized." });
+        }
+
+        if (fs.existsSync(doc.storage_reference)) {
+            try {
+                fs.unlinkSync(doc.storage_reference);
+            } catch (_) {}
+        }
+
+        await db.deleteMedicalDocument(req.user.patientId, req.params.documentId);
+        await db.insertAuditLog(req.user.patientId, "medical_document_deleted", req.user.patientId, {
+            documentId: req.params.documentId,
+            filename: doc.original_filename
+        });
+
+        res.json({
+            success: true,
+            message: "Medical document removed from PostgreSQL and storage."
+        });
+    } catch (err) {
+        res.status(500).json({ success: false, message: "Delete failed: " + err.message });
+    }
+});
+
+// Secondary Details update endpoint (Patient Only)
+app.put("/api/patient/secondary-details", auth("patient"), async (req, res) => {
+    try {
+        const { guardian2Name, guardian2Phone, guardian2Relationship } = req.body;
+        const updated = await db.updatePatientDetails(req.user.patientId, {
+            guardian2Name,
+            guardian2Phone,
+            guardian2Relationship
+        });
+
+        await db.insertAuditLog(req.user.patientId, "secondary_details_updated", req.user.patientId, {
+            hasGuardian2: Boolean(guardian2Name)
+        });
+
+        res.json({
+            success: true,
+            patient: updated,
+            message: "Secondary details updated in PostgreSQL."
+        });
+    } catch (err) {
+        res.status(500).json({ success: false, message: "Failed to update secondary details: " + err.message });
     }
 });
 
@@ -726,7 +927,7 @@ app.get("/api/doctor/patients/:id", auth("doctor"), async (req, res) => {
 /* ================= CHAT BOARD & MESSAGING SYSTEM (POSTGRESQL) ================= */
 
 // List available doctors for patient chat
-app.get("/api/chat/doctors", auth(), async (req, res) => {
+app.get("/api/chat/doctors", auth("patient"), async (req, res) => {
     try {
         const doctors = await db.getDoctorsList();
         res.json({
@@ -882,52 +1083,94 @@ app.post("/api/chat/messages/read", auth(), async (req, res) => {
 
 /* ================= MODE 2: AI HEALTH ASSISTANT ================= */
 
-// Send prompt to AI Health Assistant
-app.post("/api/chat/ai", auth(), async (req, res) => {
+// Check AI Health Assistant service status (Patient Only)
+app.get("/api/chat/ai/status", auth("patient"), (req, res) => {
+    const configured = isAiConfigured();
+    if (!configured) {
+        return res.json({
+            success: true,
+            configured: false,
+            message: "AI service is not configured. Please configure the required AI API key."
+        });
+    }
+    res.json({
+        success: true,
+        configured: true,
+        model: "gemini-3.8-flash"
+    });
+});
+
+// Send prompt to AI Health Assistant (Patient Only)
+app.post("/api/chat/ai", auth("patient"), async (req, res) => {
     try {
-        const { message } = req.body;
+        const { message, documentId } = req.body;
         if (!message || !message.trim()) {
             return res.status(400).json({ success: false, message: "Message content cannot be empty." });
         }
 
-        const sessionId = req.user.patientId || req.user.doctorId || req.user.userId;
+        const sessionId = req.user.patientId;
+        const cleanPrompt = message.trim();
 
         // 1. Get recent session history from PostgreSQL
         const history = await db.getAiChatHistory(sessionId, 10);
 
-        // 2. Persist user message in PostgreSQL
-        await db.saveAiChatMessage(sessionId, "user", message.trim());
+        // 2. Check if user is asking about an uploaded medical file or specified a documentId
+        let matchedDoc = null;
+        try {
+            matchedDoc = await db.findDocumentForPrompt(sessionId, cleanPrompt, documentId);
+        } catch (findErr) {
+            console.warn("Document lookup notice:", findErr.message);
+        }
 
-        // 3. Call server-side Gemini AI model (gemini-3.8-flash)
-        const aiResponseText = await generateAiHealthResponse(message.trim(), history);
+        // 3. Check if user is asking about health conditions / questionnaire / allergies
+        let selectiveHealthInfo = null;
+        const lowerPrompt = cleanPrompt.toLowerCase();
+        const healthKeywords = ["allergy", "allergies", "diabetes", "blood pressure", "hypertension", "asthma", "heart", "surgery", "medication", "medicine", "condition", "chronic", "questionnaire", "my health", "health info"];
+        if (healthKeywords.some(kw => lowerPrompt.includes(kw))) {
+            const patient = await db.getPatientDetails(sessionId);
+            if (patient && patient.healthInformation) {
+                selectiveHealthInfo = patient.healthInformation;
+            }
+        }
 
-        // 4. Persist AI response in PostgreSQL
+        // 4. Persist user message in PostgreSQL
+        await db.saveAiChatMessage(sessionId, "user", cleanPrompt);
+
+        // 5. Call server-side Gemini AI model (gemini-3.8-flash) with authorized file / health context
+        const aiResponseText = await generateAiHealthResponse(cleanPrompt, history, {
+            document: matchedDoc,
+            healthInfo: selectiveHealthInfo
+        });
+
+        // 6. Persist AI response in PostgreSQL
         const savedAiMessage = await db.saveAiChatMessage(sessionId, "model", aiResponseText);
 
-        // 5. Audit log
+        // 7. Audit log
         await db.insertAuditLog(sessionId, "ai_health_assistant_interaction", null, {
-            queryLength: message.trim().length,
-            responseLength: aiResponseText.length
+            queryLength: cleanPrompt.length,
+            responseLength: aiResponseText.length,
+            analyzedDocument: matchedDoc ? matchedDoc.original_filename : null
         });
 
         res.json({
             success: true,
             reply: aiResponseText,
-            timestamp: savedAiMessage.timestamp
+            timestamp: savedAiMessage.timestamp,
+            documentAnalyzed: matchedDoc ? matchedDoc.original_filename : null
         });
     } catch (err) {
         console.error("AI Health Assistant error:", err.message);
         res.status(500).json({
             success: false,
-            message: "AI Health Assistant error: " + err.message
+            message: err.message
         });
     }
 });
 
-// Load AI Chat history for current authenticated session
-app.get("/api/chat/ai/history", auth(), async (req, res) => {
+// Load AI Chat history for current authenticated session (Patient Only)
+app.get("/api/chat/ai/history", auth("patient"), async (req, res) => {
     try {
-        const sessionId = req.user.patientId || req.user.doctorId || req.user.userId;
+        const sessionId = req.user.patientId;
         const history = await db.getAiChatHistory(sessionId, 50);
         res.json({
             success: true,
@@ -938,10 +1181,10 @@ app.get("/api/chat/ai/history", auth(), async (req, res) => {
     }
 });
 
-// Clear AI Chat history for current session
-app.delete("/api/chat/ai/history", auth(), async (req, res) => {
+// Clear AI Chat history for current session (Patient Only)
+app.delete("/api/chat/ai/history", auth("patient"), async (req, res) => {
     try {
-        const sessionId = req.user.patientId || req.user.doctorId || req.user.userId;
+        const sessionId = req.user.patientId;
         await db.clearAiChatHistory(sessionId);
         await db.insertAuditLog(sessionId, "ai_health_history_cleared", null);
         res.json({
