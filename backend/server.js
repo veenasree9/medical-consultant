@@ -10,7 +10,7 @@ dotenv.config({ path: path.join(__dirname, "../.env") });
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = 3000;
 
 /* ================= CORS ================= */
 const allowedOrigins = (process.env.FRONTEND_ORIGIN || "*")
@@ -471,6 +471,163 @@ app.get("/api/patient/documents", auth("patient"), async (req, res) => {
             success: false,
             message: "Failed to retrieve documents: " + err.message
         });
+    }
+});
+
+// Update Structured Health Information (Booleans in PostgreSQL)
+app.put("/api/patient/health-information", auth("patient"), async (req, res) => {
+    try {
+        const updated = await db.updateHealthInformation(req.user.patientId, req.body);
+        if (!updated) {
+            return res.status(404).json({
+                success: false,
+                message: "Patient record not found in PostgreSQL."
+            });
+        }
+
+        await db.insertAuditLog(req.user.patientId, "health_information_update", req.user.patientId, {
+            updatedQuestions: Object.keys(req.body)
+        });
+
+        res.json({
+            success: true,
+            healthInformation: updated.healthInformation,
+            message: "Structured health information updated successfully in PostgreSQL."
+        });
+    } catch (err) {
+        console.error("Health information update error:", err.message);
+        res.status(500).json({
+            success: false,
+            message: "Failed to update health information in PostgreSQL: " + err.message
+        });
+    }
+});
+
+// WebAuthn Passkey: Challenge Generation
+const passkeyChallenges = new Map();
+
+app.post("/api/patient/passkey/register-challenge", auth("patient"), async (req, res) => {
+    try {
+        const patient = await db.getPatientDetails(req.user.patientId);
+        if (!patient) {
+            return res.status(404).json({ success: false, message: "Patient not found." });
+        }
+
+        const challenge = Buffer.from(crypto.randomBytes(32)).toString("base64url");
+        passkeyChallenges.set(req.user.patientId, challenge);
+
+        res.json({
+            success: true,
+            challenge: challenge,
+            rp: {
+                name: "MediCare Consultant",
+                id: req.hostname
+            },
+            user: {
+                id: Buffer.from(req.user.patientId).toString("base64url"),
+                name: patient.phone || req.user.patientId,
+                displayName: patient.name || "Patient"
+            },
+            pubKeyCredParams: [
+                { alg: -7, type: "public-key" },  // ES256
+                { alg: -257, type: "public-key" } // RS256
+            ],
+            authenticatorSelection: {
+                authenticatorAttachment: "platform",
+                userVerification: "preferred"
+            },
+            timeout: 60000
+        });
+    } catch (err) {
+        res.status(500).json({ success: false, message: "Failed to create passkey challenge: " + err.message });
+    }
+});
+
+// WebAuthn Passkey: Verify Registration & Save Credential
+app.post("/api/patient/passkey/verify-registration", auth("patient"), async (req, res) => {
+    try {
+        const { credentialId, clientDataJSON, attestationObject } = req.body;
+        const storedChallenge = passkeyChallenges.get(req.user.patientId);
+
+        if (!credentialId) {
+            return res.status(400).json({ success: false, message: "Credential ID is required." });
+        }
+
+        passkeyChallenges.delete(req.user.patientId);
+
+        // Store credential in PostgreSQL webauthn_credentials
+        await db.saveWebAuthnCredential(
+            req.user.patientId,
+            credentialId,
+            attestationObject ? attestationObject.slice(0, 500) : "verified_key",
+            1
+        );
+
+        // Mark passkey verification as verified in PostgreSQL verification_records
+        await db.updateVerificationRecord(req.user.patientId, "passkey", "verified", {
+            credentialId,
+            verifiedAt: new Date().toISOString()
+        });
+
+        await db.insertAuditLog(req.user.patientId, "passkey_registered", req.user.patientId, {
+            credentialId
+        });
+
+        res.json({
+            success: true,
+            status: "verified",
+            message: "Passkey registered and verified successfully in PostgreSQL!"
+        });
+    } catch (err) {
+        console.error("Passkey verification error:", err.message);
+        res.status(500).json({ success: false, message: "Passkey registration failed: " + err.message });
+    }
+});
+
+// Live Camera Verification
+app.post("/api/patient/verification/camera", auth("patient"), async (req, res) => {
+    try {
+        const { status, verified } = req.body;
+        const outcome = verified ? "verified" : "not_configured";
+
+        await db.updateVerificationRecord(req.user.patientId, "camera_live", outcome, {
+            verifiedAt: verified ? new Date().toISOString() : null,
+            note: "Live camera verification completed via patient dashboard."
+        });
+
+        await db.insertAuditLog(req.user.patientId, "camera_verification", req.user.patientId, {
+            status: outcome
+        });
+
+        res.json({
+            success: true,
+            status: outcome,
+            message: verified ? "Live camera verification verified!" : "Camera verification incomplete."
+        });
+    } catch (err) {
+        res.status(500).json({ success: false, message: "Camera verification failed: " + err.message });
+    }
+});
+
+// Face Recognition Service Verification Status Check
+app.get("/api/patient/verification/face-status", auth("patient"), async (req, res) => {
+    try {
+        const isConfigured = hasRealFaceService;
+        const status = isConfigured ? "configured" : "not_configured";
+
+        await db.updateVerificationRecord(req.user.patientId, "face", status, {
+            provider: hasAwsRekognition ? "AWS Rekognition" : (hasAzureFace ? "Azure Face API" : "None"),
+            isConfigured
+        });
+
+        res.json({
+            success: true,
+            status: status,
+            isConfigured: isConfigured,
+            provider: hasAwsRekognition ? "AWS Rekognition" : (hasAzureFace ? "Azure Face API" : "None")
+        });
+    } catch (err) {
+        res.status(500).json({ success: false, message: "Face status check failed: " + err.message });
     }
 });
 

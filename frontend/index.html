@@ -247,12 +247,13 @@
             </h1>
 
             <p>
-                Your primary information is shown below.
+                Manage your primary personal information, biometric verification, secondary emergency contacts, and structured health records.
             </p>
 
         </div>
 
 
+        <!-- ================= PRIMARY DETAILS CARD ================= -->
         <div class="profile-card">
 
             <div class="profile-head">
@@ -280,47 +281,63 @@
             <hr>
 
 
-            <h3>
-                Primary Details
-            </h3>
+            <div class="section-title-row">
+                <h3>
+                    📋 Primary Patient Details
+                </h3>
+                <span class="badge-tag">PostgreSQL Stored</span>
+            </div>
 
 
             <div class="details-grid">
 
                 <div>
 
-                    <label>Full Name</label>
+                    <label>Patient ID</label>
+
+                    <input
+                        id="pPatientId"
+                        class="input-readonly"
+                        readonly>
+
+                </div>
+
+
+                <div>
+
+                    <label>Full Name *</label>
 
                     <input
                         id="pName"
-                        disabled>
+                        disabled
+                        placeholder="Enter full name">
 
                 </div>
 
 
                 <div>
 
-                    <label>Age</label>
+                    <label>Date of Birth / Age</label>
 
                     <input
                         id="pAge"
-                        type="number"
-                        disabled>
+                        disabled
+                        placeholder="e.g. 28 or 1998-04-12">
 
                 </div>
 
 
                 <div>
 
-                    <label>Gender</label>
+                    <label>Gender *</label>
 
                     <select
                         id="pGender"
                         disabled>
 
-                        <option>Male</option>
-                        <option>Female</option>
-                        <option>Other</option>
+                        <option value="Male">Male</option>
+                        <option value="Female">Female</option>
+                        <option value="Other">Other</option>
 
                     </select>
 
@@ -329,22 +346,34 @@
 
                 <div>
 
-                    <label>Blood Group</label>
+                    <label>Blood Group *</label>
 
-                    <input
+                    <select
                         id="pBlood"
                         disabled>
+
+                        <option value="A+">A+</option>
+                        <option value="A-">A-</option>
+                        <option value="B+">B+</option>
+                        <option value="B-">B-</option>
+                        <option value="AB+">AB+</option>
+                        <option value="AB-">AB-</option>
+                        <option value="O+">O+</option>
+                        <option value="O-">O-</option>
+
+                    </select>
 
                 </div>
 
 
                 <div>
 
-                    <label>Phone</label>
+                    <label>Phone *</label>
 
                     <input
                         id="pPhone"
-                        disabled>
+                        disabled
+                        placeholder="+919876543210">
 
                 </div>
 
@@ -356,31 +385,8 @@
                     <input
                         id="pEmail"
                         type="email"
-                        disabled>
-
-                </div>
-
-
-                <div>
-
-                    <label>Guardian Name</label>
-
-                    <input
-                        id="pGuardianName"
-                        placeholder="e.g. Suresh Kumar (Father)"
-                        disabled>
-
-                </div>
-
-
-                <div>
-
-                    <label>Guardian Emergency Phone</label>
-
-                    <input
-                        id="pGuardianPhone"
-                        placeholder="+919876543211"
-                        disabled>
+                        disabled
+                        placeholder="patient@example.com">
 
                 </div>
 
@@ -391,7 +397,63 @@
 
                     <textarea
                         id="pAddress"
+                        disabled
+                        placeholder="Residential address">
+                    </textarea>
+
+                </div>
+
+
+                <!-- PRIMARY GUARDIAN -->
+                <div class="full guardian-subhead">
+                    <h4>Primary Guardian Details (Emergency Contact 1)</h4>
+                </div>
+
+
+                <div>
+
+                    <label>Guardian Name *</label>
+
+                    <input
+                        id="pGuardianName"
+                        placeholder="Guardian full name"
                         disabled>
+
+                </div>
+
+
+                <div>
+
+                    <label>Guardian Phone Number *</label>
+
+                    <input
+                        id="pGuardianPhone"
+                        placeholder="Guardian phone number"
+                        disabled>
+
+                </div>
+
+
+                <div>
+
+                    <label>Relationship *</label>
+
+                    <input
+                        id="pGuardianRelationship"
+                        placeholder="e.g. Father, Mother, Spouse"
+                        disabled>
+
+                </div>
+
+
+                <div class="full">
+
+                    <label>Medical History</label>
+
+                    <textarea
+                        id="pMedicalHistory"
+                        disabled
+                        placeholder="Past medical illnesses, chronic diagnosis, family history">
                     </textarea>
 
                 </div>
@@ -403,7 +465,8 @@
 
                     <textarea
                         id="pNotes"
-                        disabled>
+                        disabled
+                        placeholder="Physician notes, allergies summary, daily instructions">
                     </textarea>
 
                 </div>
@@ -441,6 +504,292 @@
                     Cancel
 
                 </button>
+
+            </div>
+
+        </div>
+
+
+        <!-- ================= SEPARATE SECONDARY DETAILS CARD ================= -->
+        <div id="secondaryDetailsCard" class="profile-card secondary-card">
+
+            <div class="section-title-row">
+                <h2>
+                    🛡️ Secondary Details
+                </h2>
+                <span class="badge-tag">Separated Profile Records</span>
+            </div>
+
+            <p style="color: #64748b; font-size: 14px; margin-bottom: 24px;">
+                Manage advanced biometric identity credentials, secondary emergency contact, and structured emergency health questions.
+            </p>
+
+
+            <!-- PART A: IDENTITY & VERIFICATION -->
+            <div class="secondary-subpanel">
+
+                <div class="subpanel-header">
+                    <h3>A. Identity & Verification</h3>
+                    <p>Real-time cryptographic and visual verification status.</p>
+                </div>
+
+                <div class="verif-grid">
+
+                    <!-- Face Verification -->
+                    <div class="verif-item">
+                        <div class="verif-header">
+                            <span class="verif-icon">👤</span>
+                            <div>
+                                <b>Face Verification / Recognition</b>
+                                <div class="verif-desc">Biometric facial verification using configured cloud vision services.</div>
+                            </div>
+                        </div>
+                        <div class="verif-actions">
+                            <span id="verifFaceBadge" class="status-badge status-unconfigured">Not configured</span>
+                            <button type="button" class="btn-small secondary" onclick="checkFaceVerification()">
+                                Set Up Face Verification
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Passkey / Fingerprint -->
+                    <div class="verif-item">
+                        <div class="verif-header">
+                            <span class="verif-icon">🔑</span>
+                            <div>
+                                <b>Fingerprint / Passkey Verification</b>
+                                <div class="verif-desc">FIDO2 WebAuthn biometric passkey (fingerprint, TouchID, FaceID, or hardware key).</div>
+                            </div>
+                        </div>
+                        <div class="verif-actions">
+                            <span id="verifPasskeyBadge" class="status-badge status-unconfigured">Not configured</span>
+                            <button type="button" class="btn-small primary" onclick="setupPasskey()">
+                                Set Up Passkey
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Live Camera Verification -->
+                    <div class="verif-item">
+                        <div class="verif-header">
+                            <span class="verif-icon">📷</span>
+                            <div>
+                                <b>Live Camera Verification</b>
+                                <div class="verif-desc">Direct live camera presence verification session.</div>
+                            </div>
+                        </div>
+                        <div class="verif-actions">
+                            <span id="verifCameraBadge" class="status-badge status-unconfigured">Not configured</span>
+                            <button type="button" class="btn-small primary" onclick="openCameraVerificationModal()">
+                                Start Camera Verification
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Liveness Verification -->
+                    <div class="verif-item">
+                        <div class="verif-header">
+                            <span class="verif-icon">👁️</span>
+                            <div>
+                                <b>Liveness Verification</b>
+                                <div class="verif-desc">Anti-spoofing presentation check to ensure physical person presence.</div>
+                            </div>
+                        </div>
+                        <div class="verif-actions">
+                            <span id="verifLivenessBadge" class="status-badge status-unconfigured">Not configured</span>
+                            <button type="button" class="btn-small secondary" onclick="checkLivenessVerification()">
+                                Check Liveness Service
+                            </button>
+                        </div>
+                    </div>
+
+                </div>
+
+            </div>
+
+
+            <hr style="margin: 28px 0;">
+
+
+            <!-- PART B: SECONDARY GUARDIAN DETAILS -->
+            <div class="secondary-subpanel">
+
+                <div class="subpanel-header">
+                    <h3>B. Secondary Guardian Details</h3>
+                    <p>Backup emergency contact saved directly to PostgreSQL.</p>
+                </div>
+
+                <div class="details-grid">
+
+                    <div>
+                        <label>Guardian 2 Name</label>
+                        <input
+                            id="pGuardian2Name"
+                            placeholder="Second guardian full name">
+                    </div>
+
+                    <div>
+                        <label>Guardian 2 Phone Number</label>
+                        <input
+                            id="pGuardian2Phone"
+                            placeholder="Second guardian phone">
+                    </div>
+
+                    <div>
+                        <label>Guardian 2 Relationship</label>
+                        <input
+                            id="pGuardian2Relationship"
+                            placeholder="e.g. Mother, Sibling, Uncle">
+                    </div>
+
+                </div>
+
+                <div style="margin-top: 16px;">
+                    <button
+                        type="button"
+                        class="btn-small success"
+                        onclick="saveSecondaryGuardian()">
+                        💾 Save Secondary Guardian
+                    </button>
+                </div>
+
+            </div>
+
+
+            <hr style="margin: 28px 0;">
+
+
+            <!-- PART C: HEALTH INFORMATION -->
+            <div class="secondary-subpanel">
+
+                <div class="subpanel-header">
+                    <h3>C. Health Information</h3>
+                    <p>Clinical emergency questions stored as structured boolean values in PostgreSQL (no large free-text).</p>
+                </div>
+
+                <div class="health-questions-table">
+
+                    <div class="health-q-row">
+                        <div class="health-q-label">
+                            <span class="q-idx">1.</span>
+                            <span>Do you have any known allergies?</span>
+                        </div>
+                        <div class="yn-group" data-q="allergies">
+                            <button type="button" class="yn-btn" data-val="true" onclick="setHealthValue('allergies', true)">Yes</button>
+                            <button type="button" class="yn-btn active" data-val="false" onclick="setHealthValue('allergies', false)">No</button>
+                        </div>
+                    </div>
+
+                    <div class="health-q-row">
+                        <div class="health-q-label">
+                            <span class="q-idx">2.</span>
+                            <span>Do you have diabetes?</span>
+                        </div>
+                        <div class="yn-group" data-q="diabetes">
+                            <button type="button" class="yn-btn" data-val="true" onclick="setHealthValue('diabetes', true)">Yes</button>
+                            <button type="button" class="yn-btn active" data-val="false" onclick="setHealthValue('diabetes', false)">No</button>
+                        </div>
+                    </div>
+
+                    <div class="health-q-row">
+                        <div class="health-q-label">
+                            <span class="q-idx">3.</span>
+                            <span>Do you have high blood pressure?</span>
+                        </div>
+                        <div class="yn-group" data-q="hypertension">
+                            <button type="button" class="yn-btn" data-val="true" onclick="setHealthValue('hypertension', true)">Yes</button>
+                            <button type="button" class="yn-btn active" data-val="false" onclick="setHealthValue('hypertension', false)">No</button>
+                        </div>
+                    </div>
+
+                    <div class="health-q-row">
+                        <div class="health-q-label">
+                            <span class="q-idx">4.</span>
+                            <span>Do you have asthma or breathing problems?</span>
+                        </div>
+                        <div class="yn-group" data-q="asthma">
+                            <button type="button" class="yn-btn" data-val="true" onclick="setHealthValue('asthma', true)">Yes</button>
+                            <button type="button" class="yn-btn active" data-val="false" onclick="setHealthValue('asthma', false)">No</button>
+                        </div>
+                    </div>
+
+                    <div class="health-q-row">
+                        <div class="health-q-label">
+                            <span class="q-idx">5.</span>
+                            <span>Do you have any heart-related condition?</span>
+                        </div>
+                        <div class="yn-group" data-q="heart_condition">
+                            <button type="button" class="yn-btn" data-val="true" onclick="setHealthValue('heart_condition', true)">Yes</button>
+                            <button type="button" class="yn-btn active" data-val="false" onclick="setHealthValue('heart_condition', false)">No</button>
+                        </div>
+                    </div>
+
+                    <div class="health-q-row">
+                        <div class="health-q-label">
+                            <span class="q-idx">6.</span>
+                            <span>Have you had any major surgery?</span>
+                        </div>
+                        <div class="yn-group" data-q="major_surgery">
+                            <button type="button" class="yn-btn" data-val="true" onclick="setHealthValue('major_surgery', true)">Yes</button>
+                            <button type="button" class="yn-btn active" data-val="false" onclick="setHealthValue('major_surgery', false)">No</button>
+                        </div>
+                    </div>
+
+                    <div class="health-q-row">
+                        <div class="health-q-label">
+                            <span class="q-idx">7.</span>
+                            <span>Are you currently taking regular medication?</span>
+                        </div>
+                        <div class="yn-group" data-q="regular_medication">
+                            <button type="button" class="yn-btn" data-val="true" onclick="setHealthValue('regular_medication', true)">Yes</button>
+                            <button type="button" class="yn-btn active" data-val="false" onclick="setHealthValue('regular_medication', false)">No</button>
+                        </div>
+                    </div>
+
+                    <div class="health-q-row">
+                        <div class="health-q-label">
+                            <span class="q-idx">8.</span>
+                            <span>Do you have any known chronic medical condition?</span>
+                        </div>
+                        <div class="yn-group" data-q="chronic_condition">
+                            <button type="button" class="yn-btn" data-val="true" onclick="setHealthValue('chronic_condition', true)">Yes</button>
+                            <button type="button" class="yn-btn active" data-val="false" onclick="setHealthValue('chronic_condition', false)">No</button>
+                        </div>
+                    </div>
+
+                    <div class="health-q-row">
+                        <div class="health-q-label">
+                            <span class="q-idx">9.</span>
+                            <span>Have you ever had a serious drug reaction?</span>
+                        </div>
+                        <div class="yn-group" data-q="drug_reaction">
+                            <button type="button" class="yn-btn" data-val="true" onclick="setHealthValue('drug_reaction', true)">Yes</button>
+                            <button type="button" class="yn-btn active" data-val="false" onclick="setHealthValue('drug_reaction', false)">No</button>
+                        </div>
+                    </div>
+
+                    <div class="health-q-row">
+                        <div class="health-q-label">
+                            <span class="q-idx">10.</span>
+                            <span>Do you have any other important emergency health condition?</span>
+                        </div>
+                        <div class="yn-group" data-q="emergency_condition">
+                            <button type="button" class="yn-btn" data-val="true" onclick="setHealthValue('emergency_condition', true)">Yes</button>
+                            <button type="button" class="yn-btn active" data-val="false" onclick="setHealthValue('emergency_condition', false)">No</button>
+                        </div>
+                    </div>
+
+                </div>
+
+                <div style="margin-top: 24px;">
+                    <button
+                        type="button"
+                        id="saveHealthBtn"
+                        class="primary"
+                        onclick="saveHealthInformation()">
+                        💾 Save Health Information to PostgreSQL
+                    </button>
+                </div>
 
             </div>
 
@@ -965,19 +1314,65 @@
             <input id="regName" type="text" placeholder="e.g. Priya Sharma">
 
             <label>Contact Phone</label>
-            <input id="regPhone" type="text" placeholder="e.g. 9876543210">
+            <input id="regPhone" type="text" placeholder="e.g. +919876543210">
 
             <label>Password *</label>
             <input id="regPassword" type="password" placeholder="Create a password">
 
-            <label>Blood Group</label>
-            <input id="regBlood" type="text" placeholder="e.g. O+, A+, B+">
+            <label>Blood Group *</label>
+            <select id="regBlood">
+                <option value="A+">A+</option>
+                <option value="A-">A-</option>
+                <option value="B+">B+</option>
+                <option value="B-">B-</option>
+                <option value="AB+">AB+</option>
+                <option value="AB-">AB-</option>
+                <option value="O+" selected>O+</option>
+                <option value="O-">O-</option>
+            </select>
+
+            <label>Guardian Name</label>
+            <input id="regGuardianName" type="text" placeholder="e.g. Ramesh Sharma">
+
+            <label>Guardian Phone</label>
+            <input id="regGuardianPhone" type="text" placeholder="e.g. +919876543211">
+
+            <label>Guardian Relationship</label>
+            <input id="regGuardianRel" type="text" placeholder="e.g. Father, Mother, Spouse">
 
             <p id="regMessage" class="error" style="margin-top: 10px;"></p>
 
             <button class="primary full" style="margin-top: 14px;" onclick="submitRegistration()">
                 Complete Registration
             </button>
+        </div>
+    </div>
+</div>
+
+<!-- ================= PATIENT CAMERA VERIFICATION MODAL ================= -->
+<div id="patientCameraModal" class="modal-overlay hidden">
+    <div class="modal-card camera-modal-card">
+        <div class="modal-header">
+            <h2>📸 Live Camera Verification</h2>
+            <button class="close-modal" onclick="closeCameraVerificationModal()">✕</button>
+        </div>
+        <div class="modal-body">
+            <p style="color: #64748b; font-size: 14px; margin-bottom: 12px;">
+                Position your face directly in the frame to record a live camera verification session.
+            </p>
+            <div class="patient-camera-viewport">
+                <video id="patCameraVideo" autoplay playsinline muted></video>
+                <div id="patCameraGuide" class="patient-camera-guide"></div>
+                <canvas id="patCameraCanvas" style="display:none;"></canvas>
+            </div>
+            <div class="button-row" style="margin-top: 16px;">
+                <button type="button" class="btn-success" onclick="confirmCameraVerification()">
+                    ✅ Confirm Live Verification
+                </button>
+                <button type="button" class="btn-secondary" onclick="closeCameraVerificationModal()">
+                    Cancel
+                </button>
+            </div>
         </div>
     </div>
 </div>

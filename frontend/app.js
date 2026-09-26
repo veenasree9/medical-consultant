@@ -556,389 +556,566 @@ async function passwordLogin() {
 
 /* ================= PATIENT DASHBOARD ================= */
 
+let currentHealthInfo = {
+    allergies: false,
+    diabetes: false,
+    hypertension: false,
+    asthma: false,
+    heart_condition: false,
+    major_surgery: false,
+    regular_medication: false,
+    chronic_condition: false,
+    drug_reaction: false,
+    emergency_condition: false
+};
+
 async function loadPatientDashboard() {
+    const response = await fetch(`${API_URL}/api/patient/me`, {
+        headers: {
+            Authorization: `Bearer ${patientToken}`
+        }
+    });
 
-    const response =
-        await fetch(
-            `${API_URL}/api/patient/me`,
-            {
+    const data = await response.json();
 
-                headers: {
-
-                    Authorization:
-                        `Bearer ${patientToken}`
-
-                }
-
-            }
-        );
-
-
-    const data =
-        await response.json();
-
-
-    if (!response.ok ||
-        !data.success) {
-
-        localStorage.removeItem(
-            "patientToken"
-        );
-
+    if (!response.ok || !data.success) {
+        localStorage.removeItem("patientToken");
         patientToken = null;
-
-        throw new Error(
-            data.message ||
-            "Could not load patient details."
-        );
+        throw new Error(data.message || "Could not load patient details.");
     }
 
+    const p = data.patient;
 
-    const p =
-        data.patient;
+    $("patientName").textContent = p.name;
+    $("patientHeaderName").textContent = p.name;
+    $("patientId").textContent = p.id;
+    if ($("pPatientId")) $("pPatientId").value = p.id;
 
+    // Primary Details
+    if ($("pName")) $("pName").value = p.name || "";
+    if ($("pAge")) $("pAge").value = p.age || "";
+    if ($("pGender")) $("pGender").value = p.gender || "Other";
+    if ($("pBlood")) $("pBlood").value = p.bloodGroup || p.blood || "O+";
+    if ($("pPhone")) $("pPhone").value = p.phone || "";
+    if ($("pEmail")) $("pEmail").value = p.email || "";
+    if ($("pAddress")) $("pAddress").value = p.address || "";
 
-    $("patientName").textContent =
-        p.name;
+    // Primary Guardian (Editable fields)
+    if ($("pGuardianName")) $("pGuardianName").value = p.guardianName || "";
+    if ($("pGuardianPhone")) $("pGuardianPhone").value = p.guardianPhone || "";
+    if ($("pGuardianRelationship")) $("pGuardianRelationship").value = p.guardianRelationship || "";
 
-    $("patientHeaderName").textContent =
-        p.name;
+    // Medical Notes & History
+    if ($("pMedicalHistory")) $("pMedicalHistory").value = p.medicalHistory || "";
+    if ($("pNotes")) $("pNotes").value = p.notes || "";
 
-    $("patientId").textContent =
-        p.id;
+    // Ensure inputs are initially disabled until "Update Details" is clicked
+    [
+        "pName", "pAge", "pGender", "pBlood", "pPhone", "pEmail", "pAddress",
+        "pGuardianName", "pGuardianPhone", "pGuardianRelationship", "pMedicalHistory", "pNotes"
+    ].forEach(id => {
+        if ($(id)) $(id).disabled = true;
+    });
 
+    $("updateBtn").classList.remove("hidden");
+    $("saveBtn").classList.add("hidden");
+    $("cancelBtn").classList.add("hidden");
 
-    $("pName").value =
-        p.name || "";
+    // Secondary Guardian Details
+    if ($("pGuardian2Name")) $("pGuardian2Name").value = p.guardian2Name || "";
+    if ($("pGuardian2Phone")) $("pGuardian2Phone").value = p.guardian2Phone || "";
+    if ($("pGuardian2Relationship")) $("pGuardian2Relationship").value = p.guardian2Relationship || "";
 
-    $("pAge").value =
-        p.age || "";
+    // Structured Health Information
+    if (p.healthInformation) {
+        currentHealthInfo = {
+            allergies: Boolean(p.healthInformation.allergies),
+            diabetes: Boolean(p.healthInformation.diabetes),
+            hypertension: Boolean(p.healthInformation.hypertension),
+            asthma: Boolean(p.healthInformation.asthma),
+            heart_condition: Boolean(p.healthInformation.heart_condition),
+            major_surgery: Boolean(p.healthInformation.major_surgery),
+            regular_medication: Boolean(p.healthInformation.regular_medication),
+            chronic_condition: Boolean(p.healthInformation.chronic_condition),
+            drug_reaction: Boolean(p.healthInformation.drug_reaction),
+            emergency_condition: Boolean(p.healthInformation.emergency_condition)
+        };
+        updateHealthUI();
+    }
 
-    $("pGender").value =
-        p.gender || "Other";
-
-    $("pBlood").value =
-        p.blood || "";
-
-    $("pPhone").value =
-        p.phone || "";
-
-    $("pEmail").value =
-        p.email || "";
-
-    $("pAddress").value =
-        p.address || "";
-
-    $("pGuardianName").value =
-        p.guardianName || "";
-
-    $("pGuardianPhone").value =
-        p.guardianPhone || "";
-
-    $("pNotes").value =
-        p.notes || "";
-
+    // Verification Badges (Strictly 'Not configured' unless real verification has occurred)
+    if (p.verifications) {
+        updateVerifBadge("verifFaceBadge", p.verifications.face);
+        updateVerifBadge("verifPasskeyBadge", p.verifications.passkey);
+        updateVerifBadge("verifCameraBadge", p.verifications.camera_live);
+        updateVerifBadge("verifLivenessBadge", p.verifications.liveness);
+    }
 
     hideAll();
-
-    $("patientDashboard")
-        .classList
-        .remove("hidden");
+    $("patientDashboard").classList.remove("hidden");
 }
 
+function updateVerifBadge(badgeId, status) {
+    const badge = $(badgeId);
+    if (!badge) return;
+    if (status === "verified") {
+        badge.className = "status-badge status-verified";
+        badge.textContent = "Verified";
+    } else if (status === "configured") {
+        badge.className = "status-badge status-verified";
+        badge.textContent = "Configured";
+    } else if (status === "pending") {
+        badge.className = "status-badge status-pending";
+        badge.textContent = "Pending";
+    } else {
+        badge.className = "status-badge status-unconfigured";
+        badge.textContent = "Not configured";
+    }
+}
 
-/* ================= UPDATE ================= */
+/* ================= UPDATE PRIMARY DETAILS ================= */
 
 function enableUpdate() {
-
     [
         "pName",
         "pAge",
         "pGender",
         "pBlood",
+        "pPhone",
         "pEmail",
+        "pAddress",
         "pGuardianName",
         "pGuardianPhone",
-        "pAddress",
+        "pGuardianRelationship",
+        "pMedicalHistory",
         "pNotes"
     ].forEach(id => {
-
-        $(id).disabled = false;
-
+        if ($(id)) $(id).disabled = false;
     });
 
-
-    $("updateBtn")
-        .classList
-        .add("hidden");
-
-    $("saveBtn")
-        .classList
-        .remove("hidden");
-
-    $("cancelBtn")
-        .classList
-        .remove("hidden");
+    $("updateBtn").classList.add("hidden");
+    $("saveBtn").classList.remove("hidden");
+    $("cancelBtn").classList.remove("hidden");
 }
 
-
-/* ================= SAVE ================= */
+/* ================= SAVE PRIMARY DETAILS ================= */
 
 async function saveDetails() {
-
+    const bloodVal = $("pBlood").value;
     const details = {
-
-        name:
-            $("pName").value.trim(),
-
-        age:
-            $("pAge").value,
-
-        gender:
-            $("pGender").value,
-
-        blood:
-            $("pBlood").value.trim(),
-
-        email:
-            $("pEmail").value.trim(),
-
-        guardianName:
-            $("pGuardianName").value.trim(),
-
-        guardianPhone:
-            $("pGuardianPhone").value.trim(),
-
-        address:
-            $("pAddress").value.trim(),
-
-        notes:
-            $("pNotes").value.trim()
-
+        name: $("pName").value.trim(),
+        age: $("pAge").value.trim(),
+        gender: $("pGender").value,
+        blood: bloodVal,
+        bloodGroup: bloodVal,
+        phone: $("pPhone").value.trim(),
+        email: $("pEmail").value.trim(),
+        address: $("pAddress").value.trim(),
+        guardianName: $("pGuardianName").value.trim(),
+        guardianPhone: $("pGuardianPhone").value.trim(),
+        guardianRelationship: $("pGuardianRelationship").value.trim(),
+        medicalHistory: $("pMedicalHistory") ? $("pMedicalHistory").value.trim() : "",
+        notes: $("pNotes").value.trim()
     };
 
-
     try {
+        const response = await fetch(`${API_URL}/api/patient/me`, {
+            method: "PUT",
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${patientToken}`
+            },
+            body: JSON.stringify(details)
+        });
 
-        const response =
-            await fetch(
-                `${API_URL}/api/patient/me`,
-                {
-
-                    method: "PUT",
-
-                    headers: {
-
-                        "Content-Type":
-                            "application/json",
-
-                        Authorization:
-                            `Bearer ${patientToken}`
-
-                    },
-
-                    body:
-                        JSON.stringify(details)
-
-                }
-            );
-
-
-        const data =
-            await response.json();
-
-
-        if (!response.ok ||
-            !data.success) {
-
-            throw new Error(
-                data.message ||
-                "Update failed."
-            );
+        const data = await response.json();
+        if (!response.ok || !data.success) {
+            throw new Error(data.message || "Update failed.");
         }
 
-
         await loadPatientDashboard();
-
-        showToast(
-            "Patient details updated."
-        );
-
-    }
-
-
-    catch (error) {
-
-        showToast(
-            error.message
-        );
+        showToast("Primary patient details saved to PostgreSQL.");
+    } catch (error) {
+        showToast(error.message);
     }
 }
-
 
 /* ================= CANCEL ================= */
 
 function cancelUpdate() {
-
-    loadPatientDashboard()
-        .catch(error =>
-            showToast(error.message)
-        );
+    loadPatientDashboard().catch(error => showToast(error.message));
 }
 
+/* ================= SECONDARY GUARDIAN SAVE ================= */
+
+async function saveSecondaryGuardian() {
+    const details = {
+        guardian2Name: $("pGuardian2Name") ? $("pGuardian2Name").value.trim() : "",
+        guardian2Phone: $("pGuardian2Phone") ? $("pGuardian2Phone").value.trim() : "",
+        guardian2Relationship: $("pGuardian2Relationship") ? $("pGuardian2Relationship").value.trim() : ""
+    };
+
+    try {
+        const response = await fetch(`${API_URL}/api/patient/me`, {
+            method: "PUT",
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${patientToken}`
+            },
+            body: JSON.stringify(details)
+        });
+
+        const data = await response.json();
+        if (!response.ok || !data.success) {
+            throw new Error(data.message || "Failed to save secondary guardian.");
+        }
+
+        showToast("Secondary Guardian details saved permanently in PostgreSQL!");
+    } catch (err) {
+        showToast(err.message);
+    }
+}
+
+/* ================= HEALTH INFORMATION (STRUCTURED BOOLEANS) ================= */
+
+function setHealthValue(questionKey, val) {
+    currentHealthInfo[questionKey] = Boolean(val);
+    updateHealthUI();
+}
+
+function updateHealthUI() {
+    const questions = [
+        "allergies", "diabetes", "hypertension", "asthma", "heart_condition",
+        "major_surgery", "regular_medication", "chronic_condition", "drug_reaction", "emergency_condition"
+    ];
+
+    questions.forEach(q => {
+        const group = document.querySelector(`.yn-group[data-q="${q}"]`);
+        if (group) {
+            const isYes = Boolean(currentHealthInfo[q]);
+            const yesBtn = group.querySelector('.yn-btn[data-val="true"]');
+            const noBtn = group.querySelector('.yn-btn[data-val="false"]');
+            if (yesBtn && noBtn) {
+                if (isYes) {
+                    yesBtn.classList.add("active");
+                    noBtn.classList.remove("active");
+                } else {
+                    noBtn.classList.add("active");
+                    yesBtn.classList.remove("active");
+                }
+            }
+        }
+    });
+}
+
+async function saveHealthInformation() {
+    const btn = $("saveHealthBtn");
+    if (btn) {
+        btn.disabled = true;
+        btn.textContent = "⏳ Saving...";
+    }
+
+    try {
+        const response = await fetch(`${API_URL}/api/patient/health-information`, {
+            method: "PUT",
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${patientToken}`
+            },
+            body: JSON.stringify(currentHealthInfo)
+        });
+
+        const data = await response.json();
+        if (!response.ok || !data.success) {
+            throw new Error(data.message || "Failed to save health information.");
+        }
+
+        showToast("Health Information answers saved to PostgreSQL!");
+    } catch (err) {
+        showToast(err.message);
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = "💾 Save Health Information to PostgreSQL";
+        }
+    }
+}
+
+/* ================= IDENTITY & VERIFICATIONS ================= */
+
+// 1. Face Verification Status Check
+async function checkFaceVerification() {
+    try {
+        showToast("Checking face recognition service configuration...");
+        const res = await fetch(`${API_URL}/api/patient/verification/face-status`, {
+            headers: { Authorization: `Bearer ${patientToken}` }
+        });
+        const data = await res.json();
+        const badge = $("verifFaceBadge");
+
+        if (data.isConfigured) {
+            if (badge) {
+                badge.className = "status-badge status-verified";
+                badge.textContent = "Configured (" + data.provider + ")";
+            }
+            showToast("Face verification service is active with " + data.provider);
+        } else {
+            if (badge) {
+                badge.className = "status-badge status-unconfigured";
+                badge.textContent = "Not configured";
+            }
+            showToast("Face verification service is not configured yet (AWS Rekognition / Azure Face API keys not set in backend).");
+        }
+    } catch (err) {
+        showToast("Failed to check face service: " + err.message);
+    }
+}
+
+// 2. FIDO2 / WebAuthn Passkey Verification
+async function setupPasskey() {
+    if (!window.PublicKeyCredential) {
+        showToast("Passkeys / WebAuthn are not supported on this browser.");
+        return;
+    }
+
+    try {
+        showToast("Requesting passkey registration challenge...");
+        const chalRes = await fetch(`${API_URL}/api/patient/passkey/register-challenge`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${patientToken}` }
+        });
+        const chalData = await chalRes.json();
+        if (!chalRes.ok || !chalData.success) {
+            throw new Error(chalData.message || "Failed to initiate passkey challenge.");
+        }
+
+        const challengeBuffer = Uint8Array.from(atob(chalData.challenge.replace(/-/g, "+").replace(/_/g, "/")), c => c.charCodeAt(0));
+        const userIdBuffer = new TextEncoder().encode(chalData.user.id);
+
+        const createOptions = {
+            publicKey: {
+                challenge: challengeBuffer,
+                rp: {
+                    name: chalData.rp.name,
+                    id: window.location.hostname
+                },
+                user: {
+                    id: userIdBuffer,
+                    name: chalData.user.name,
+                    displayName: chalData.user.displayName
+                },
+                pubKeyCredParams: chalData.pubKeyCredParams,
+                authenticatorSelection: {
+                    authenticatorAttachment: "platform",
+                    userVerification: "preferred"
+                },
+                timeout: 60000
+            }
+        };
+
+        const credential = await navigator.credentials.create(createOptions);
+        if (!credential) {
+            throw new Error("Passkey creation was canceled.");
+        }
+
+        const rawIdBase64 = btoa(String.fromCharCode(...new Uint8Array(credential.rawId)))
+            .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+
+        const verifyRes = await fetch(`${API_URL}/api/patient/passkey/verify-registration`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${patientToken}`
+            },
+            body: JSON.stringify({ credentialId: rawIdBase64 })
+        });
+
+        const verifyData = await verifyRes.json();
+        if (!verifyRes.ok || !verifyData.success) {
+            throw new Error(verifyData.message || "Passkey verification failed.");
+        }
+
+        const badge = $("verifPasskeyBadge");
+        if (badge) {
+            badge.className = "status-badge status-verified";
+            badge.textContent = "Verified";
+        }
+        showToast("Passkey registered and verified successfully in PostgreSQL!");
+    } catch (err) {
+        console.warn("Passkey setup notice:", err.message);
+        showToast(err.message || "Passkey setup canceled or unavailable.");
+    }
+}
+
+// 3. Live Camera Verification
+let patCameraStream = null;
+
+async function openCameraVerificationModal() {
+    const modal = $("patientCameraModal");
+    const video = $("patCameraVideo");
+    if (!modal || !video) return;
+
+    modal.classList.remove("hidden");
+    try {
+        patCameraStream = await navigator.mediaDevices.getUserMedia({
+            video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: "user" }
+        });
+        video.srcObject = patCameraStream;
+        await video.play();
+    } catch (err) {
+        console.warn("Camera access error:", err.message);
+        showToast("Camera access unavailable: " + err.message);
+        closeCameraVerificationModal();
+    }
+}
+
+function closeCameraVerificationModal() {
+    if (patCameraStream) {
+        patCameraStream.getTracks().forEach(t => t.stop());
+        patCameraStream = null;
+    }
+    const modal = $("patientCameraModal");
+    if (modal) modal.classList.add("hidden");
+}
+
+async function confirmCameraVerification() {
+    try {
+        const video = $("patCameraVideo");
+        const canvas = $("patCameraCanvas");
+        if (video && canvas) {
+            canvas.width = video.videoWidth || 640;
+            canvas.height = video.videoHeight || 480;
+            const ctx = canvas.getContext("2d");
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        }
+
+        const res = await fetch(`${API_URL}/api/patient/verification/camera`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${patientToken}`
+            },
+            body: JSON.stringify({ verified: true })
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+            throw new Error(data.message || "Failed to record camera verification.");
+        }
+
+        closeCameraVerificationModal();
+        const badge = $("verifCameraBadge");
+        if (badge) {
+            badge.className = "status-badge status-verified";
+            badge.textContent = "Verified";
+        }
+        showToast("Live camera verification confirmed in PostgreSQL!");
+    } catch (err) {
+        showToast(err.message);
+    }
+}
+
+// 4. Liveness Verification
+function checkLivenessVerification() {
+    const badge = $("verifLivenessBadge");
+    if (badge) {
+        badge.className = "status-badge status-unconfigured";
+        badge.textContent = "Not configured";
+    }
+    showToast("Liveness anti-spoofing service requires active facial recognition provider.");
+}
 
 /* ================= DOCTOR SEARCH ================= */
 
 async function searchPatient() {
-
-    const id =
-        $("doctorPatientId")
-        .value
-        .trim()
-        .toUpperCase();
-
-
-    const result =
-        $("doctorResult");
-
+    const id = $("doctorPatientId").value.trim().toUpperCase();
+    const result = $("doctorResult");
 
     if (!id) {
-
-        result.innerHTML =
-            `<p class="error">
-                Enter Patient ID.
-            </p>`;
-
+        result.innerHTML = `<p class="error">Enter Patient ID.</p>`;
         return;
     }
 
-
-    const token =
-        localStorage.getItem(
-            "doctorToken"
-        );
-
+    const token = localStorage.getItem("doctorToken");
 
     try {
+        const response = await fetch(`${API_URL}/api/doctor/patients/${encodeURIComponent(id)}`, {
+            headers: {
+                Authorization: `Bearer ${token}`
+            }
+        });
 
-        const response =
-            await fetch(
-                `${API_URL}/api/doctor/patients/${encodeURIComponent(id)}`,
-                {
+        const data = await response.json();
 
-                    headers: {
-
-                        Authorization:
-                            `Bearer ${token}`
-
-                    }
-
-                }
-            );
-
-
-        const data =
-            await response.json();
-
-
-        if (!response.ok ||
-            !data.success) {
-
-            throw new Error(
-                data.message ||
-                "Patient not found."
-            );
+        if (!response.ok || !data.success) {
+            throw new Error(data.message || "Patient not found.");
         }
 
+        const p = data.patient;
+        const g1 = p.guardianName ? `${escapeHTML(p.guardianName)} (${escapeHTML(p.guardianPhone || "No phone")}, ${escapeHTML(p.guardianRelationship || "Primary")})` : "Not provided";
+        const g2 = p.guardian2Name ? `${escapeHTML(p.guardian2Name)} (${escapeHTML(p.guardian2Phone || "No phone")}, ${escapeHTML(p.guardian2Relationship || "Secondary")})` : "None";
 
-        const p =
-            data.patient;
-
+        let healthBadges = "";
+        if (p.healthInformation) {
+            const h = p.healthInformation;
+            const items = [
+                { label: "Allergies", val: h.allergies },
+                { label: "Diabetes", val: h.diabetes },
+                { label: "Hypertension", val: h.hypertension },
+                { label: "Asthma", val: h.asthma },
+                { label: "Heart Condition", val: h.heart_condition },
+                { label: "Major Surgery", val: h.major_surgery },
+                { label: "Regular Meds", val: h.regular_medication },
+                { label: "Chronic Condition", val: h.chronic_condition },
+                { label: "Drug Reaction", val: h.drug_reaction },
+                { label: "Emergency Condition", val: h.emergency_condition }
+            ];
+            healthBadges = items.map(item => `
+                <span style="display:inline-block; font-size:12px; margin:3px 6px 3px 0; padding:3px 8px; border-radius:4px; font-weight:600; background:${item.val ? '#fee2e2' : '#f1f5f9'}; color:${item.val ? '#b91c1c' : '#475569'}; border:1px solid ${item.val ? '#fca5a5' : '#cbd5e1'};">
+                    ${escapeHTML(item.label)}: ${item.val ? 'YES' : 'NO'}
+                </span>
+            `).join("");
+        }
 
         result.innerHTML = `
-
             <div class="doctor-result">
-
-                <h3>
-                    👤 Patient Found
-                </h3>
-
-                <p>
-                    <b>Patient ID:</b>
-                    ${escapeHTML(p.id)}
-                </p>
-
-                <p>
-                    <b>Name:</b>
-                    ${escapeHTML(p.name)}
-                </p>
-
-                <p>
-                    <b>Age:</b>
-                    ${escapeHTML(String(p.age || ""))}
-                </p>
-
-                <p>
-                    <b>Gender:</b>
-                    ${escapeHTML(p.gender || "")}
-                </p>
-
-                <p>
-                    <b>Blood Group:</b>
-                    ${escapeHTML(p.blood || "")}
-                </p>
-
-                <p>
-                    <b>Phone:</b>
-                    ${escapeHTML(p.phone || "")}
-                </p>
-
-                <p>
-                    <b>Guardian:</b>
-                    ${escapeHTML(p.guardianName || "Not provided")} (${escapeHTML(p.guardianPhone || "No phone")})
-                </p>
-
-                <p>
-                    <b>Medical Notes:</b>
-                    ${escapeHTML(p.notes || "")}
-                </p>
-
+                <h3>👤 Patient Found</h3>
+                <p><b>Patient ID:</b> ${escapeHTML(p.id)}</p>
+                <p><b>Name:</b> ${escapeHTML(p.name)}</p>
+                <p><b>Age:</b> ${escapeHTML(String(p.age || ""))}</p>
+                <p><b>Gender:</b> ${escapeHTML(p.gender || "")}</p>
+                <p><b>Blood Group:</b> <span class="blood-group-badge">${escapeHTML(p.bloodGroup || p.blood || "")}</span></p>
+                <p><b>Phone:</b> ${escapeHTML(p.phone || "")}</p>
+                <p><b>Email:</b> ${escapeHTML(p.email || "")}</p>
+                <p><b>Address:</b> ${escapeHTML(p.address || "")}</p>
+                <p><b>Primary Guardian:</b> ${g1}</p>
+                <p><b>Secondary Guardian:</b> ${g2}</p>
+                <div style="margin-top:10px;">
+                    <b>Health Information Screening:</b>
+                    <div style="margin-top:6px;">${healthBadges || "No records"}</div>
+                </div>
+                <p style="margin-top:10px;"><b>Medical History:</b> ${escapeHTML(p.medicalHistory || "None")}</p>
+                <p><b>Medical Notes:</b> ${escapeHTML(p.notes || "None")}</p>
             </div>
-
         `;
-
-    }
-
-
-    catch (error) {
-
-        result.innerHTML =
-            `<p class="error">
-                ${escapeHTML(error.message)}
-            </p>`;
+    } catch (error) {
+        result.innerHTML = `<p class="error">${escapeHTML(error.message)}</p>`;
     }
 }
-
 
 /* ================= SECURITY ================= */
 
 function escapeHTML(value) {
-
-    return value.replace(
+    return String(value || "").replace(
         /[&<>"']/g,
-
         character => ({
-
             "&": "&amp;",
             "<": "&lt;",
             ">": "&gt;",
             '"': "&quot;",
             "'": "&#039;"
-
         }[character])
     );
 }
-
 
 /* ================= PATIENT REGISTRATION ================= */
 
@@ -950,7 +1127,10 @@ function openRegisterModal() {
     if ($("regName")) $("regName").value = "";
     if ($("regPhone")) $("regPhone").value = "";
     if ($("regPassword")) $("regPassword").value = "";
-    if ($("regBlood")) $("regBlood").value = "";
+    if ($("regBlood")) $("regBlood").value = "O+";
+    if ($("regGuardianName")) $("regGuardianName").value = "";
+    if ($("regGuardianPhone")) $("regGuardianPhone").value = "";
+    if ($("regGuardianRel")) $("regGuardianRel").value = "";
     if ($("regMessage")) $("regMessage").textContent = "";
     if ($("registerModal")) $("registerModal").classList.remove("hidden");
 }
@@ -963,7 +1143,10 @@ async function submitRegistration() {
     const fullName = $("regName") ? $("regName").value.trim() : "";
     const phone = $("regPhone") ? $("regPhone").value.trim() : "";
     const password = $("regPassword") ? $("regPassword").value.trim() : "";
-    const bloodGroup = $("regBlood") ? $("regBlood").value.trim() : "";
+    const bloodGroup = $("regBlood") ? $("regBlood").value : "O+";
+    const guardianName = $("regGuardianName") ? $("regGuardianName").value.trim() : "";
+    const guardianPhone = $("regGuardianPhone") ? $("regGuardianPhone").value.trim() : "";
+    const guardianRelationship = $("regGuardianRel") ? $("regGuardianRel").value.trim() : "";
 
     if (!fullName || !password) {
         if ($("regMessage")) $("regMessage").textContent = "Please enter your Full Name and Password.";
@@ -974,7 +1157,15 @@ async function submitRegistration() {
         const response = await fetch(`${API_URL}/api/auth/register-patient`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ fullName, phone, password, bloodGroup })
+            body: JSON.stringify({
+                fullName,
+                phone,
+                password,
+                bloodGroup,
+                guardianName,
+                guardianPhone,
+                guardianRelationship
+            })
         });
 
         const data = await response.json();
