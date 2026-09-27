@@ -493,7 +493,7 @@ app.post("/api/auth/register-doctor", async (req, res) => {
             username: (username || doctorId || "").trim(),
             phone: phone ? phone.trim() : "",
             password: password,
-            specialization: specialization ? specialization.trim() : ""
+            specialization: specialization ? (Array.isArray(specialization) ? specialization : specialization.trim()) : "General Medicine"
         });
 
         await db.insertAuditLog(newDoctor.doctorId, "doctor_registration", null, {
@@ -916,10 +916,18 @@ app.get("/api/patient/export-pdf", auth("patient"), async (req, res) => {
     }
 });
 
-// Doctor downloading patient's physical record
+// Doctor downloading patient's physical record (Strictly Authorized Patients Only)
 app.get("/api/doctor/patients/:id/export-pdf", auth("doctor"), async (req, res) => {
     try {
         const id = String(req.params.id).toUpperCase();
+        const isAccepted = await db.isDoctorAccessAccepted(req.user.doctorId, id);
+        if (!isAccepted) {
+            return res.status(403).json({
+                success: false,
+                message: "Access denied: Waiting for patient approval."
+            });
+        }
+
         const patient = await db.getPatientDetails(id);
         if (!patient) {
             return res.status(404).json({
@@ -943,7 +951,9 @@ app.get("/api/doctor/patients/:id/export-pdf", auth("doctor"), async (req, res) 
     }
 });
 
-/* ================= DOCTOR PATIENT LOOKUP (POSTGRESQL) ================= */
+/* ================= DOCTOR PATIENT LOOKUP & ACCESS REQUESTS (POSTGRESQL) ================= */
+
+// Doctor search: A doctor must NEVER see a patient's private details merely by searching
 app.get("/api/doctor/patients/:id", auth("doctor"), async (req, res) => {
     try {
         const id = String(req.params.id).toUpperCase();
@@ -960,9 +970,37 @@ app.get("/api/doctor/patients/:id", auth("doctor"), async (req, res) => {
             searchId: id
         });
 
-        res.json({
+        // Check if access request has been accepted by this patient
+        const accessStatus = await db.getDoctorAccessStatus(req.user.doctorId, id);
+        const isAccepted = accessStatus && accessStatus.status === "accepted";
+
+        if (!isAccepted) {
+            // STRICT PRIVACY (Requirement 4):
+            // Before acceptance, the doctor must NOT see:
+            // health information, medical records, medical files, guardian details, phone number, email, address, private profile info
+            return res.json({
+                success: true,
+                authorized: false,
+                accessStatus: accessStatus ? accessStatus.status : "none",
+                patient: {
+                    id: patient.patientId || patient.id,
+                    name: patient.name
+                },
+                message: (accessStatus && accessStatus.status === "pending")
+                    ? "Waiting for patient approval."
+                    : (accessStatus && accessStatus.status === "rejected")
+                    ? "Access request was rejected by patient."
+                    : "Access request required to view patient medical information."
+            });
+        }
+
+        // ONLY after the patient clicks Accept can the doctor access the authorized patient information
+        const authorizedPatient = await db.getAuthorizedPatientDetailsForDoctor(req.user.doctorId, id);
+        return res.json({
             success: true,
-            patient: patient
+            authorized: true,
+            accessStatus: "accepted",
+            patient: authorizedPatient
         });
     } catch (err) {
         res.status(500).json({
@@ -972,12 +1010,92 @@ app.get("/api/doctor/patients/:id", auth("doctor"), async (req, res) => {
     }
 });
 
+// Doctor sends access request to a patient
+app.post("/api/doctor/access-requests", auth("doctor"), async (req, res) => {
+    try {
+        const { patientId } = req.body;
+        if (!patientId) {
+            return res.status(400).json({ success: false, message: "Patient ID is required." });
+        }
+        const cleanPat = String(patientId).trim().toUpperCase();
+        const request = await db.createDoctorAccessRequest(req.user.doctorId, cleanPat);
+        await db.insertAuditLog(req.user.doctorId, "doctor_access_request_sent", cleanPat, {
+            status: "pending"
+        });
+        res.json({
+            success: true,
+            request,
+            message: "Waiting for patient approval."
+        });
+    } catch (err) {
+        res.status(400).json({ success: false, message: err.message });
+    }
+});
+
+// Doctor lists their access requests
+app.get("/api/doctor/access-requests", auth("doctor"), async (req, res) => {
+    try {
+        const requests = await db.getDoctorAccessRequestsForDoctor(req.user.doctorId);
+        res.json({ success: true, requests });
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    }
+});
+
+// Doctor lists authorized patients
+app.get("/api/doctor/authorized-patients", auth("doctor"), async (req, res) => {
+    try {
+        const patients = await db.getAcceptedPatientsForDoctor(req.user.doctorId);
+        res.json({ success: true, patients });
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    }
+});
+
+// Patient lists Doctor Access Requests (Requirement 4)
+app.get("/api/patient/access-requests", auth("patient"), async (req, res) => {
+    try {
+        const requests = await db.getDoctorAccessRequestsForPatient(req.user.patientId);
+        res.json({
+            success: true,
+            requests: requests || []
+        });
+    } catch (err) {
+        res.status(500).json({ success: false, message: "Failed to retrieve access requests: " + err.message });
+    }
+});
+
+// Patient responds to Doctor Access Request (Accept / Reject)
+app.post("/api/patient/access-requests/:doctorId/respond", auth("patient"), async (req, res) => {
+    try {
+        const { action } = req.body; // 'accept' or 'reject'
+        const doctorId = String(req.params.doctorId).trim().toLowerCase();
+        if (action !== "accept" && action !== "reject" && action !== "accepted" && action !== "rejected") {
+            return res.status(400).json({ success: false, message: "Action must be 'accept' or 'reject'." });
+        }
+        const outcome = await db.respondToDoctorAccessRequest(req.user.patientId, doctorId, action);
+        await db.insertAuditLog(req.user.patientId, "patient_access_request_response", doctorId, {
+            action,
+            status: outcome.status
+        });
+        res.json({
+            success: true,
+            status: outcome.status,
+            message: outcome.status === "accepted"
+                ? "Access granted to doctor."
+                : "Access request rejected."
+        });
+    } catch (err) {
+        res.status(500).json({ success: false, message: "Failed to update access request: " + err.message });
+    }
+});
+
 /* ================= CHAT BOARD & MESSAGING SYSTEM (POSTGRESQL) ================= */
 
-// List available doctors for patient chat
+// List available doctors for patient chat (Strictly Accepted Doctors Only)
 app.get("/api/chat/doctors", auth("patient"), async (req, res) => {
     try {
-        const doctors = await db.getDoctorsList();
+        const doctors = await db.getDoctorsList(req.user.patientId);
         res.json({
             success: true,
             doctors
@@ -987,7 +1105,7 @@ app.get("/api/chat/doctors", auth("patient"), async (req, res) => {
     }
 });
 
-// List patients for doctor chat (with unread counters)
+// List patients for doctor chat (with unread counters - Strictly Accepted Patients Only)
 app.get("/api/chat/patients", auth("doctor"), async (req, res) => {
     try {
         const patients = await db.getDoctorPatientsList(req.user.doctorId);
@@ -1000,7 +1118,7 @@ app.get("/api/chat/patients", auth("doctor"), async (req, res) => {
     }
 });
 
-// Get messages for conversation (strictly authorized)
+// Get messages for conversation (strictly authorized and verified)
 app.get("/api/chat/messages", auth(), async (req, res) => {
     try {
         let { patientId, doctorId } = req.query;
@@ -1016,13 +1134,7 @@ app.get("/api/chat/messages", auth(), async (req, res) => {
             }
             patientId = req.user.patientId;
         } else if (req.user.role === "doctor") {
-            // Doctor can ONLY access conversations with their doctorId
-            if (doctorId && doctorId.toLowerCase() !== req.user.doctorId.toLowerCase()) {
-                return res.status(403).json({
-                    success: false,
-                    message: "Unauthorized: You can only access your own doctor conversations."
-                });
-            }
+            // Doctor can ONLY access conversations for their own verified doctorId
             doctorId = req.user.doctorId;
         } else {
             return res.status(403).json({ success: false, message: "Access denied." });
@@ -1032,6 +1144,16 @@ app.get("/api/chat/messages", auth(), async (req, res) => {
             return res.status(400).json({
                 success: false,
                 message: "Both patientId and doctorId are required to load messages."
+            });
+        }
+
+        // REQUIREMENT 3: The backend must verify the doctor-patient relationship before returning chat messages
+        const isAccepted = await db.isDoctorAccessAccepted(doctorId, patientId);
+        if (!isAccepted) {
+            return res.status(403).json({
+                success: false,
+                waitingForApproval: true,
+                message: "Waiting for patient approval."
             });
         }
 
@@ -1050,7 +1172,7 @@ app.get("/api/chat/messages", auth(), async (req, res) => {
     }
 });
 
-// Send message in Doctor-Patient conversation
+// Send message in Doctor-Patient conversation (strictly verified)
 app.post("/api/chat/messages", auth(), async (req, res) => {
     try {
         let { patientId, doctorId, message } = req.body;
@@ -1079,6 +1201,16 @@ app.post("/api/chat/messages", auth(), async (req, res) => {
             receiverId = patientId;
         } else {
             return res.status(403).json({ success: false, message: "Only patients and doctors can send chat messages." });
+        }
+
+        // REQUIREMENT 3: The backend must verify the doctor-patient relationship before sending chat messages
+        const isAccepted = await db.isDoctorAccessAccepted(doctorId, patientId);
+        if (!isAccepted) {
+            return res.status(403).json({
+                success: false,
+                waitingForApproval: true,
+                message: "Waiting for patient approval."
+            });
         }
 
         const messageId = "MSG-" + Date.now() + "-" + Math.random().toString(36).substring(2, 7).toUpperCase();
@@ -1311,12 +1443,8 @@ app.post("/api/helper/identify-person", async (req, res) => {
             success: false,
             configured: false,
             matched: false,
-            error: "Face identification service is not configured yet.",
-            message: "Face identification service is not configured yet. A real biometric face-matching service (such as AWS Rekognition with AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION or Azure AI Face API with AZURE_FACE_API_KEY, AZURE_FACE_ENDPOINT) is required to perform reliable facial matching. MediCare never displays fake or randomly guessed patient matches.",
-            requiredCredentials: [
-                "AWS Rekognition: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION",
-                "Azure Face API: AZURE_FACE_API_KEY, AZURE_FACE_ENDPOINT"
-            ]
+            error: "No reliable registered patient match found.",
+            message: "No reliable registered patient match found."
         });
     }
 
@@ -1374,7 +1502,7 @@ app.post("/api/helper/identify-person", async (req, res) => {
                 success: true,
                 configured: true,
                 matched: false,
-                message: "No reliable match found. The person could not be confidently identified among registered patients."
+                message: "No reliable registered patient match found."
             });
         }
 

@@ -557,6 +557,9 @@ async function passwordLogin() {
             if ($("doctorDashboard")) {
                 $("doctorDashboard").classList.remove("hidden");
             }
+            const chatFab = $("chatFab");
+            if (chatFab) chatFab.classList.remove("hidden");
+            loadDoctorAuthorizedPatients();
 
         }
 
@@ -723,6 +726,9 @@ async function loadPatientDashboard() {
     // Load Medical Documents from PostgreSQL
     await loadPatientDocuments();
 
+    // Load Doctor Access Requests from PostgreSQL
+    await loadDoctorAccessRequests();
+
     hideAll();
     if ($("patientDashboard")) {
         $("patientDashboard").classList.remove("hidden");
@@ -787,43 +793,11 @@ function hideProfileEdit() {
     if ($("cancelBtn")) $("cancelBtn").classList.add("hidden");
 }
 
-function enableUpdate() {
-    showProfileEdit();
-}
-
-function enableEdit() {
-    showProfileEdit();
-}
-
-function showSecondaryEdit() {
-    showProfileEdit();
-}
-
-function hideSecondaryEdit() {
-    hideProfileEdit();
-}
-
-function showHealthEdit() {
-    showProfileEdit();
-}
-
-function hideHealthEdit() {
-    hideProfileEdit();
-}
-
 function scrollToCard(cardId) {
     const el = $(cardId);
     if (el) {
         el.scrollIntoView({ behavior: "smooth" });
     }
-}
-
-function showVerificationManage() {
-    showProfileEdit();
-}
-
-async function saveSecondaryDetailsFromPanel() {
-    await saveDetails();
 }
 
 /* ================= SAVE UNIFIED PROFILE (PRIMARY, SECONDARY & HEALTH TO POSTGRESQL) ================= */
@@ -1162,7 +1136,7 @@ function checkLivenessVerification() {
     showToast("Liveness anti-spoofing service requires active facial recognition provider.");
 }
 
-/* ================= DOCTOR SEARCH ================= */
+/* ================= DOCTOR SEARCH & PATIENT ACCESS (PRIVACY PROTECTED) ================= */
 
 async function searchPatient() {
     const id = $("doctorPatientId").value.trim().toUpperCase();
@@ -1174,8 +1148,13 @@ async function searchPatient() {
     }
 
     const token = localStorage.getItem("doctorToken");
+    if (!token) {
+        result.innerHTML = `<p class="error">Doctor session expired. Please log in.</p>`;
+        return;
+    }
 
     try {
+        result.innerHTML = `<div style="text-align: center; padding: 14px; color: #64748b;">⏳ Searching PostgreSQL...</div>`;
         const response = await fetch(`${API_URL}/api/doctor/patients/${encodeURIComponent(id)}`, {
             headers: {
                 Authorization: `Bearer ${token}`
@@ -1188,10 +1167,72 @@ async function searchPatient() {
             throw new Error(data.message || "Patient not found.");
         }
 
-        const p = data.patient;
-        const g1 = p.guardianName ? `${escapeHTML(p.guardianName)} (${escapeHTML(p.guardianPhone || "No phone")}, ${escapeHTML(p.guardianRelationship || "Primary")})` : "Not provided";
-        const g2 = p.guardian2Name ? `${escapeHTML(p.guardian2Name)} (${escapeHTML(p.guardian2Phone || "No phone")}, ${escapeHTML(p.guardian2Relationship || "Secondary")})` : "None";
+        // PRIVACY ENFORCEMENT: If access is not accepted, do NOT show private details
+        if (!data.authorized) {
+            const p = data.patient;
+            const status = data.accessStatus || "none";
+            let statusBadge = "";
+            let actionBlock = "";
 
+            if (status === "pending") {
+                statusBadge = `<span style="padding: 4px 10px; border-radius: 6px; font-weight: 600; font-size: 12px; background: #fef3c7; color: #92400e; border: 1px solid #fde68a;">⏳ Waiting for patient approval.</span>`;
+                actionBlock = `
+                    <div style="margin-top: 14px; padding: 12px 14px; background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; font-size: 13px; color: #92400e; line-height: 1.4;">
+                        <b>Request Status:</b> Waiting for patient approval.<br>
+                        Doctor-patient chat and medical records will become accessible once the patient accepts your request.
+                    </div>
+                    <div style="margin-top: 12px;">
+                        <button type="button" class="btn-secondary" disabled style="opacity: 0.65; cursor: not-allowed;">
+                            💬 Waiting for patient approval.
+                        </button>
+                    </div>
+                `;
+            } else if (status === "rejected") {
+                statusBadge = `<span style="padding: 4px 10px; border-radius: 6px; font-weight: 600; font-size: 12px; background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5;">❌ Request Rejected</span>`;
+                actionBlock = `
+                    <div style="margin-top: 14px; padding: 12px 14px; background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; font-size: 13px; color: #991b1b; line-height: 1.4;">
+                        The patient previously rejected this access request.
+                    </div>
+                    <div style="margin-top: 12px; display: flex; gap: 10px; flex-wrap: wrap;">
+                        <button type="button" class="primary" onclick="sendDoctorAccessRequest('${escapeHTML(p.id)}')">
+                            📨 Re-send Access Request
+                        </button>
+                        <button type="button" class="btn-secondary" disabled style="opacity: 0.65; cursor: not-allowed;">
+                            💬 Waiting for patient approval.
+                        </button>
+                    </div>
+                `;
+            } else {
+                statusBadge = `<span style="padding: 4px 10px; border-radius: 6px; font-weight: 600; font-size: 12px; background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1;">Not Requested</span>`;
+                actionBlock = `
+                    <div style="margin-top: 14px;">
+                        <button type="button" class="primary" onclick="sendDoctorAccessRequest('${escapeHTML(p.id)}')">
+                            📨 Request Access
+                        </button>
+                    </div>
+                `;
+            }
+
+            // Doctor must NOT see: health information, medical records, files, guardian details, phone, email, address, private profile
+            result.innerHTML = `
+                <div class="doctor-result">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
+                        <h3 style="margin: 0;">👤 Patient Found</h3>
+                        ${statusBadge}
+                    </div>
+                    <p><b>Patient Name:</b> ${escapeHTML(p.name)}</p>
+                    <p><b>Patient ID:</b> ${escapeHTML(p.id)}</p>
+                    <div style="margin-top: 12px; padding: 12px 14px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 13px; color: #475569; line-height: 1.5;">
+                        🔒 <b>Patient Privacy Protection:</b> Patient's health information, medical records, files, guardian details, phone, email, and address are restricted. Doctor-Patient Chat and records are available ONLY after the patient clicks Accept.
+                    </div>
+                    ${actionBlock}
+                </div>
+            `;
+            return;
+        }
+
+        // ACCESS APPROVED: Display ONLY information already authorized for doctor access
+        const p = data.patient;
         let healthBadges = "";
         if (p.healthInformation) {
             const h = p.healthInformation;
@@ -1214,27 +1255,46 @@ async function searchPatient() {
             `).join("");
         }
 
+        let docsList = "";
+        if (Array.isArray(p.authorizedDocuments) && p.authorizedDocuments.length > 0) {
+            docsList = p.authorizedDocuments.map(d => `
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; margin-top: 6px;">
+                    <span style="font-size: 13px; font-weight: 500;">📄 ${escapeHTML(d.originalFilename)}</span>
+                    <button type="button" class="btn-small secondary" onclick="downloadAuthorizedDoc('${escapeHTML(p.id)}', '${escapeHTML(d.documentId)}', '${escapeHTML(d.originalFilename)}')">
+                        ⬇️ Download
+                    </button>
+                </div>
+            `).join("");
+        } else {
+            docsList = `<p style="font-size: 13px; color: #94a3b8; margin: 6px 0 0 0;">No authorized medical documents available.</p>`;
+        }
+
         result.innerHTML = `
             <div class="doctor-result">
-                <h3>👤 Patient Found</h3>
-                <p><b>Patient ID:</b> ${escapeHTML(p.id)}</p>
-                <p><b>Name:</b> ${escapeHTML(p.name)}</p>
-                <p><b>Age:</b> ${escapeHTML(String(p.age || ""))}</p>
-                <p><b>Gender:</b> ${escapeHTML(p.gender || "")}</p>
-                <p><b>Blood Group:</b> <span class="blood-group-badge">${escapeHTML(p.bloodGroup || p.blood || "")}</span></p>
-                <p><b>Phone:</b> ${escapeHTML(p.phone || "")}</p>
-                <p><b>Email:</b> ${escapeHTML(p.email || "")}</p>
-                <p><b>Address:</b> ${escapeHTML(p.address || "")}</p>
-                <p><b>Primary Guardian:</b> ${g1}</p>
-                <p><b>Secondary Guardian:</b> ${g2}</p>
-                <div style="margin-top:10px;">
-                    <b>Health Information Screening:</b>
-                    <div style="margin-top:6px;">${healthBadges || "No records"}</div>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
+                    <h3 style="margin: 0;">👤 Authorized Patient Information</h3>
+                    <span style="padding: 4px 10px; border-radius: 6px; font-weight: 600; font-size: 12px; background: #dcfce7; color: #15803d; border: 1px solid #86efac;">
+                        ✓ Access Approved
+                    </span>
                 </div>
-                <p style="margin-top:10px;"><b>Medical History:</b> ${escapeHTML(p.medicalHistory || "None")}</p>
-                <p><b>Medical Notes:</b> ${escapeHTML(p.notes || "None")}</p>
+                <p><b>Patient Name:</b> ${escapeHTML(p.name)}</p>
+                <p><b>Patient ID:</b> ${escapeHTML(p.id)}</p>
+                <p><b>Blood Group:</b> <span class="blood-group-badge">${escapeHTML(p.bloodGroup || "O+")}</span></p>
 
-                <div style="margin-top: 16px; padding-top: 14px; border-top: 1px solid #e2e8f0; display: flex; gap: 10px;">
+                <div style="margin-top: 14px; padding-top: 12px; border-top: 1px solid #e2e8f0;">
+                    <b>Health Information Screening:</b>
+                    <div style="margin-top: 6px;">${healthBadges || "No records"}</div>
+                </div>
+
+                <div style="margin-top: 14px; padding-top: 12px; border-top: 1px solid #e2e8f0;">
+                    <b>Authorized Medical Documents:</b>
+                    ${docsList}
+                </div>
+
+                <div style="margin-top: 18px; padding-top: 14px; border-top: 1px solid #e2e8f0; display: flex; gap: 10px; flex-wrap: wrap;">
+                    <button type="button" class="btn-primary" style="background: #0284c7; color: white; padding: 9px 18px; border-radius: 8px; font-weight: 600; border: none; cursor: pointer;" onclick="openDoctorChatForPatient('${escapeHTML(p.id)}')">
+                        💬 Open Doctor-Patient Chat
+                    </button>
                     <button type="button" class="btn-export-pdf" onclick="downloadDoctorPatientPdf('${escapeHTML(p.id)}')">
                         📥 Export Physical Medical Record (PDF)
                     </button>
@@ -1243,6 +1303,232 @@ async function searchPatient() {
         `;
     } catch (error) {
         result.innerHTML = `<p class="error">${escapeHTML(error.message)}</p>`;
+    }
+}
+
+async function sendDoctorAccessRequest(patientId) {
+    const token = localStorage.getItem("doctorToken");
+    if (!token) {
+        showToast("Doctor session expired. Please log in.");
+        return;
+    }
+
+    try {
+        const res = await fetch(`${API_URL}/api/doctor/access-requests`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`
+            },
+            body: JSON.stringify({ patientId })
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+            throw new Error(data.message || "Failed to send access request.");
+        }
+
+        showToast("Access request sent. Waiting for patient approval.");
+        await searchPatient();
+        await loadDoctorAuthorizedPatients();
+    } catch (err) {
+        showToast(err.message);
+    }
+}
+
+async function loadDoctorAuthorizedPatients() {
+    const listEl = $("doctorAuthorizedPatientsList");
+    if (!listEl) return;
+    const token = localStorage.getItem("doctorToken");
+    if (!token) return;
+
+    try {
+        const res = await fetch(`${API_URL}/api/doctor/authorized-patients`, {
+            headers: { Authorization: `Bearer ${token}` }
+        });
+        const data = await res.json();
+
+        if (!res.ok || !data.success || !Array.isArray(data.patients) || data.patients.length === 0) {
+            listEl.innerHTML = `
+                <div style="text-align: center; padding: 24px; color: #94a3b8; background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 10px;">
+                    <div style="font-size: 28px; margin-bottom: 6px;">👥</div>
+                    <p style="margin: 0; font-size: 14px;">No authorized patients yet.</p>
+                    <p style="margin: 4px 0 0 0; font-size: 12px; color: #94a3b8;">Search a Patient ID above and click "Request Access". Once approved, the patient will appear here for consultation.</p>
+                </div>
+            `;
+            return;
+        }
+
+        listEl.innerHTML = data.patients.map(p => {
+            const unreadBadge = p.unreadCount > 0 ? `<span class="badge-tag" style="background:#ef4444; color:#fff; font-size:11px; padding:2px 8px; border-radius:12px;">${p.unreadCount} NEW</span>` : "";
+            return `
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; margin-bottom: 10px; flex-wrap: wrap; gap: 10px;">
+                    <div>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span style="font-size: 18px;">👤</span>
+                            <b style="font-size: 15px; color: #0f172a;">${escapeHTML(p.name)}</b>
+                            <span class="blood-group-badge">${escapeHTML(p.bloodGroup || "O+")}</span>
+                            ${unreadBadge}
+                        </div>
+                        <div style="font-size: 13px; color: #64748b; margin-top: 2px;">
+                            <b>Patient ID:</b> <code>${escapeHTML(p.patientId)}</code>
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 8px;">
+                        <button type="button" class="btn-small primary" onclick="openDoctorChatForPatient('${escapeHTML(p.patientId)}')">
+                            💬 Open Chat
+                        </button>
+                        <button type="button" class="btn-small secondary" onclick="viewPatientInDoctorPortal('${escapeHTML(p.patientId)}')">
+                            📋 View Records
+                        </button>
+                    </div>
+                </div>
+            `;
+        }).join("");
+    } catch (err) {
+        console.warn("Could not load authorized patients:", err);
+    }
+}
+
+function viewPatientInDoctorPortal(patientId) {
+    if ($("doctorPatientId")) $("doctorPatientId").value = patientId;
+    searchPatient();
+    scrollToCard("doctorResult");
+}
+
+async function downloadAuthorizedDoc(patientId, documentId, filename) {
+    const token = localStorage.getItem("doctorToken");
+    if (!token) {
+        showToast("Doctor authentication required.");
+        return;
+    }
+    try {
+        const response = await fetch(`${API_URL}/api/patient/documents/${encodeURIComponent(documentId)}/download`, {
+            headers: { Authorization: `Bearer ${token}` }
+        });
+        if (!response.ok) {
+            throw new Error("Failed to download document.");
+        }
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename || "medical_document";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+    } catch (err) {
+        showToast(err.message);
+    }
+}
+
+/* ================= PATIENT PORTAL: DOCTOR ACCESS REQUESTS ================= */
+
+async function loadDoctorAccessRequests() {
+    const listEl = $("doctorAccessRequestsList");
+    if (!listEl) return;
+    const pToken = patientToken || localStorage.getItem("patientToken");
+    if (!pToken) return;
+
+    try {
+        const res = await fetch(`${API_URL}/api/patient/access-requests`, {
+            headers: { Authorization: `Bearer ${pToken}` }
+        });
+        const data = await res.json();
+
+        const pendingRequests = (data.requests || []).filter(
+            req => (req.status || "pending").toLowerCase() === "pending"
+        );
+
+        if (!res.ok || !data.success || pendingRequests.length === 0) {
+            listEl.innerHTML = `
+                <div style="text-align: center; padding: 24px; color: #94a3b8; background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 10px;">
+                    <div style="font-size: 28px; margin-bottom: 6px;">🔒</div>
+                    <p style="margin: 0; font-size: 14px;">No doctor access requests at this time.</p>
+                    <p style="margin: 4px 0 0 0; font-size: 12px; color: #94a3b8;">When a doctor requests access to consult with you, it will appear here for your approval.</p>
+                </div>
+            `;
+            return;
+        }
+
+        listEl.innerHTML = pendingRequests.map(req => {
+            const requestedDate = req.requestedAt ? new Date(req.requestedAt).toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" }) : "";
+
+            return `
+                <div id="doctor-request-${escapeHTML(req.doctorId)}" class="access-request-card" style="display: flex; justify-content: space-between; align-items: center; padding: 14px 18px; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; margin-bottom: 12px; flex-wrap: wrap; gap: 14px;">
+                    <div style="min-width: 220px;">
+                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+                            <span style="font-size: 18px;">👨‍⚕️</span>
+                            <b style="font-size: 15px; color: #0f172a;">${escapeHTML(req.doctorName)}</b>
+                            <span class="status-badge status-pending">Pending</span>
+                        </div>
+                        <div style="font-size: 13px; color: #475569; margin-bottom: 2px;">
+                            <b>Doctor ID:</b> <code>${escapeHTML(req.doctorId)}</code>
+                        </div>
+                        <div style="font-size: 13px; color: #475569;">
+                            <b>Specialization:</b> ${escapeHTML(req.specialization || "General Medicine")}
+                        </div>
+                        ${requestedDate ? `<div style="font-size: 11px; color: #94a3b8; margin-top: 4px;">Requested on: ${requestedDate}</div>` : ""}
+                    </div>
+
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        <button type="button" class="btn-small success" style="padding: 7px 16px; font-weight: 600;" onclick="respondToDoctorRequest('${escapeHTML(req.doctorId)}', 'accept')">
+                            ✓ Accept
+                        </button>
+                        <button type="button" class="btn-small danger" style="padding: 7px 16px; font-weight: 600; background: #fee2e2; color: #dc2626; border: 1px solid #fca5a5;" onclick="respondToDoctorRequest('${escapeHTML(req.doctorId)}', 'reject')">
+                            ✕ Reject
+                        </button>
+                    </div>
+                </div>
+            `;
+        }).join("");
+    } catch (err) {
+        console.warn("Could not load doctor access requests:", err);
+    }
+}
+
+async function respondToDoctorRequest(doctorId, action) {
+    const pToken = patientToken || localStorage.getItem("patientToken");
+    if (!pToken) return;
+
+    // Immediately remove from pending list in UI for instant responsiveness
+    const reqCard = $(`doctor-request-${doctorId}`);
+    if (reqCard) {
+        reqCard.remove();
+        const listEl = $("doctorAccessRequestsList");
+        if (listEl && listEl.children.length === 0) {
+            listEl.innerHTML = `
+                <div style="text-align: center; padding: 24px; color: #94a3b8; background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 10px;">
+                    <div style="font-size: 28px; margin-bottom: 6px;">🔒</div>
+                    <p style="margin: 0; font-size: 14px;">No doctor access requests at this time.</p>
+                    <p style="margin: 4px 0 0 0; font-size: 12px; color: #94a3b8;">When a doctor requests access to consult with you, it will appear here for your approval.</p>
+                </div>
+            `;
+        }
+    }
+
+    try {
+        const res = await fetch(`${API_URL}/api/patient/access-requests/${encodeURIComponent(doctorId)}/respond`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${pToken}`
+            },
+            body: JSON.stringify({ action })
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+            throw new Error(data.message || "Failed to update access request.");
+        }
+
+        showToast(action === "accept" ? "Doctor access request accepted! Doctor is now connected in Chat Board." : "Doctor access request rejected.");
+        await loadDoctorAccessRequests();
+        if (typeof initDoctorChat === "function") {
+            await initDoctorChat();
+        }
+    } catch (err) {
+        showToast(err.message);
+        await loadDoctorAccessRequests();
     }
 }
 
@@ -1417,7 +1703,12 @@ function openDoctorRegisterModal() {
     if ($("regDocName")) $("regDocName").value = "";
     if ($("regDocUsername")) $("regDocUsername").value = "";
     if ($("regDocPhone")) $("regDocPhone").value = "";
-    if ($("regDocSpecialization")) $("regDocSpecialization").value = "";
+    const specSelect = $("regDocSpecialization");
+    if (specSelect) {
+        for (let i = 0; i < specSelect.options.length; i++) {
+            specSelect.options[i].selected = (specSelect.options[i].value === "General Medicine");
+        }
+    }
     if ($("regDocPassword")) $("regDocPassword").value = "";
     if ($("regDocMessage")) $("regDocMessage").textContent = "";
     if ($("doctorRegisterModal")) $("doctorRegisterModal").classList.remove("hidden");
@@ -1431,13 +1722,21 @@ async function submitDoctorRegistration() {
     const fullName = $("regDocName") ? $("regDocName").value.trim() : "";
     const username = $("regDocUsername") ? $("regDocUsername").value.trim() : "";
     const phone = $("regDocPhone") ? $("regDocPhone").value.trim() : "";
-    const specialization = $("regDocSpecialization") ? $("regDocSpecialization").value.trim() : "";
+    const specSelect = $("regDocSpecialization");
+    const selectedOptions = specSelect ? Array.from(specSelect.selectedOptions).map(o => o.value.trim()).filter(Boolean) : [];
     const password = $("regDocPassword") ? $("regDocPassword").value.trim() : "";
 
     if (!fullName || !password) {
         if ($("regDocMessage")) $("regDocMessage").textContent = "Please enter Doctor Full Name and Password.";
         return;
     }
+
+    if (selectedOptions.length === 0) {
+        if ($("regDocMessage")) $("regDocMessage").textContent = "Please select at least one specialization from the dropdown.";
+        return;
+    }
+
+    const specialization = selectedOptions.join(", ");
 
     try {
         const response = await fetch(`${API_URL}/api/auth/register-doctor`, {
@@ -1524,21 +1823,50 @@ function showChatBoardForPatient() {
     }
 }
 
+function parseJwtPayload(token) {
+    if (!token) return null;
+    try {
+        const parts = token.split(".");
+        if (parts.length < 2) return null;
+        const payloadBase64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+        const jsonStr = decodeURIComponent(
+            atob(payloadBase64)
+                .split("")
+                .map(c => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+                .join("")
+        );
+        return JSON.parse(jsonStr);
+    } catch (_) {
+        return null;
+    }
+}
+
 function getCurrentChatAuth() {
     const pToken = patientToken || localStorage.getItem("patientToken");
     const patientDash = $("patientDashboard");
     const isPatientView = patientDash && !patientDash.classList.contains("hidden");
 
-    // Chat Board is strictly available ONLY to authenticated patients
     if (pToken && isPatientView) {
-        return { role: "patient", token: pToken };
+        const payload = parseJwtPayload(pToken);
+        const pId = payload?.patientId || ($("pPatientId") ? $("pPatientId").value : "PAT1001");
+        return { role: "patient", token: pToken, patientId: pId, name: payload?.name || "Patient" };
     }
+
+    const dToken = localStorage.getItem("doctorToken");
+    const doctorDash = $("doctorDashboard");
+    const isDoctorView = doctorDash && !doctorDash.classList.contains("hidden");
+    if (dToken && isDoctorView) {
+        const payload = parseJwtPayload(dToken);
+        const dId = payload?.doctorId || "DOC1001";
+        return { role: "doctor", token: dToken, doctorId: dId, name: payload?.name || "Doctor" };
+    }
+
     return null;
 }
 
 function toggleChat() {
     const authInfo = getCurrentChatAuth();
-    if (!authInfo || authInfo.role !== "patient") {
+    if (!authInfo) {
         hideChatBoard();
         return;
     }
@@ -1550,11 +1878,15 @@ function toggleChat() {
 
     if (isOpening) {
         updateChatAuthUI();
-        if (currentChatMode === "doctor") {
-            initDoctorChat();
+        if (authInfo.role === "doctor") {
+            switchChatMode("doctor");
         } else {
-            checkAiStatus();
-            loadAiChatHistory();
+            if (currentChatMode === "doctor") {
+                initDoctorChat();
+            } else {
+                checkAiStatus();
+                loadAiChatHistory();
+            }
         }
         startChatPolling();
     } else {
@@ -1587,8 +1919,8 @@ function switchChatMode(mode) {
 
 function openDoctorChatMode() {
     const authInfo = getCurrentChatAuth();
-    if (!authInfo || authInfo.role !== "patient") {
-        showToast("Please log in as a patient to access Doctor Chat.");
+    if (!authInfo) {
+        showToast("Please log in to access Doctor-Patient Chat.");
         return;
     }
     const chatFab = $("chatFab");
@@ -1598,6 +1930,74 @@ function openDoctorChatMode() {
     updateChatAuthUI();
     switchChatMode("doctor");
     startChatPolling();
+}
+
+async function openDoctorChatForPatient(patientId) {
+    const token = localStorage.getItem("doctorToken");
+    if (!token) {
+        showToast("Doctor session expired. Please log in.");
+        return;
+    }
+
+    const cleanPat = String(patientId || "").toUpperCase();
+    try {
+        const res = await fetch(`${API_URL}/api/doctor/patients/${encodeURIComponent(cleanPat)}`, {
+            headers: { Authorization: `Bearer ${token}` }
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+            showToast(data.message || "Patient not found.");
+            return;
+        }
+
+        if (!data.authorized) {
+            showToast("Waiting for patient approval.");
+            return;
+        }
+
+        chatActivePatientId = cleanPat;
+
+        const chatFab = $("chatFab");
+        if (chatFab) chatFab.classList.remove("hidden");
+        const chatBox = $("chatBox");
+        if (chatBox) chatBox.classList.remove("hidden");
+
+        updateChatAuthUI();
+        switchChatMode("doctor");
+        await initDoctorChat();
+
+        const peerSelect = $("chatPeerSelect");
+        if (peerSelect) {
+            peerSelect.value = cleanPat;
+        }
+        await loadDoctorChatMessages(false);
+        startChatPolling();
+    } catch (err) {
+        showToast("Failed to open chat: " + err.message);
+    }
+}
+
+async function openDoctorChatFromPortal() {
+    const token = localStorage.getItem("doctorToken");
+    if (!token) {
+        showToast("Doctor session expired. Please log in.");
+        return;
+    }
+
+    try {
+        const res = await fetch(`${API_URL}/api/doctor/authorized-patients`, {
+            headers: { Authorization: `Bearer ${token}` }
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success || !Array.isArray(data.patients) || data.patients.length === 0) {
+            showToast("Waiting for patient approval.");
+            return;
+        }
+
+        await openDoctorChatForPatient(data.patients[0].patientId);
+    } catch (err) {
+        showToast("Failed to load authorized patients: " + err.message);
+    }
 }
 
 function openAiChatMode() {
@@ -1617,13 +2017,48 @@ function openAiChatMode() {
 function updateChatAuthUI() {
     const authInfo = getCurrentChatAuth();
     const statusElem = $("chatAuthStatus");
-    if (!statusElem) return;
+    const tabDoc = $("tabDoctorChat");
+    const tabAi = $("tabAiAssistant");
+    const docInput = $("doctorChatInput");
+    const peerLabel = $("doctorChatPeerLabel");
 
     if (!authInfo) {
-        statusElem.textContent = "Login Required";
+        if (statusElem) statusElem.textContent = "Login Required";
+        return;
+    }
+
+    if (authInfo.role === "doctor") {
+        if (statusElem) statusElem.textContent = `Doctor: ${authInfo.doctorId || "Doctor"}`;
+        if (tabDoc) {
+            tabDoc.textContent = "Doctor-Patient Chat";
+            tabDoc.classList.remove("hidden");
+            tabDoc.classList.add("active");
+        }
+        if (tabAi) {
+            tabAi.classList.add("hidden");
+        }
+        if (peerLabel) {
+            peerLabel.textContent = "Authorized Patient:";
+        }
+        if (docInput) {
+            docInput.placeholder = "Type consultation advice or response...";
+        }
     } else {
-        const patId = $("pPatientId") ? $("pPatientId").value : "Patient";
-        statusElem.textContent = `Patient: ${patId}`;
+        const patId = authInfo.patientId || ($("pPatientId") ? $("pPatientId").value : "PAT1001");
+        if (statusElem) statusElem.textContent = `Patient: ${patId}`;
+        if (tabDoc) {
+            tabDoc.textContent = "Doctor Chat";
+            tabDoc.classList.remove("hidden");
+        }
+        if (tabAi) {
+            tabAi.classList.remove("hidden");
+        }
+        if (peerLabel) {
+            peerLabel.textContent = "Doctor:";
+        }
+        if (docInput) {
+            docInput.placeholder = "Type a message to your doctor...";
+        }
     }
 }
 
@@ -1725,23 +2160,39 @@ async function initDoctorChat() {
                 throw new Error(data.message || "Failed to load doctors.");
             }
 
+            // Deduplicate doctors: Do not show the same doctor twice
+            const seen = new Set();
+            const uniqueDoctors = (data.doctors || []).filter(d => {
+                const id = String(d.doctorId || "").toLowerCase();
+                if (!id || seen.has(id)) return false;
+                seen.add(id);
+                return true;
+            });
+
             if (peerSelect) {
-                if (data.doctors.length === 0) {
-                    peerSelect.innerHTML = `<option value="">No doctors available</option>`;
+                if (uniqueDoctors.length === 0) {
+                    peerSelect.innerHTML = `<option value="">No accepted doctors yet</option>`;
                 } else {
-                    peerSelect.innerHTML = data.doctors.map(d => `
+                    peerSelect.innerHTML = uniqueDoctors.map(d => `
                         <option value="${escapeHTML(d.doctorId)}">
                             👨‍⚕️ ${escapeHTML(d.name)} (${escapeHTML(d.doctorId)})
                         </option>
                     `).join("");
                 }
+
+                if (chatActiveDoctorId && uniqueDoctors.some(d => d.doctorId.toLowerCase() === chatActiveDoctorId.toLowerCase())) {
+                    peerSelect.value = chatActiveDoctorId;
+                } else if (uniqueDoctors.length > 0) {
+                    peerSelect.value = uniqueDoctors[0].doctorId;
+                    chatActiveDoctorId = uniqueDoctors[0].doctorId;
+                }
             }
 
-            chatActivePatientId = $("pPatientId") ? $("pPatientId").value : "PAT1001";
+            chatActivePatientId = authInfo.patientId;
             chatActiveDoctorId = peerSelect ? peerSelect.value : null;
 
         } else if (authInfo.role === "doctor") {
-            if (peerLabel) peerLabel.textContent = "Patient:";
+            if (peerLabel) peerLabel.textContent = "Authorized Patient:";
             const res = await fetch(`${API_URL}/api/chat/patients`, {
                 headers: { Authorization: `Bearer ${authInfo.token}` }
             });
@@ -1750,11 +2201,20 @@ async function initDoctorChat() {
                 throw new Error(data.message || "Failed to load patients.");
             }
 
+            // Deduplicate patients: Do not show the same patient twice
+            const seen = new Set();
+            const uniquePatients = (data.patients || []).filter(p => {
+                const id = String(p.patientId || "").toUpperCase();
+                if (!id || seen.has(id)) return false;
+                seen.add(id);
+                return true;
+            });
+
             if (peerSelect) {
-                if (data.patients.length === 0) {
-                    peerSelect.innerHTML = `<option value="">No patients available</option>`;
+                if (uniquePatients.length === 0) {
+                    peerSelect.innerHTML = `<option value="">Waiting for patient approval.</option>`;
                 } else {
-                    peerSelect.innerHTML = data.patients.map(p => {
+                    peerSelect.innerHTML = uniquePatients.map(p => {
                         const unreadTxt = p.unreadCount > 0 ? ` [${p.unreadCount} NEW]` : "";
                         return `
                             <option value="${escapeHTML(p.patientId)}">
@@ -1763,10 +2223,19 @@ async function initDoctorChat() {
                         `;
                     }).join("");
                 }
+
+                if (chatActivePatientId && uniquePatients.some(p => p.patientId.toUpperCase() === chatActivePatientId.toUpperCase())) {
+                    peerSelect.value = chatActivePatientId;
+                } else if (uniquePatients.length > 0) {
+                    peerSelect.value = uniquePatients[0].patientId;
+                    chatActivePatientId = uniquePatients[0].patientId;
+                }
             }
 
-            chatActiveDoctorId = "doctor";
-            chatActivePatientId = peerSelect ? peerSelect.value : null;
+            chatActiveDoctorId = authInfo.doctorId;
+            if (!chatActivePatientId && peerSelect && peerSelect.value) {
+                chatActivePatientId = peerSelect.value;
+            }
         }
 
         await loadDoctorChatMessages(false);
@@ -1802,16 +2271,18 @@ async function loadDoctorChatMessages(isManualRefresh = false) {
     let doctorId;
 
     if (authInfo.role === "patient") {
-        patientId = $("pPatientId") ? $("pPatientId").value : "PAT1001";
-        doctorId = peerSelect.value;
+        patientId = authInfo.patientId || ($("pPatientId") ? $("pPatientId").value : "PAT1001");
+        doctorId = peerSelect.value || chatActiveDoctorId;
     } else {
-        doctorId = "doctor";
-        patientId = peerSelect.value;
+        doctorId = authInfo.doctorId || "DOC1001";
+        patientId = peerSelect.value || chatActivePatientId;
     }
 
     if (!patientId || !doctorId) {
         if (msgContainer) {
-            msgContainer.innerHTML = `<div class="chat-empty-state">Select a contact to view conversation history.</div>`;
+            msgContainer.innerHTML = authInfo.role === "doctor"
+                ? `<div class="chat-empty-state">⏳ Waiting for patient approval.<br><small style="color: #64748b; margin-top: 6px; display: block;">Search a patient and request access. Once accepted, consultation messages will appear here.</small></div>`
+                : `<div class="chat-empty-state">Select an accepted doctor to view conversation history.</div>`;
         }
         return;
     }
@@ -1823,6 +2294,12 @@ async function loadDoctorChatMessages(isManualRefresh = false) {
         const data = await res.json();
 
         if (!res.ok || !data.success) {
+            if (data && data.waitingForApproval) {
+                if (msgContainer) {
+                    msgContainer.innerHTML = `<div class="chat-empty-state">⏳ Waiting for patient approval.</div>`;
+                }
+                return;
+            }
             throw new Error(data.message || "Failed to load messages.");
         }
 
@@ -1837,10 +2314,10 @@ async function loadDoctorChatMessages(isManualRefresh = false) {
             return;
         }
 
-        const currentUserId = authInfo.role === "patient" ? patientId.toUpperCase() : doctorId.toLowerCase();
+        const myId = (authInfo.role === "patient" ? patientId : doctorId).toUpperCase();
 
         msgContainer.innerHTML = data.messages.map(m => {
-            const isOutgoing = (m.senderId || "").toUpperCase() === currentUserId.toUpperCase();
+            const isOutgoing = (m.senderId || "").toUpperCase() === myId;
             const timeStr = formatChatTime(m.timestamp);
             const senderLabel = isOutgoing
                 ? "You"
@@ -1885,15 +2362,15 @@ async function sendDoctorChatMessage() {
     let doctorId;
 
     if (authInfo.role === "patient") {
-        patientId = $("pPatientId") ? $("pPatientId").value : "PAT1001";
-        doctorId = peerSelect.value;
+        patientId = authInfo.patientId || ($("pPatientId") ? $("pPatientId").value : "PAT1001");
+        doctorId = peerSelect.value || chatActiveDoctorId;
     } else {
-        doctorId = "doctor";
-        patientId = peerSelect.value;
+        doctorId = authInfo.doctorId || "DOC1001";
+        patientId = peerSelect.value || chatActivePatientId;
     }
 
     if (!patientId || !doctorId) {
-        showToast("Please select a recipient first.");
+        showToast(authInfo.role === "doctor" ? "Waiting for patient approval." : "Please select an accepted doctor first.");
         return;
     }
 
@@ -1916,6 +2393,10 @@ async function sendDoctorChatMessage() {
 
         const data = await res.json();
         if (!res.ok || !data.success) {
+            if (data && data.waitingForApproval) {
+                showToast("Waiting for patient approval.");
+                return;
+            }
             throw new Error(data.message || "Failed to send message.");
         }
 
@@ -2440,28 +2921,24 @@ async function identifyEmergencyPatient() {
             identifyBtn.textContent = "🔍 Identify Patient";
         }
 
-        // 1. Service Unconfigured State
-        if (data.configured === false) {
-            setElementHidden("unconfiguredResult", false);
-            if (data.message && $("unconfiguredMessage")) {
-                $("unconfiguredMessage").textContent = data.message;
-            }
-            showToast("Face identification service is not configured.");
-        }
-        // 2. No Reliable Match Found State
-        else if (data.matched === false) {
+        // 1. If there is no reliable match (or biometric unconfigured):
+        if (data.configured === false || data.matched === false) {
+            setElementHidden("unconfiguredResult", true);
+            setElementHidden("matchResult", true);
             setElementHidden("noMatchResult", false);
-            if (data.message && $("noMatchMessage")) {
-                $("noMatchMessage").textContent = data.message;
+            if ($("noMatchMessage")) {
+                $("noMatchMessage").textContent = "No reliable registered patient match found.";
             }
             showToast("No reliable registered patient match found.");
         }
-        // 3. Reliable Registered Patient Match Found
+        // 2. Reliable Registered Patient Match Found
+        // Display ONLY: Patient Name, Patient ID, Blood Group, Guardian Name, Guardian Phone Number
+        // Retrieved from patient's saved database record.
         else if (data.matched === true && data.patient) {
             const p = data.patient;
 
-            if ($("resPatientId")) $("resPatientId").textContent = p.id || "-";
             if ($("resPatientName")) $("resPatientName").textContent = p.name || "-";
+            if ($("resPatientId")) $("resPatientId").textContent = p.id || "-";
             if ($("resBloodGroupBadge")) $("resBloodGroupBadge").textContent = p.bloodGroup || p.blood || "N/A";
             if ($("resGuardianName")) $("resGuardianName").textContent = p.guardianName || "Not Provided";
 
@@ -2473,6 +2950,8 @@ async function identifyEmergencyPatient() {
                 $("resCallGuardianBtn").href = cleanPhone ? `tel:${cleanPhone}` : "javascript:void(0)";
             }
 
+            setElementHidden("unconfiguredResult", true);
+            setElementHidden("noMatchResult", true);
             setElementHidden("matchResult", false);
             showToast("Registered patient successfully identified!");
         }
@@ -2815,6 +3294,9 @@ window.addEventListener("DOMContentLoaded", () => {
         if (dToken) {
             hideAll();
             if ($("doctorDashboard")) $("doctorDashboard").classList.remove("hidden");
+            const chatFab = $("chatFab");
+            if (chatFab) chatFab.classList.remove("hidden");
+            loadDoctorAuthorizedPatients();
         } else {
             goHome();
         }
@@ -2830,6 +3312,15 @@ window.openRegisterModal = openRegisterModal;
 window.closeRegisterModal = closeRegisterModal;
 window.submitRegistration = submitRegistration;
 window.openDoctorChatMode = openDoctorChatMode;
+window.openDoctorChatForPatient = openDoctorChatForPatient;
+window.openDoctorChatFromPortal = openDoctorChatFromPortal;
+window.sendDoctorAccessRequest = sendDoctorAccessRequest;
+window.loadDoctorAuthorizedPatients = loadDoctorAuthorizedPatients;
+window.loadDoctorAccessRequests = loadDoctorAccessRequests;
+window.respondToDoctorRequest = respondToDoctorRequest;
+window.searchPatient = searchPatient;
+window.viewPatientInDoctorPortal = viewPatientInDoctorPortal;
+window.downloadDoctorPatientPdf = downloadDoctorPatientPdf;
 window.openAiChatMode = openAiChatMode;
 window.openFileUploadModal = openFileUploadModal;
 window.closeFileUploadModal = closeFileUploadModal;
@@ -2843,14 +3334,6 @@ window.askAiAboutDocument = askAiAboutDocument;
 window.showProfileEdit = showProfileEdit;
 window.hideProfileEdit = hideProfileEdit;
 window.saveDetails = saveDetails;
-window.showSecondaryEdit = showSecondaryEdit;
-window.hideSecondaryEdit = hideSecondaryEdit;
-window.showHealthEdit = showHealthEdit;
-window.hideHealthEdit = hideHealthEdit;
-window.saveSecondaryDetailsFromPanel = saveSecondaryDetailsFromPanel;
-window.saveHealthInformation = saveHealthInformation;
-window.saveSecondaryGuardian = saveSecondaryGuardian;
-window.showVerificationManage = showVerificationManage;
 window.setHealthValue = setHealthValue;
 window.toggleChat = toggleChat;
 window.switchChatMode = switchChatMode;

@@ -66,8 +66,8 @@ CREATE TABLE IF NOT EXISTS doctors (
     doctor_id VARCHAR(50) UNIQUE NOT NULL,
     full_name VARCHAR(150) NOT NULL,
     phone VARCHAR(50),
-    specialization VARCHAR(100) DEFAULT 'General Medicine',
-    department VARCHAR(100) DEFAULT 'General Medicine',
+    specialization TEXT DEFAULT 'General Medicine',
+    department TEXT DEFAULT 'General Medicine',
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 

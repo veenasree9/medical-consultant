@@ -256,8 +256,8 @@
         <!-- ================= PATIENT DASHBOARD QUICKNAV ================= -->
         <div class="dashboard-quicknav">
             <button type="button" onclick="scrollToCard('profileCard')">📋 Profile</button>
-            <button type="button" onclick="showProfileEdit()">✏️ Edit Profile</button>
             <button type="button" onclick="scrollToCard('medicalFilesCard')">📁 Medical Files</button>
+            <button type="button" onclick="scrollToCard('doctorAccessRequestsCard')">🔒 Doctor Requests</button>
             <button type="button" onclick="downloadPatientPdf()">📥 Download Medical Record (PDF)</button>
         </div>
 
@@ -298,14 +298,9 @@
             <div id="profileSummaryView">
                 <div class="summary-card-header">
                     <h3>📋 Patient Profile</h3>
-                    <div style="display: flex; gap: 8px;">
-                        <button type="button" id="updateBtn" class="btn-small primary" onclick="showProfileEdit()">
-                            ✏️ Edit Profile
-                        </button>
-                        <button type="button" class="btn-small secondary" onclick="downloadPatientPdf()">
-                            📄 Export PDF
-                        </button>
-                    </div>
+                    <button type="button" id="updateBtn" class="btn-small primary" onclick="showProfileEdit()">
+                        ✏️ Edit Profile
+                    </button>
                 </div>
 
                 <div class="summary-grid">
@@ -729,6 +724,25 @@
             </div>
         </div>
 
+
+        <!-- ================= 3. DOCTOR ACCESS REQUESTS CARD ================= -->
+        <div id="doctorAccessRequestsCard" class="profile-card" style="margin-top: 25px;">
+            <div class="summary-card-header" style="justify-content: space-between; align-items: center; display: flex; flex-wrap: wrap; gap: 8px;">
+                <h3>🔒 Doctor Access Requests</h3>
+                <button type="button" class="btn-small secondary" onclick="loadDoctorAccessRequests()">
+                    🔄 Refresh Requests
+                </button>
+            </div>
+
+            <p style="color: #64748b; font-size: 14px; margin-bottom: 14px;">
+                Doctors who request access to your profile will appear here. You must <b>Accept</b> a request before the doctor can view your authorized health information or chat with you.
+            </p>
+
+            <div id="doctorAccessRequestsList">
+                <!-- Dynamically populated via renderDoctorAccessRequests -->
+            </div>
+        </div>
+
     </main>
 
 </section>
@@ -823,6 +837,27 @@
 
             <div id="doctorResult"></div>
 
+        </div>
+
+
+        <!-- ================= DOCTOR AUTHORIZED PATIENTS CARD ================= -->
+        <div id="doctorAuthorizedPatientsCard" class="profile-card" style="margin-top: 25px;">
+            <div class="summary-card-header" style="justify-content: space-between; align-items: center; display: flex; flex-wrap: wrap; gap: 8px;">
+                <h2>👥 Authorized Patients & Consultations</h2>
+                <div style="display: flex; gap: 8px;">
+                    <button type="button" class="btn-small secondary" onclick="loadDoctorAuthorizedPatients()">
+                        🔄 Refresh
+                    </button>
+                </div>
+            </div>
+
+            <p style="color: #64748b; font-size: 14px; margin-bottom: 14px;">
+                Only patients who have accepted your access request are shown here. Click <b>Open Chat</b> on an authorized patient to start consultation.
+            </p>
+
+            <div id="doctorAuthorizedPatientsList">
+                <!-- Dynamically populated via renderDoctorAuthorizedPatients -->
+            </div>
         </div>
 
     </main>
@@ -1031,18 +1066,18 @@
                 class="result-card result-nomatch hidden">
 
                 <h3>
-                    ⚠️ No reliable match found
+                    ⚠️ No reliable registered patient match found.
                 </h3>
 
                 <p id="noMatchMessage">
-                    The captured face could not be reliably identified among registered patients. Please ensure adequate lighting, clear face visibility without obstructions, and retake the photo.
+                    No reliable registered patient match found.
                 </p>
 
             </div>
 
 
             <!-- IDENTIFICATION RESULT: RELIABLE REGISTERED PATIENT MATCH FOUND -->
-            <!-- STRICT PRIVACY: Displays ONLY Patient ID, Full Name, Blood Group, Guardian Name, Guardian Phone -->
+            <!-- STRICT PRIVACY: Displays ONLY Patient Name, Patient ID, Blood Group, Guardian Name, Guardian Phone Number -->
             <!-- NEVER displays password, email, address, medical history, notes, documents, or full profile -->
             <div
                 id="matchResult"
@@ -1063,13 +1098,13 @@
                 <div class="emergency-fields-grid">
 
                     <div class="emergency-field-item">
-                        <div class="emergency-field-label">Patient / User ID</div>
-                        <div id="resPatientId" class="emergency-field-value">-</div>
+                        <div class="emergency-field-label">Patient Name</div>
+                        <div id="resPatientName" class="emergency-field-value">-</div>
                     </div>
 
                     <div class="emergency-field-item">
-                        <div class="emergency-field-label">Full Name</div>
-                        <div id="resPatientName" class="emergency-field-value">-</div>
+                        <div class="emergency-field-label">Patient ID</div>
+                        <div id="resPatientId" class="emergency-field-value">-</div>
                     </div>
 
                     <div class="emergency-field-item">
@@ -1090,7 +1125,7 @@
                 <div class="guardian-contact-box">
 
                     <div>
-                        <div class="emergency-field-label">Emergency Guardian Phone</div>
+                        <div class="emergency-field-label">Guardian Phone Number</div>
                         <div id="resGuardianPhone" class="emergency-field-value" style="font-size: 20px; color: #065f46;">
                             -
                         </div>
@@ -1416,8 +1451,32 @@
             <label>Contact Phone</label>
             <input id="regDocPhone" type="text" placeholder="e.g. +919876543220">
 
-            <label>Specialization / Department</label>
-            <input id="regDocSpecialization" type="text" placeholder="e.g. General Medicine, Cardiology, Pediatrics">
+            <label for="regDocSpecialization">Specialization / Department (Select one or more) *</label>
+            <select id="regDocSpecialization" multiple size="7" class="multi-select-dropdown" style="width: 100%; border: 1.5px solid #cbd5e1; border-radius: 8px; padding: 6px; font-size: 13px; color: #0f172a; background: #ffffff;">
+                <option value="General Medicine" selected>General Medicine</option>
+                <option value="Cardiology">Cardiology</option>
+                <option value="Dermatology">Dermatology</option>
+                <option value="Neurology">Neurology</option>
+                <option value="Pediatrics">Pediatrics</option>
+                <option value="Orthopedics">Orthopedics</option>
+                <option value="Gynecology">Gynecology</option>
+                <option value="Psychiatry">Psychiatry</option>
+                <option value="ENT">ENT</option>
+                <option value="Ophthalmology">Ophthalmology</option>
+                <option value="Dentistry">Dentistry</option>
+                <option value="Gastroenterology">Gastroenterology</option>
+                <option value="Pulmonology">Pulmonology</option>
+                <option value="Nephrology">Nephrology</option>
+                <option value="Urology">Urology</option>
+                <option value="Oncology">Oncology</option>
+                <option value="Endocrinology">Endocrinology</option>
+                <option value="Emergency Medicine">Emergency Medicine</option>
+                <option value="Radiology">Radiology</option>
+                <option value="Pathology">Pathology</option>
+            </select>
+            <span style="font-size: 11px; color: #64748b; margin-top: 4px; margin-bottom: 8px; display: block;">
+                Hold Ctrl (Windows) or Cmd (Mac) to select multiple specializations.
+            </span>
 
             <label>Password *</label>
             <input id="regDocPassword" type="password" placeholder="Create a secure password">

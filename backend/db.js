@@ -283,6 +283,10 @@ async function runInitialization() {
                         await client.query(statement);
                     } catch (_) {}
                 }
+                try {
+                    await client.query("ALTER TABLE doctors ALTER COLUMN specialization TYPE TEXT");
+                    await client.query("ALTER TABLE doctors ALTER COLUMN department TYPE TEXT");
+                } catch (_) {}
             }
 
             // Seed initial records in PostgreSQL if users table is empty
@@ -1035,7 +1039,12 @@ async function registerDoctor(fields) {
     }
 
     const cleanName = String(fullName || "").trim() || "Doctor";
-    const cleanSpec = String(specialization || "General Medicine").trim();
+    let cleanSpec = "General Medicine";
+    if (Array.isArray(specialization)) {
+        cleanSpec = specialization.map(s => String(s).trim()).filter(Boolean).join(", ") || "General Medicine";
+    } else if (specialization) {
+        cleanSpec = String(specialization).trim() || "General Medicine";
+    }
     const cleanDept = String(department || cleanSpec).trim();
     const passwordHash = await bcrypt.hash(password || "1234", 10);
     const newUserId = "USR_DOC_" + cleanDocId.replace(/[^a-zA-Z0-9_]/g, "");
@@ -1483,11 +1492,11 @@ async function getDoctorAccessRequestsForPatient(patientId) {
                         COALESCE(d.department, 'General Medicine') AS "department"
                  FROM doctor_patient_requests r
                  LEFT JOIN doctors d ON LOWER(d.doctor_id) = LOWER(r.doctor_id)
-                 WHERE UPPER(r.patient_id) = UPPER($1)
+                 WHERE UPPER(r.patient_id) = UPPER($1) AND r.status = 'pending'
                  ORDER BY r.requested_at DESC`,
                 [cleanPat]
             );
-            if (res.rows.length > 0) return res.rows;
+            return res.rows;
         } catch (e) {
             console.warn("Postgres get patient requests fallback:", e.message);
         }
@@ -1495,7 +1504,7 @@ async function getDoctorAccessRequestsForPatient(patientId) {
 
     const list = [];
     for (const r of mockStore.accessRequests.values()) {
-        if (r.patientId.toUpperCase() === cleanPat) {
+        if (r.patientId.toUpperCase() === cleanPat && r.status === "pending") {
             const doc = mockStore.doctors.get(r.doctorId.toLowerCase()) || { name: "Doctor", specialization: "General Medicine" };
             list.push({
                 id: r.id,
@@ -1528,11 +1537,11 @@ async function getDoctorAccessRequestsForDoctor(doctorId) {
                         COALESCE(p.full_name, 'Patient') AS "patientName"
                  FROM doctor_patient_requests r
                  LEFT JOIN patients p ON UPPER(p.patient_id) = UPPER(r.patient_id)
-                 WHERE LOWER(r.doctor_id) = LOWER($1)
+                 WHERE LOWER(r.doctor_id) = LOWER($1) AND r.status = 'pending'
                  ORDER BY r.requested_at DESC`,
                 [cleanDoc]
             );
-            if (res.rows.length > 0) return res.rows;
+            return res.rows;
         } catch (e) {
             console.warn("Postgres get doctor requests fallback:", e.message);
         }
@@ -1540,7 +1549,7 @@ async function getDoctorAccessRequestsForDoctor(doctorId) {
 
     const list = [];
     for (const r of mockStore.accessRequests.values()) {
-        if (r.doctorId.toLowerCase() === cleanDoc) {
+        if (r.doctorId.toLowerCase() === cleanDoc && r.status === "pending") {
             const pat = mockStore.patients.get(r.patientId.toUpperCase()) || { name: "Patient" };
             list.push({
                 id: r.id,
@@ -1622,7 +1631,8 @@ async function getAcceptedDoctorsForPatient(patientId) {
     if (!isMockActive) {
         try {
             const res = await query(
-                `SELECT d.doctor_id AS "doctorId", d.full_name AS "name", d.phone,
+                `SELECT DISTINCT ON (LOWER(d.doctor_id))
+                        d.doctor_id AS "doctorId", d.full_name AS "name", d.phone,
                         COALESCE(d.specialization, 'General Medicine') AS "specialization",
                         COALESCE(d.department, 'General Medicine') AS "department",
                         r.status AS "connectionStatus",
@@ -1630,29 +1640,34 @@ async function getAcceptedDoctorsForPatient(patientId) {
                  FROM doctors d
                  JOIN doctor_patient_requests r ON LOWER(r.doctor_id) = LOWER(d.doctor_id)
                  WHERE UPPER(r.patient_id) = UPPER($1) AND r.status = 'accepted'
-                 ORDER BY d.full_name ASC`,
+                 ORDER BY LOWER(d.doctor_id), r.responded_at DESC`,
                 [cleanPat]
             );
-            if (res.rows.length > 0) return res.rows;
+            return res.rows;
         } catch (e) {
             console.warn("Postgres get accepted doctors fallback:", e.message);
         }
     }
 
     const list = [];
+    const seenDoctors = new Set();
     for (const r of mockStore.accessRequests.values()) {
         if (r.patientId.toUpperCase() === cleanPat && r.status === "accepted") {
-            const doc = mockStore.doctors.get(r.doctorId.toLowerCase());
-            if (doc) {
-                list.push({
-                    doctorId: doc.doctorId,
-                    name: doc.name,
-                    phone: doc.phone,
-                    specialization: doc.specialization || "General Medicine",
-                    department: doc.department || "General Medicine",
-                    connectionStatus: "connected",
-                    acceptedAt: r.respondedAt
-                });
+            const docKey = r.doctorId.toLowerCase();
+            if (!seenDoctors.has(docKey)) {
+                seenDoctors.add(docKey);
+                const doc = mockStore.doctors.get(docKey);
+                if (doc) {
+                    list.push({
+                        doctorId: doc.doctorId,
+                        name: doc.name,
+                        phone: doc.phone,
+                        specialization: doc.specialization || "General Medicine",
+                        department: doc.department || "General Medicine",
+                        connectionStatus: "connected",
+                        acceptedAt: r.respondedAt
+                    });
+                }
             }
         }
     }
@@ -1667,45 +1682,49 @@ async function getAcceptedPatientsForDoctor(doctorId) {
     if (!isMockActive) {
         try {
             const res = await query(
-                `SELECT p.patient_id AS "patientId", p.full_name AS "name", p.blood_group AS "bloodGroup",
+                `SELECT DISTINCT ON (UPPER(p.patient_id))
+                        p.patient_id AS "patientId", p.full_name AS "name", p.blood_group AS "bloodGroup",
                         r.responded_at AS "acceptedAt",
                         COALESCE((
                             SELECT COUNT(*)
                             FROM chat_messages cm
-                            WHERE cm.patient_id = p.patient_id
-                              AND cm.doctor_id = $1
-                              AND cm.receiver_id = $1
+                            WHERE UPPER(cm.patient_id) = UPPER(p.patient_id)
+                              AND LOWER(cm.doctor_id) = LOWER($1)
+                              AND LOWER(cm.receiver_id) = LOWER($1)
                               AND cm.is_read = FALSE
                         ), 0) AS "unreadCount"
                  FROM patients p
                  JOIN doctor_patient_requests r ON UPPER(r.patient_id) = UPPER(p.patient_id)
                  WHERE LOWER(r.doctor_id) = LOWER($1) AND r.status = 'accepted'
-                 ORDER BY p.full_name ASC`,
+                 ORDER BY UPPER(p.patient_id), r.responded_at DESC`,
                 [cleanDoc]
             );
-            if (res.rows.length > 0) {
-                return res.rows.map(r => ({
-                    ...r,
-                    unreadCount: parseInt(r.unreadCount, 10) || 0
-                }));
-            }
+            return res.rows.map(r => ({
+                ...r,
+                unreadCount: parseInt(r.unreadCount, 10) || 0
+            }));
         } catch (e) {
             console.warn("Postgres get accepted patients fallback:", e.message);
         }
     }
 
     const list = [];
+    const seenPatients = new Set();
     for (const r of mockStore.accessRequests.values()) {
         if (r.doctorId.toLowerCase() === cleanDoc && r.status === "accepted") {
-            const p = mockStore.patients.get(r.patientId.toUpperCase());
-            if (p) {
-                list.push({
-                    patientId: p.patientId,
-                    name: p.name,
-                    bloodGroup: p.bloodGroup || p.blood || "",
-                    acceptedAt: r.respondedAt,
-                    unreadCount: 0
-                });
+            const patKey = r.patientId.toUpperCase();
+            if (!seenPatients.has(patKey)) {
+                seenPatients.add(patKey);
+                const p = mockStore.patients.get(patKey);
+                if (p) {
+                    list.push({
+                        patientId: p.patientId,
+                        name: p.name,
+                        bloodGroup: p.bloodGroup || p.blood || "",
+                        acceptedAt: r.respondedAt,
+                        unreadCount: 0
+                    });
+                }
             }
         }
     }
@@ -1823,57 +1842,61 @@ async function getDoctorPatientsList(doctorId) {
     if (!isMockActive) {
         try {
             const res = await query(
-                `SELECT p.patient_id AS "patientId", p.full_name AS "name", p.blood_group AS "bloodGroup",
+                `SELECT DISTINCT ON (UPPER(p.patient_id))
+                        p.patient_id AS "patientId", p.full_name AS "name", p.blood_group AS "bloodGroup",
                         COALESCE((
                             SELECT COUNT(*)
                             FROM chat_messages cm
-                            WHERE cm.patient_id = p.patient_id
-                              AND cm.doctor_id = $1
-                              AND cm.receiver_id = $1
+                            WHERE UPPER(cm.patient_id) = UPPER(p.patient_id)
+                              AND LOWER(cm.doctor_id) = LOWER($1)
+                              AND LOWER(cm.receiver_id) = LOWER($1)
                               AND cm.is_read = FALSE
                         ), 0) AS "unreadCount",
                         (
                             SELECT MAX(created_at)
                             FROM chat_messages cm2
-                            WHERE cm2.patient_id = p.patient_id
-                              AND cm2.doctor_id = $1
+                            WHERE UPPER(cm2.patient_id) = UPPER(p.patient_id)
+                              AND LOWER(cm2.doctor_id) = LOWER($1)
                         ) AS "lastMessageTime"
                  FROM patients p
                  JOIN doctor_patient_requests r ON UPPER(r.patient_id) = UPPER(p.patient_id) AND LOWER(r.doctor_id) = LOWER($1) AND r.status = 'accepted'
-                 ORDER BY "lastMessageTime" DESC NULLS LAST, p.patient_id ASC`,
+                 ORDER BY UPPER(p.patient_id), "lastMessageTime" DESC NULLS LAST`,
                 [cleanDoc]
             );
-            if (res.rows.length > 0) {
-                return res.rows.map(r => ({
-                    ...r,
-                    unreadCount: parseInt(r.unreadCount, 10) || 0
-                }));
-            }
+            return res.rows.map(r => ({
+                ...r,
+                unreadCount: parseInt(r.unreadCount, 10) || 0
+            }));
         } catch (e) {
-            // fall back
+            console.warn("Postgres get doctor patients list fallback:", e.message);
         }
     }
 
     const list = [];
+    const seenPatients = new Set();
     for (const p of mockStore.patients.values()) {
         const key = `${cleanDoc}:${p.patientId.toUpperCase()}`;
         const req = mockStore.accessRequests.get(key);
         if (req && req.status === "accepted") {
-            const unreadCount = mockStore.chatMessages.filter(
-                m => m.patientId === p.patientId && m.doctorId === cleanDoc && m.receiverId === cleanDoc && !m.isRead
-            ).length;
-            const patientMessages = mockStore.chatMessages.filter(
-                m => m.patientId === p.patientId && m.doctorId === cleanDoc
-            );
-            const lastMessage = patientMessages[patientMessages.length - 1];
+            const patKey = p.patientId.toUpperCase();
+            if (!seenPatients.has(patKey)) {
+                seenPatients.add(patKey);
+                const unreadCount = mockStore.chatMessages.filter(
+                    m => m.patientId.toUpperCase() === patKey && m.doctorId.toLowerCase() === cleanDoc && m.receiverId.toLowerCase() === cleanDoc && !m.isRead
+                ).length;
+                const patientMessages = mockStore.chatMessages.filter(
+                    m => m.patientId.toUpperCase() === patKey && m.doctorId.toLowerCase() === cleanDoc
+                );
+                const lastMessage = patientMessages[patientMessages.length - 1];
 
-            list.push({
-                patientId: p.patientId,
-                name: p.name,
-                bloodGroup: p.bloodGroup,
-                unreadCount,
-                lastMessageTime: lastMessage ? lastMessage.timestamp : null
-            });
+                list.push({
+                    patientId: p.patientId,
+                    name: p.name,
+                    bloodGroup: p.bloodGroup,
+                    unreadCount,
+                    lastMessageTime: lastMessage ? lastMessage.timestamp : null
+                });
+            }
         }
     }
     return list;
@@ -2080,6 +2103,16 @@ module.exports = {
     getMedicalDocument,
     deleteMedicalDocument,
     findDocumentForPrompt,
+    toggleDocumentDoctorAuthorization,
+    // Doctor Access Request & Privacy Verification
+    createDoctorAccessRequest,
+    respondToDoctorAccessRequest,
+    getDoctorAccessStatus,
+    isDoctorAccessAccepted,
+    getDoctorAccessRequestsForPatient,
+    getDoctorAccessRequestsForDoctor,
+    getAcceptedPatientsForDoctor,
+    getAuthorizedPatientDetailsForDoctor,
     // Chat & AI Exports
     getDoctorsList,
     getDoctorPatientsList,
