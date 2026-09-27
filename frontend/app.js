@@ -13,15 +13,16 @@ function $(id) {
 function showToast(message) {
 
     const toast = $("toast");
+    if (!toast) return;
 
     toast.textContent = message;
 
     toast.classList.add("show");
 
     setTimeout(() => {
-
-        toast.classList.remove("show");
-
+        if (toast) {
+            toast.classList.remove("show");
+        }
     }, 2500);
 }
 
@@ -59,13 +60,19 @@ function openLogin(type) {
 
     hideAll();
 
-    $("loginPage").classList.remove("hidden");
+    if ($("loginPage")) {
+        $("loginPage").classList.remove("hidden");
+    }
 
-    $("loginMessage").textContent = "";
+    if ($("loginMessage")) {
+        $("loginMessage").textContent = "";
+    }
 
-    $("username").value = "";
-    $("password").value = "";
-    $("password").type = "password";
+    if ($("username")) $("username").value = "";
+    if ($("password")) {
+        $("password").value = "";
+        $("password").type = "password";
+    }
     if ($("togglePasswordBtn")) {
         $("togglePasswordBtn").textContent = "👁️";
     }
@@ -143,7 +150,9 @@ function goHome() {
 
     hideAll();
 
-    $("homePage").classList.remove("hidden");
+    if ($("homePage")) {
+        $("homePage").classList.remove("hidden");
+    }
 }
 
 
@@ -232,9 +241,9 @@ async function sendOTP(isResend = false) {
         }
 
 
-        $("otpSection")
-            .classList
-            .remove("hidden");
+        if ($("otpSection")) {
+            $("otpSection").classList.remove("hidden");
+        }
 
 
         $("otp").focus();
@@ -535,9 +544,9 @@ async function passwordLogin() {
 
             hideChatBoard();
             hideAll();
-            $("doctorDashboard")
-                .classList
-                .remove("hidden");
+            if ($("doctorDashboard")) {
+                $("doctorDashboard").classList.remove("hidden");
+            }
 
         }
 
@@ -590,12 +599,32 @@ async function loadPatientDashboard() {
 
     const p = data.patient;
 
-    $("patientName").textContent = p.name;
-    $("patientHeaderName").textContent = p.name;
-    $("patientId").textContent = p.id;
-    if ($("pPatientId")) $("pPatientId").value = p.id;
+    if ($("patientName")) $("patientName").textContent = p.name || "";
+    if ($("patientHeaderName")) $("patientHeaderName").textContent = p.name || "";
+    if ($("patientId")) $("patientId").textContent = p.id || "";
+    if ($("pPatientId")) $("pPatientId").value = p.id || "";
 
-    // Primary Details
+    // Summary Card Details
+    if ($("sumPatientId")) $("sumPatientId").textContent = p.id || "-";
+    if ($("sumName")) $("sumName").textContent = p.name || "-";
+    if ($("sumAge")) $("sumAge").textContent = p.age ? String(p.age) : "-";
+    if ($("sumGender")) $("sumGender").textContent = p.gender || "-";
+    if ($("sumBlood")) $("sumBlood").textContent = p.bloodGroup || p.blood || "-";
+    if ($("sumPhone")) $("sumPhone").textContent = p.phone || "-";
+    if ($("sumEmail")) $("sumEmail").textContent = p.email || "-";
+    if ($("sumAddress")) $("sumAddress").textContent = p.address || "-";
+    if ($("sumGuardian")) {
+        $("sumGuardian").textContent = p.guardianName
+            ? `${p.guardianName} (${p.guardianRelationship || "Guardian"}, ${p.guardianPhone || "No phone"})`
+            : "-";
+    }
+    if ($("sumGuardian2")) {
+        $("sumGuardian2").textContent = p.guardian2Name
+            ? `${p.guardian2Name} (${p.guardian2Relationship || "Secondary"}, ${p.guardian2Phone || "No phone"})`
+            : "None recorded";
+    }
+
+    // Primary Details Form Fields
     if ($("pName")) $("pName").value = p.name || "";
     if ($("pAge")) $("pAge").value = p.age || "";
     if ($("pGender")) $("pGender").value = p.gender || "Other";
@@ -613,7 +642,7 @@ async function loadPatientDashboard() {
     if ($("pMedicalHistory")) $("pMedicalHistory").value = p.medicalHistory || "";
     if ($("pNotes")) $("pNotes").value = p.notes || "";
 
-    // Ensure inputs are initially disabled until "Update Details" is clicked
+    // Ensure inputs are initially disabled until "Update Details" / "Edit Profile" is clicked
     [
         "pName", "pAge", "pGender", "pBlood", "pPhone", "pEmail", "pAddress",
         "pGuardianName", "pGuardianPhone", "pGuardianRelationship", "pMedicalHistory", "pNotes"
@@ -621,14 +650,24 @@ async function loadPatientDashboard() {
         if ($(id)) $(id).disabled = true;
     });
 
-    $("updateBtn").classList.remove("hidden");
-    $("saveBtn").classList.add("hidden");
-    $("cancelBtn").classList.add("hidden");
+    if ($("updateBtn")) $("updateBtn").classList.remove("hidden");
+    if ($("saveBtn")) $("saveBtn").classList.add("hidden");
+    if ($("cancelBtn")) $("cancelBtn").classList.add("hidden");
+
+    if ($("profileSummaryView")) $("profileSummaryView").classList.remove("hidden");
+    if ($("profileEditView")) $("profileEditView").classList.add("hidden");
+    if ($("secondarySummaryView")) $("secondarySummaryView").classList.remove("hidden");
+    if ($("secondaryEditView")) $("secondaryEditView").classList.add("hidden");
+    if ($("healthSummaryView")) $("healthSummaryView").classList.remove("hidden");
+    if ($("healthEditView")) $("healthEditView").classList.add("hidden");
 
     // Secondary Guardian Details
     if ($("pGuardian2Name")) $("pGuardian2Name").value = p.guardian2Name || "";
     if ($("pGuardian2Phone")) $("pGuardian2Phone").value = p.guardian2Phone || "";
     if ($("pGuardian2Relationship")) $("pGuardian2Relationship").value = p.guardian2Relationship || "";
+    if ($("secGuardian2Name")) $("secGuardian2Name").value = p.guardian2Name || "";
+    if ($("secGuardian2Phone")) $("secGuardian2Phone").value = p.guardian2Phone || "";
+    if ($("secGuardian2Relationship")) $("secGuardian2Relationship").value = p.guardian2Relationship || "";
 
     // Structured Health Information
     if (p.healthInformation) {
@@ -653,10 +692,19 @@ async function loadPatientDashboard() {
         updateVerifBadge("verifPasskeyBadge", p.verifications.passkey);
         updateVerifBadge("verifCameraBadge", p.verifications.camera_live);
         updateVerifBadge("verifLivenessBadge", p.verifications.liveness);
+
+        if ($("sumFaceStatus")) {
+            $("sumFaceStatus").textContent = p.verifications.face === "verified" ? "Verified" : "Not configured";
+        }
+        if ($("sumPasskeyStatus")) {
+            $("sumPasskeyStatus").textContent = p.verifications.passkey === "verified" || p.verifications.passkey === "configured" ? "Configured" : "Not configured";
+        }
     }
 
     hideAll();
-    $("patientDashboard").classList.remove("hidden");
+    if ($("patientDashboard")) {
+        $("patientDashboard").classList.remove("hidden");
+    }
     showChatBoardForPatient();
 }
 
@@ -680,47 +728,148 @@ function updateVerifBadge(badgeId, status) {
 
 /* ================= UPDATE PRIMARY DETAILS ================= */
 
-function enableUpdate() {
+function showProfileEdit() {
     [
-        "pName",
-        "pAge",
-        "pGender",
-        "pBlood",
-        "pPhone",
-        "pEmail",
-        "pAddress",
-        "pGuardianName",
-        "pGuardianPhone",
-        "pGuardianRelationship",
-        "pMedicalHistory",
-        "pNotes"
+        "pName", "pAge", "pGender", "pBlood", "pPhone", "pEmail", "pAddress",
+        "pGuardianName", "pGuardianPhone", "pGuardianRelationship", "pMedicalHistory", "pNotes"
     ].forEach(id => {
         if ($(id)) $(id).disabled = false;
     });
 
-    $("updateBtn").classList.add("hidden");
-    $("saveBtn").classList.remove("hidden");
-    $("cancelBtn").classList.remove("hidden");
+    if ($("profileSummaryView")) $("profileSummaryView").classList.add("hidden");
+    if ($("profileEditView")) $("profileEditView").classList.remove("hidden");
+    if ($("updateBtn")) $("updateBtn").classList.add("hidden");
+    if ($("saveBtn")) $("saveBtn").classList.remove("hidden");
+    if ($("cancelBtn")) $("cancelBtn").classList.remove("hidden");
+
+    const editEl = $("profileEditView") || $("profileCard");
+    if (editEl) editEl.scrollIntoView({ behavior: "smooth" });
+}
+
+function hideProfileEdit() {
+    [
+        "pName", "pAge", "pGender", "pBlood", "pPhone", "pEmail", "pAddress",
+        "pGuardianName", "pGuardianPhone", "pGuardianRelationship", "pMedicalHistory", "pNotes"
+    ].forEach(id => {
+        if ($(id)) $(id).disabled = true;
+    });
+
+    if ($("profileSummaryView")) $("profileSummaryView").classList.remove("hidden");
+    if ($("profileEditView")) $("profileEditView").classList.add("hidden");
+    if ($("updateBtn")) $("updateBtn").classList.remove("hidden");
+    if ($("saveBtn")) $("saveBtn").classList.add("hidden");
+    if ($("cancelBtn")) $("cancelBtn").classList.add("hidden");
+}
+
+function enableUpdate() {
+    showProfileEdit();
+}
+
+function enableEdit() {
+    showProfileEdit();
+}
+
+function showSecondaryEdit() {
+    if ($("secondarySummaryView")) $("secondarySummaryView").classList.add("hidden");
+    if ($("secondaryEditView")) $("secondaryEditView").classList.remove("hidden");
+    const el = $("secondaryEditView") || $("secondaryDetailsCard");
+    if (el) el.scrollIntoView({ behavior: "smooth" });
+}
+
+function hideSecondaryEdit() {
+    if ($("secondarySummaryView")) $("secondarySummaryView").classList.remove("hidden");
+    if ($("secondaryEditView")) $("secondaryEditView").classList.add("hidden");
+}
+
+function showHealthEdit() {
+    if ($("healthSummaryView")) $("healthSummaryView").classList.add("hidden");
+    if ($("healthEditView")) $("healthEditView").classList.remove("hidden");
+    const el = $("healthEditView") || $("healthInfoCard");
+    if (el) el.scrollIntoView({ behavior: "smooth" });
+}
+
+function hideHealthEdit() {
+    if ($("healthSummaryView")) $("healthSummaryView").classList.remove("hidden");
+    if ($("healthEditView")) $("healthEditView").classList.add("hidden");
+}
+
+function scrollToCard(cardId) {
+    const el = $(cardId);
+    if (el) {
+        el.scrollIntoView({ behavior: "smooth" });
+    }
+}
+
+function showVerificationManage() {
+    showSecondaryEdit();
+    const el = $("secondaryEditView") || $("secondaryDetailsCard");
+    if (el) el.scrollIntoView({ behavior: "smooth" });
+}
+
+async function saveSecondaryDetailsFromPanel() {
+    const name = ($("secGuardian2Name") && $("secGuardian2Name").value.trim()) ||
+                 ($("pGuardian2Name") && $("pGuardian2Name").value.trim()) || "";
+    const phone = ($("secGuardian2Phone") && $("secGuardian2Phone").value.trim()) ||
+                  ($("pGuardian2Phone") && $("pGuardian2Phone").value.trim()) || "";
+    const rel = ($("secGuardian2Relationship") && $("secGuardian2Relationship").value.trim()) ||
+                ($("pGuardian2Relationship") && $("pGuardian2Relationship").value.trim()) || "";
+
+    const details = {
+        guardian2Name: name,
+        guardian2Phone: phone,
+        guardian2Relationship: rel
+    };
+
+    try {
+        const response = await fetch(`${API_URL}/api/patient/me`, {
+            method: "PUT",
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${patientToken}`
+            },
+            body: JSON.stringify(details)
+        });
+
+        const data = await response.json();
+        if (!response.ok || !data.success) {
+            throw new Error(data.message || "Failed to save secondary guardian.");
+        }
+
+        if ($("sumGuardian2")) {
+            $("sumGuardian2").textContent = name ? `${name} (${rel || "Secondary"}, ${phone || "No phone"})` : "None recorded";
+        }
+        if ($("pGuardian2Name")) $("pGuardian2Name").value = name;
+        if ($("pGuardian2Phone")) $("pGuardian2Phone").value = phone;
+        if ($("pGuardian2Relationship")) $("pGuardian2Relationship").value = rel;
+        if ($("secGuardian2Name")) $("secGuardian2Name").value = name;
+        if ($("secGuardian2Phone")) $("secGuardian2Phone").value = phone;
+        if ($("secGuardian2Relationship")) $("secGuardian2Relationship").value = rel;
+
+        showToast("Secondary Guardian details saved permanently!");
+        hideSecondaryEdit();
+    } catch (err) {
+        showToast(err.message);
+    }
 }
 
 /* ================= SAVE PRIMARY DETAILS ================= */
 
 async function saveDetails() {
-    const bloodVal = $("pBlood").value;
+    const bloodVal = $("pBlood") ? $("pBlood").value : "O+";
     const details = {
-        name: $("pName").value.trim(),
-        age: $("pAge").value.trim(),
-        gender: $("pGender").value,
+        name: $("pName") ? $("pName").value.trim() : "",
+        age: $("pAge") ? $("pAge").value.trim() : "",
+        gender: $("pGender") ? $("pGender").value : "Other",
         blood: bloodVal,
         bloodGroup: bloodVal,
-        phone: $("pPhone").value.trim(),
-        email: $("pEmail").value.trim(),
-        address: $("pAddress").value.trim(),
-        guardianName: $("pGuardianName").value.trim(),
-        guardianPhone: $("pGuardianPhone").value.trim(),
-        guardianRelationship: $("pGuardianRelationship").value.trim(),
+        phone: $("pPhone") ? $("pPhone").value.trim() : "",
+        email: $("pEmail") ? $("pEmail").value.trim() : "",
+        address: $("pAddress") ? $("pAddress").value.trim() : "",
+        guardianName: $("pGuardianName") ? $("pGuardianName").value.trim() : "",
+        guardianPhone: $("pGuardianPhone") ? $("pGuardianPhone").value.trim() : "",
+        guardianRelationship: $("pGuardianRelationship") ? $("pGuardianRelationship").value.trim() : "",
         medicalHistory: $("pMedicalHistory") ? $("pMedicalHistory").value.trim() : "",
-        notes: $("pNotes").value.trim()
+        notes: $("pNotes") ? $("pNotes").value.trim() : ""
     };
 
     try {
@@ -738,6 +887,7 @@ async function saveDetails() {
             throw new Error(data.message || "Update failed.");
         }
 
+        hideProfileEdit();
         await loadPatientDashboard();
         showToast("Primary patient details saved to PostgreSQL.");
     } catch (error) {
@@ -748,6 +898,7 @@ async function saveDetails() {
 /* ================= CANCEL ================= */
 
 function cancelUpdate() {
+    hideProfileEdit();
     loadPatientDashboard().catch(error => showToast(error.message));
 }
 
@@ -1972,9 +2123,21 @@ let emergencySessionId =
 sessionStorage.setItem("emergencyHelperSession", emergencySessionId);
 
 
+function setElementHidden(id, hidden) {
+    const el = typeof id === "string" ? $(id) : id;
+    if (!el) return;
+    if (hidden) {
+        el.classList.add("hidden");
+    } else {
+        el.classList.remove("hidden");
+    }
+}
+
 function openHelperEmergency() {
     hideAll();
-    $("helperDashboard").classList.remove("hidden");
+    if ($("helperDashboard")) {
+        $("helperDashboard").classList.remove("hidden");
+    }
     resetEmergencyCameraUI();
     loadEmergencyAuditLogs();
 }
@@ -1988,22 +2151,22 @@ function resetEmergencyCameraUI() {
     stopEmergencyCamera();
     capturedImageData = null;
 
-    $("cameraPreview").classList.add("hidden");
-    $("faceGuide").classList.add("hidden");
-    $("cameraPlaceholder").classList.remove("hidden");
-    $("capturedImage").classList.add("hidden");
+    setElementHidden("cameraPreview", true);
+    setElementHidden("faceGuide", true);
+    setElementHidden("cameraPlaceholder", false);
+    setElementHidden("capturedImage", true);
 
-    $("startCameraBtn").classList.remove("hidden");
-    $("captureBtn").classList.add("hidden");
-    $("switchCameraBtn").classList.add("hidden");
-    $("retakeBtn").classList.add("hidden");
-    $("identifyBtn").classList.add("hidden");
-    $("stopCameraBtn").classList.add("hidden");
+    setElementHidden("startCameraBtn", false);
+    setElementHidden("captureBtn", true);
+    setElementHidden("switchCameraBtn", true);
+    setElementHidden("retakeBtn", true);
+    setElementHidden("identifyBtn", true);
+    setElementHidden("stopCameraBtn", true);
 
-    $("identifyingSpinner").classList.add("hidden");
-    $("unconfiguredResult").classList.add("hidden");
-    $("noMatchResult").classList.add("hidden");
-    $("matchResult").classList.add("hidden");
+    setElementHidden("identifyingSpinner", true);
+    setElementHidden("unconfiguredResult", true);
+    setElementHidden("noMatchResult", true);
+    setElementHidden("matchResult", true);
 }
 
 async function startEmergencyCamera() {
@@ -2037,34 +2200,40 @@ async function startEmergencyCamera() {
 
         emergencyCameraStream = stream;
         const video = $("cameraPreview");
-        video.srcObject = stream;
-        await video.play();
+        if (video) {
+            video.srcObject = stream;
+            await video.play();
+            setElementHidden(video, false);
+        }
 
-        video.classList.remove("hidden");
-        $("faceGuide").classList.remove("hidden");
-        $("cameraPlaceholder").classList.add("hidden");
-        $("capturedImage").classList.add("hidden");
+        setElementHidden("faceGuide", false);
+        setElementHidden("cameraPlaceholder", true);
+        setElementHidden("capturedImage", true);
 
-        startBtn.classList.add("hidden");
-        startBtn.disabled = false;
-        startBtn.textContent = "📸 Start Camera";
+        if (startBtn) {
+            setElementHidden(startBtn, true);
+            startBtn.disabled = false;
+            startBtn.textContent = "📸 Start Camera";
+        }
 
-        $("captureBtn").classList.remove("hidden");
-        $("switchCameraBtn").classList.remove("hidden");
-        $("stopCameraBtn").classList.remove("hidden");
-        $("retakeBtn").classList.add("hidden");
-        $("identifyBtn").classList.add("hidden");
+        setElementHidden("captureBtn", false);
+        setElementHidden("switchCameraBtn", false);
+        setElementHidden("stopCameraBtn", false);
+        setElementHidden("retakeBtn", true);
+        setElementHidden("identifyBtn", true);
 
         // Hide previous results
-        $("unconfiguredResult").classList.add("hidden");
-        $("noMatchResult").classList.add("hidden");
-        $("matchResult").classList.add("hidden");
+        setElementHidden("unconfiguredResult", true);
+        setElementHidden("noMatchResult", true);
+        setElementHidden("matchResult", true);
 
         showToast("Camera started. Align the face inside the guide.");
     } catch (err) {
         console.error("Camera access error:", err);
-        $("startCameraBtn").disabled = false;
-        $("startCameraBtn").textContent = "📸 Start Camera";
+        if ($("startCameraBtn")) {
+            $("startCameraBtn").disabled = false;
+            $("startCameraBtn").textContent = "📸 Start Camera";
+        }
         showToast("Camera access denied or unavailable: " + err.message);
     }
 }
@@ -2078,19 +2247,19 @@ function stopEmergencyCamera() {
     const video = $("cameraPreview");
     if (video) {
         video.srcObject = null;
-        video.classList.add("hidden");
+        setElementHidden(video, true);
     }
 
-    $("faceGuide").classList.add("hidden");
+    setElementHidden("faceGuide", true);
 
     if (!capturedImageData) {
-        $("cameraPlaceholder").classList.remove("hidden");
-        $("startCameraBtn").classList.remove("hidden");
+        setElementHidden("cameraPlaceholder", false);
+        setElementHidden("startCameraBtn", false);
     }
 
-    $("captureBtn").classList.add("hidden");
-    $("switchCameraBtn").classList.add("hidden");
-    $("stopCameraBtn").classList.add("hidden");
+    setElementHidden("captureBtn", true);
+    setElementHidden("switchCameraBtn", true);
+    setElementHidden("stopCameraBtn", true);
 }
 
 function switchCameraFacing() {
@@ -2121,30 +2290,32 @@ function captureEmergencyPhoto() {
 
     // Display captured still photo
     const capturedImg = $("capturedImage");
-    capturedImg.src = capturedImageData;
-    capturedImg.classList.remove("hidden");
+    if (capturedImg) {
+        capturedImg.src = capturedImageData;
+        setElementHidden(capturedImg, false);
+    }
 
     // Stop live stream to save battery and freeze frame
     stopEmergencyCamera();
 
-    $("cameraPlaceholder").classList.add("hidden");
-    $("startCameraBtn").classList.add("hidden");
-    $("captureBtn").classList.add("hidden");
-    $("switchCameraBtn").classList.add("hidden");
-    $("stopCameraBtn").classList.add("hidden");
+    setElementHidden("cameraPlaceholder", true);
+    setElementHidden("startCameraBtn", true);
+    setElementHidden("captureBtn", true);
+    setElementHidden("switchCameraBtn", true);
+    setElementHidden("stopCameraBtn", true);
 
-    $("retakeBtn").classList.remove("hidden");
-    $("identifyBtn").classList.remove("hidden");
+    setElementHidden("retakeBtn", false);
+    setElementHidden("identifyBtn", false);
 
     showToast("Photo captured! Click 'Identify Patient'.");
 }
 
 function retakePhoto() {
     capturedImageData = null;
-    $("capturedImage").classList.add("hidden");
-    $("unconfiguredResult").classList.add("hidden");
-    $("noMatchResult").classList.add("hidden");
-    $("matchResult").classList.add("hidden");
+    setElementHidden("capturedImage", true);
+    setElementHidden("unconfiguredResult", true);
+    setElementHidden("noMatchResult", true);
+    setElementHidden("matchResult", true);
 
     startEmergencyCamera();
 }
@@ -2156,13 +2327,15 @@ async function identifyEmergencyPatient() {
     }
 
     const identifyBtn = $("identifyBtn");
-    identifyBtn.disabled = true;
-    identifyBtn.textContent = "⏳ Identifying...";
+    if (identifyBtn) {
+        identifyBtn.disabled = true;
+        identifyBtn.textContent = "⏳ Identifying...";
+    }
 
-    $("identifyingSpinner").classList.remove("hidden");
-    $("unconfiguredResult").classList.add("hidden");
-    $("noMatchResult").classList.add("hidden");
-    $("matchResult").classList.add("hidden");
+    setElementHidden("identifyingSpinner", false);
+    setElementHidden("unconfiguredResult", true);
+    setElementHidden("noMatchResult", true);
+    setElementHidden("matchResult", true);
 
     try {
         const response = await fetch(`${API_URL}/api/helper/identify-person`, {
@@ -2179,44 +2352,46 @@ async function identifyEmergencyPatient() {
 
         const data = await response.json();
 
-        $("identifyingSpinner").classList.add("hidden");
-        identifyBtn.disabled = false;
-        identifyBtn.textContent = "🔍 Identify Patient";
+        setElementHidden("identifyingSpinner", true);
+        if (identifyBtn) {
+            identifyBtn.disabled = false;
+            identifyBtn.textContent = "🔍 Identify Patient";
+        }
 
         // 1. Service Unconfigured State
         if (data.configured === false) {
-            $("unconfiguredResult").classList.remove("hidden");
-            if (data.message) {
+            setElementHidden("unconfiguredResult", false);
+            if (data.message && $("unconfiguredMessage")) {
                 $("unconfiguredMessage").textContent = data.message;
             }
             showToast("Face identification service is not configured.");
         }
         // 2. No Reliable Match Found State
         else if (data.matched === false) {
-            $("noMatchResult").classList.remove("hidden");
-            if (data.message) {
+            setElementHidden("noMatchResult", false);
+            if (data.message && $("noMatchMessage")) {
                 $("noMatchMessage").textContent = data.message;
             }
             showToast("No reliable registered patient match found.");
         }
         // 3. Reliable Registered Patient Match Found
-        // Displays ONLY: Patient ID, Full Name, Blood Group, Guardian Name, Guardian Phone Number
-        // Never displays password, email, address, medical history, notes, documents, or full profile
         else if (data.matched === true && data.patient) {
             const p = data.patient;
 
-            $("resPatientId").textContent = p.id || "-";
-            $("resPatientName").textContent = p.name || "-";
-            $("resBloodGroupBadge").textContent = p.bloodGroup || p.blood || "N/A";
-            $("resGuardianName").textContent = p.guardianName || "Not Provided";
+            if ($("resPatientId")) $("resPatientId").textContent = p.id || "-";
+            if ($("resPatientName")) $("resPatientName").textContent = p.name || "-";
+            if ($("resBloodGroupBadge")) $("resBloodGroupBadge").textContent = p.bloodGroup || p.blood || "N/A";
+            if ($("resGuardianName")) $("resGuardianName").textContent = p.guardianName || "Not Provided";
 
             const guardianPhone = p.guardianPhone || "Not Provided";
-            $("resGuardianPhone").textContent = guardianPhone;
+            if ($("resGuardianPhone")) $("resGuardianPhone").textContent = guardianPhone;
 
             const cleanPhone = String(guardianPhone).replace(/[^\d+]/g, "");
-            $("resCallGuardianBtn").href = cleanPhone ? `tel:${cleanPhone}` : "javascript:void(0)";
+            if ($("resCallGuardianBtn")) {
+                $("resCallGuardianBtn").href = cleanPhone ? `tel:${cleanPhone}` : "javascript:void(0)";
+            }
 
-            $("matchResult").classList.remove("hidden");
+            setElementHidden("matchResult", false);
             showToast("Registered patient successfully identified!");
         }
 
@@ -2224,9 +2399,11 @@ async function identifyEmergencyPatient() {
         loadEmergencyAuditLogs();
     } catch (err) {
         console.error("Identification error:", err);
-        $("identifyingSpinner").classList.add("hidden");
-        identifyBtn.disabled = false;
-        identifyBtn.textContent = "🔍 Identify Patient";
+        setElementHidden("identifyingSpinner", true);
+        if (identifyBtn) {
+            identifyBtn.disabled = false;
+            identifyBtn.textContent = "🔍 Identify Patient";
+        }
         showToast("Error processing identification: " + err.message);
     }
 }

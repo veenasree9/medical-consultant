@@ -304,7 +304,7 @@
                 <div class="summary-card-header">
                     <h3>📋 Patient Profile</h3>
                     <div style="display: flex; gap: 8px;">
-                        <button type="button" class="btn-small primary" onclick="showProfileEdit()">
+                        <button type="button" id="updateBtn" class="btn-small primary" onclick="showProfileEdit()">
                             ✏️ Edit Profile
                         </button>
                         <button type="button" class="btn-small secondary" onclick="downloadPatientPdf()">
@@ -474,10 +474,10 @@
                 </div>
 
                 <div class="button-row" style="margin-top: 20px;">
-                    <button type="button" class="success" onclick="saveDetails()">
+                    <button type="button" id="saveBtn" class="success" onclick="saveDetails()">
                         💾 Save Profile
                     </button>
-                    <button type="button" class="secondary" onclick="hideProfileEdit()">
+                    <button type="button" id="cancelBtn" class="secondary" onclick="hideProfileEdit()">
                         Cancel
                     </button>
                 </div>

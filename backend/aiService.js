@@ -168,7 +168,7 @@ async function generateAiHealthResponse(prompt, history = [], options = {}) {
         parts: currentParts
     });
 
-    const candidateModels = ["gemini-3.8-flash", "gemini-flash-latest"];
+    const candidateModels = ["gemini-3.8-flash", "gemini-2.5-flash", "gemini-flash-latest"];
     let lastError = null;
 
     for (const model of candidateModels) {
