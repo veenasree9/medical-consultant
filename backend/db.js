@@ -85,12 +85,15 @@ const mockStore = {
     doctors: new Map(),
     patients: new Map(),
     documents: new Map(),
+    accessRequests: new Map(), // key: "doctorId:patientId"
+    accessRecords: new Map(),  // key: "doctorId:patientId"
     chatMessages: [],
     aiChatMessages: [],
     auditLogs: [],
     webauthn: new Map(),
     nextDocId: 100,
-    nextLogId: 100
+    nextLogId: 100,
+    nextRequestId: 100
 };
 
 async function seedMockStore() {
@@ -113,7 +116,9 @@ async function seedMockStore() {
         doctorId: "doctor",
         userId: "USR_DOC_01",
         name: "Dr. Sharma",
-        phone: "+919876543200"
+        phone: "+919876543200",
+        specialization: "General Medicine",
+        department: "General Medicine"
     });
 
     // Seed Patient PAT1001
@@ -1010,6 +1015,98 @@ async function registerPatient(fields) {
     };
 }
 
+// Doctor Self-Registration in PostgreSQL
+async function registerDoctor(fields) {
+    await initializeDatabase();
+    const {
+        fullName,
+        username,
+        doctorId,
+        phone,
+        password,
+        specialization,
+        department
+    } = fields;
+
+    let cleanDocId = String(username || doctorId || "").trim();
+    if (!cleanDocId) {
+        const nextDocNum = 1000 + mockStore.doctors.size + 1;
+        cleanDocId = "DOC" + nextDocNum;
+    }
+
+    const cleanName = String(fullName || "").trim() || "Doctor";
+    const cleanSpec = String(specialization || "General Medicine").trim();
+    const cleanDept = String(department || cleanSpec).trim();
+    const passwordHash = await bcrypt.hash(password || "1234", 10);
+    const newUserId = "USR_DOC_" + cleanDocId.replace(/[^a-zA-Z0-9_]/g, "");
+
+    // Check mock cache for existing username/ID
+    for (const doc of mockStore.doctors.values()) {
+        if (doc.doctorId.toLowerCase() === cleanDocId.toLowerCase() || doc.userId.toLowerCase() === newUserId.toLowerCase()) {
+            throw new Error(`A doctor with username "${cleanDocId}" already exists. Please choose a different one.`);
+        }
+    }
+
+    if (!isMockActive) {
+        try {
+            const existing = await query(
+                `SELECT u.user_id, d.doctor_id
+                 FROM users u
+                 FULL OUTER JOIN doctors d ON d.user_id = u.user_id
+                 WHERE LOWER(u.user_id) = LOWER($1) OR LOWER(d.doctor_id) = LOWER($2)`,
+                [newUserId, cleanDocId]
+            );
+
+            if (existing.rows && existing.rows.length > 0) {
+                throw new Error(`A doctor with username "${cleanDocId}" already exists. Please choose a different one.`);
+            }
+
+            await query(
+                `INSERT INTO users (user_id, full_name, phone, password_hash, role)
+                 VALUES ($1, $2, $3, $4, 'doctor')`,
+                [newUserId, cleanName, phone || null, passwordHash]
+            );
+
+            await query(
+                `INSERT INTO doctors (user_id, doctor_id, full_name, phone, specialization, department)
+                 VALUES ($1, $2, $3, $4, $5, $6)`,
+                [newUserId, cleanDocId, cleanName, phone || "", cleanSpec, cleanDept]
+            );
+        } catch (e) {
+            if (e.code === "23505" || (e.message && (e.message.includes("already exists") || e.message.includes("unique") || e.message.includes("duplicate")))) {
+                throw new Error(`A doctor with username "${cleanDocId}" already exists. Please choose a different one.`);
+            }
+            console.warn("Postgres doctor registration fallback to mock:", e.message);
+        }
+    }
+
+    mockStore.users.set(newUserId, {
+        userId: newUserId,
+        fullName: cleanName,
+        phone: phone || null,
+        passwordHash,
+        role: "doctor"
+    });
+
+    mockStore.doctors.set(cleanDocId, {
+        doctorId: cleanDocId,
+        userId: newUserId,
+        name: cleanName,
+        phone: phone || "",
+        specialization: cleanSpec,
+        department: cleanDept
+    });
+
+    return {
+        doctorId: cleanDocId,
+        fullName: cleanName,
+        phone: phone || "",
+        specialization: cleanSpec,
+        department: cleanDept,
+        userId: newUserId
+    };
+}
+
 // Doctor password login
 async function verifyDoctorUser(username, plainPassword) {
     await initializeDatabase();
@@ -1018,7 +1115,7 @@ async function verifyDoctorUser(username, plainPassword) {
     if (!isMockActive) {
         try {
             const res = await query(
-                `SELECT u.user_id, u.password_hash, d.doctor_id, d.full_name
+                `SELECT u.user_id, u.password_hash, d.doctor_id, d.full_name, d.specialization, d.department
                  FROM users u
                  JOIN doctors d ON d.user_id = u.user_id
                  WHERE (LOWER(d.doctor_id) = LOWER($1) OR LOWER(u.user_id) = LOWER($1)) AND u.role = 'doctor'`,
@@ -1032,6 +1129,8 @@ async function verifyDoctorUser(username, plainPassword) {
                     return {
                         doctorId: doc.doctor_id,
                         name: doc.full_name,
+                        specialization: doc.specialization || "General Medicine",
+                        department: doc.department || "General Medicine",
                         role: "doctor"
                     };
                 }
@@ -1051,6 +1150,8 @@ async function verifyDoctorUser(username, plainPassword) {
                     return {
                         doctorId: doc.doctorId,
                         name: doc.name,
+                        specialization: doc.specialization || "General Medicine",
+                        department: doc.department || "General Medicine",
                         role: "doctor"
                     };
                 }
@@ -1204,16 +1305,498 @@ async function saveWebAuthnCredential(userId, credentialId, publicKey, counter =
     mockStore.webauthn.set(credentialId, { userId, credentialId, publicKey, counter });
 }
 
-/* ================= CHAT BOARD & MESSAGING METHODS ================= */
+/* ================= DOCTOR-PATIENT ACCESS REQUESTS & AUTHORIZATION ================= */
 
-// List available doctors for patient chat
-async function getDoctorsList() {
+// Doctor Search Preview (Strictly limited: ONLY patientId, name, request status)
+async function searchPatientPreview(doctorId, queryTerm) {
     await initializeDatabase();
+    const cleanDoc = String(doctorId || "").trim().toLowerCase();
+    const cleanTerm = String(queryTerm || "").trim();
+    if (!cleanTerm) return null;
+
+    let patientSummary = null;
 
     if (!isMockActive) {
         try {
             const res = await query(
-                `SELECT doctor_id AS "doctorId", full_name AS "name", phone
+                `SELECT patient_id AS "patientId", full_name AS "name"
+                 FROM patients
+                 WHERE UPPER(patient_id) = UPPER($1) OR LOWER(full_name) = LOWER($1) OR LOWER(full_name) LIKE LOWER($2)
+                 LIMIT 1`,
+                [cleanTerm, `%${cleanTerm}%`]
+            );
+            if (res.rows.length > 0) {
+                patientSummary = res.rows[0];
+            }
+        } catch (e) {
+            console.warn("Postgres search preview fallback:", e.message);
+        }
+    }
+
+    if (!patientSummary) {
+        for (const p of mockStore.patients.values()) {
+            if (p.patientId.toUpperCase() === cleanTerm.toUpperCase() ||
+                p.name.toLowerCase().includes(cleanTerm.toLowerCase())) {
+                patientSummary = {
+                    patientId: p.patientId,
+                    name: p.name
+                };
+                break;
+            }
+        }
+    }
+
+    if (!patientSummary) return null;
+
+    // Fetch existing request status for this doctor and patient
+    const requestStatus = await getDoctorAccessStatus(cleanDoc, patientSummary.patientId);
+
+    return {
+        patientId: patientSummary.patientId,
+        name: patientSummary.name,
+        requestStatus: requestStatus.status,
+        requestedAt: requestStatus.requestedAt,
+        respondedAt: requestStatus.respondedAt
+    };
+}
+
+// Get Access Status between Doctor and Patient
+async function getDoctorAccessStatus(doctorId, patientId) {
+    await initializeDatabase();
+    const cleanDoc = String(doctorId || "").trim().toLowerCase();
+    const cleanPat = String(patientId || "").trim().toUpperCase();
+
+    if (!isMockActive) {
+        try {
+            const res = await query(
+                `SELECT status, requested_at AS "requestedAt", responded_at AS "respondedAt"
+                 FROM doctor_patient_requests
+                 WHERE LOWER(doctor_id) = LOWER($1) AND UPPER(patient_id) = UPPER($2)`,
+                [cleanDoc, cleanPat]
+            );
+            if (res.rows.length > 0) {
+                return {
+                    status: res.rows[0].status,
+                    requestedAt: res.rows[0].requestedAt,
+                    respondedAt: res.rows[0].respondedAt
+                };
+            }
+        } catch (e) {
+            console.warn("Postgres get access status fallback:", e.message);
+        }
+    }
+
+    const key = `${cleanDoc}:${cleanPat}`;
+    const req = mockStore.accessRequests.get(key);
+    if (req) {
+        return {
+            status: req.status,
+            requestedAt: req.requestedAt,
+            respondedAt: req.respondedAt
+        };
+    }
+
+    return { status: "none", requestedAt: null, respondedAt: null };
+}
+
+// Check if Doctor has accepted access for Patient
+async function isDoctorAccessAccepted(doctorId, patientId) {
+    const statusObj = await getDoctorAccessStatus(doctorId, patientId);
+    return statusObj.status === "accepted";
+}
+
+// Doctor creates access request to a Patient
+async function createDoctorAccessRequest(doctorId, patientId) {
+    await initializeDatabase();
+    const cleanDoc = String(doctorId || "").trim().toLowerCase();
+    const cleanPat = String(patientId || "").trim().toUpperCase();
+
+    // Verify patient exists
+    let patientExists = false;
+    if (!isMockActive) {
+        try {
+            const chk = await query(`SELECT 1 FROM patients WHERE UPPER(patient_id) = UPPER($1)`, [cleanPat]);
+            if (chk.rows.length > 0) patientExists = true;
+        } catch (_) {}
+    }
+    if (!patientExists) {
+        patientExists = mockStore.patients.has(cleanPat);
+    }
+    if (!patientExists) {
+        throw new Error(`Patient with ID "${cleanPat}" not found.`);
+    }
+
+    if (!isMockActive) {
+        try {
+            const res = await query(
+                `INSERT INTO doctor_patient_requests (doctor_id, patient_id, status, requested_at, responded_at)
+                 VALUES ($1, $2, 'pending', NOW(), NULL)
+                 ON CONFLICT (doctor_id, patient_id)
+                 DO UPDATE SET status = 'pending', requested_at = NOW(), responded_at = NULL
+                 RETURNING id, doctor_id, patient_id, status, requested_at`,
+                [cleanDoc, cleanPat]
+            );
+            if (res.rows.length > 0) {
+                const row = res.rows[0];
+                const key = `${cleanDoc}:${cleanPat}`;
+                mockStore.accessRequests.set(key, {
+                    id: row.id,
+                    doctorId: cleanDoc,
+                    patientId: cleanPat,
+                    status: "pending",
+                    requestedAt: row.requested_at,
+                    respondedAt: null
+                });
+                return row;
+            }
+        } catch (e) {
+            console.warn("Postgres access request fallback:", e.message);
+        }
+    }
+
+    const key = `${cleanDoc}:${cleanPat}`;
+    const req = {
+        id: ++mockStore.nextRequestId,
+        doctorId: cleanDoc,
+        patientId: cleanPat,
+        status: "pending",
+        requestedAt: new Date().toISOString(),
+        respondedAt: null
+    };
+    mockStore.accessRequests.set(key, req);
+    return req;
+}
+
+// Get Access Requests for Patient (displayed in Patient Dashboard)
+async function getDoctorAccessRequestsForPatient(patientId) {
+    await initializeDatabase();
+    const cleanPat = String(patientId || "").trim().toUpperCase();
+
+    if (!isMockActive) {
+        try {
+            const res = await query(
+                `SELECT r.id, r.doctor_id AS "doctorId", r.patient_id AS "patientId", r.status,
+                        r.requested_at AS "requestedAt", r.responded_at AS "respondedAt",
+                        COALESCE(d.full_name, 'Doctor') AS "doctorName",
+                        d.phone AS "doctorPhone",
+                        COALESCE(d.specialization, 'General Medicine') AS "specialization",
+                        COALESCE(d.department, 'General Medicine') AS "department"
+                 FROM doctor_patient_requests r
+                 LEFT JOIN doctors d ON LOWER(d.doctor_id) = LOWER(r.doctor_id)
+                 WHERE UPPER(r.patient_id) = UPPER($1)
+                 ORDER BY r.requested_at DESC`,
+                [cleanPat]
+            );
+            if (res.rows.length > 0) return res.rows;
+        } catch (e) {
+            console.warn("Postgres get patient requests fallback:", e.message);
+        }
+    }
+
+    const list = [];
+    for (const r of mockStore.accessRequests.values()) {
+        if (r.patientId.toUpperCase() === cleanPat) {
+            const doc = mockStore.doctors.get(r.doctorId.toLowerCase()) || { name: "Doctor", specialization: "General Medicine" };
+            list.push({
+                id: r.id,
+                doctorId: r.doctorId,
+                patientId: r.patientId,
+                status: r.status,
+                requestedAt: r.requestedAt,
+                respondedAt: r.respondedAt,
+                doctorName: doc.name || "Doctor",
+                doctorPhone: doc.phone || "",
+                specialization: doc.specialization || "General Medicine",
+                department: doc.department || "General Medicine"
+            });
+        }
+    }
+    list.sort((a, b) => new Date(b.requestedAt) - new Date(a.requestedAt));
+    return list;
+}
+
+// Get Access Requests sent by Doctor (displayed in Doctor Dashboard)
+async function getDoctorAccessRequestsForDoctor(doctorId) {
+    await initializeDatabase();
+    const cleanDoc = String(doctorId || "").trim().toLowerCase();
+
+    if (!isMockActive) {
+        try {
+            const res = await query(
+                `SELECT r.id, r.doctor_id AS "doctorId", r.patient_id AS "patientId", r.status,
+                        r.requested_at AS "requestedAt", r.responded_at AS "respondedAt",
+                        COALESCE(p.full_name, 'Patient') AS "patientName"
+                 FROM doctor_patient_requests r
+                 LEFT JOIN patients p ON UPPER(p.patient_id) = UPPER(r.patient_id)
+                 WHERE LOWER(r.doctor_id) = LOWER($1)
+                 ORDER BY r.requested_at DESC`,
+                [cleanDoc]
+            );
+            if (res.rows.length > 0) return res.rows;
+        } catch (e) {
+            console.warn("Postgres get doctor requests fallback:", e.message);
+        }
+    }
+
+    const list = [];
+    for (const r of mockStore.accessRequests.values()) {
+        if (r.doctorId.toLowerCase() === cleanDoc) {
+            const pat = mockStore.patients.get(r.patientId.toUpperCase()) || { name: "Patient" };
+            list.push({
+                id: r.id,
+                doctorId: r.doctorId,
+                patientId: r.patientId,
+                status: r.status,
+                requestedAt: r.requestedAt,
+                respondedAt: r.respondedAt,
+                patientName: pat.name || "Patient"
+            });
+        }
+    }
+    list.sort((a, b) => new Date(b.requestedAt) - new Date(a.requestedAt));
+    return list;
+}
+
+// Patient responds to access request (accept / reject)
+async function respondToDoctorAccessRequest(patientId, doctorId, action) {
+    await initializeDatabase();
+    const cleanPat = String(patientId || "").trim().toUpperCase();
+    const cleanDoc = String(doctorId || "").trim().toLowerCase();
+    const newStatus = (action === "accept" || action === "accepted") ? "accepted" : "rejected";
+
+    if (!isMockActive) {
+        try {
+            await query(
+                `UPDATE doctor_patient_requests
+                 SET status = $1, responded_at = NOW()
+                 WHERE UPPER(patient_id) = UPPER($2) AND LOWER(doctor_id) = LOWER($3)`,
+                [newStatus, cleanPat, cleanDoc]
+            );
+
+            if (newStatus === "accepted") {
+                await query(
+                    `INSERT INTO doctor_patient_access (doctor_id, patient_id, status, granted_at, revoked_at)
+                     VALUES ($1, $2, 'active', NOW(), NULL)
+                     ON CONFLICT (doctor_id, patient_id)
+                     DO UPDATE SET status = 'active', granted_at = NOW(), revoked_at = NULL`,
+                    [cleanDoc, cleanPat]
+                );
+            } else {
+                await query(
+                    `INSERT INTO doctor_patient_access (doctor_id, patient_id, status, revoked_at)
+                     VALUES ($1, $2, 'revoked', NOW())
+                     ON CONFLICT (doctor_id, patient_id)
+                     DO UPDATE SET status = 'revoked', revoked_at = NOW()`,
+                    [cleanDoc, cleanPat]
+                );
+            }
+        } catch (e) {
+            console.warn("Postgres respond to request fallback:", e.message);
+        }
+    }
+
+    const key = `${cleanDoc}:${cleanPat}`;
+    const req = mockStore.accessRequests.get(key) || {
+        id: ++mockStore.nextRequestId,
+        doctorId: cleanDoc,
+        patientId: cleanPat
+    };
+    req.status = newStatus;
+    req.respondedAt = new Date().toISOString();
+    mockStore.accessRequests.set(key, req);
+
+    mockStore.accessRecords.set(key, {
+        doctorId: cleanDoc,
+        patientId: cleanPat,
+        status: newStatus === "accepted" ? "active" : "revoked"
+    });
+
+    return { success: true, status: newStatus, doctorId: cleanDoc, patientId: cleanPat };
+}
+
+// Get list of Accepted Doctors for Patient (used for active Doctor Chat list)
+async function getAcceptedDoctorsForPatient(patientId) {
+    await initializeDatabase();
+    const cleanPat = String(patientId || "").trim().toUpperCase();
+
+    if (!isMockActive) {
+        try {
+            const res = await query(
+                `SELECT d.doctor_id AS "doctorId", d.full_name AS "name", d.phone,
+                        COALESCE(d.specialization, 'General Medicine') AS "specialization",
+                        COALESCE(d.department, 'General Medicine') AS "department",
+                        r.status AS "connectionStatus",
+                        r.responded_at AS "acceptedAt"
+                 FROM doctors d
+                 JOIN doctor_patient_requests r ON LOWER(r.doctor_id) = LOWER(d.doctor_id)
+                 WHERE UPPER(r.patient_id) = UPPER($1) AND r.status = 'accepted'
+                 ORDER BY d.full_name ASC`,
+                [cleanPat]
+            );
+            if (res.rows.length > 0) return res.rows;
+        } catch (e) {
+            console.warn("Postgres get accepted doctors fallback:", e.message);
+        }
+    }
+
+    const list = [];
+    for (const r of mockStore.accessRequests.values()) {
+        if (r.patientId.toUpperCase() === cleanPat && r.status === "accepted") {
+            const doc = mockStore.doctors.get(r.doctorId.toLowerCase());
+            if (doc) {
+                list.push({
+                    doctorId: doc.doctorId,
+                    name: doc.name,
+                    phone: doc.phone,
+                    specialization: doc.specialization || "General Medicine",
+                    department: doc.department || "General Medicine",
+                    connectionStatus: "connected",
+                    acceptedAt: r.respondedAt
+                });
+            }
+        }
+    }
+    return list;
+}
+
+// Get list of Accepted Patients for Doctor (displayed in Doctor Dashboard)
+async function getAcceptedPatientsForDoctor(doctorId) {
+    await initializeDatabase();
+    const cleanDoc = String(doctorId || "").trim().toLowerCase();
+
+    if (!isMockActive) {
+        try {
+            const res = await query(
+                `SELECT p.patient_id AS "patientId", p.full_name AS "name", p.blood_group AS "bloodGroup",
+                        r.responded_at AS "acceptedAt",
+                        COALESCE((
+                            SELECT COUNT(*)
+                            FROM chat_messages cm
+                            WHERE cm.patient_id = p.patient_id
+                              AND cm.doctor_id = $1
+                              AND cm.receiver_id = $1
+                              AND cm.is_read = FALSE
+                        ), 0) AS "unreadCount"
+                 FROM patients p
+                 JOIN doctor_patient_requests r ON UPPER(r.patient_id) = UPPER(p.patient_id)
+                 WHERE LOWER(r.doctor_id) = LOWER($1) AND r.status = 'accepted'
+                 ORDER BY p.full_name ASC`,
+                [cleanDoc]
+            );
+            if (res.rows.length > 0) {
+                return res.rows.map(r => ({
+                    ...r,
+                    unreadCount: parseInt(r.unreadCount, 10) || 0
+                }));
+            }
+        } catch (e) {
+            console.warn("Postgres get accepted patients fallback:", e.message);
+        }
+    }
+
+    const list = [];
+    for (const r of mockStore.accessRequests.values()) {
+        if (r.doctorId.toLowerCase() === cleanDoc && r.status === "accepted") {
+            const p = mockStore.patients.get(r.patientId.toUpperCase());
+            if (p) {
+                list.push({
+                    patientId: p.patientId,
+                    name: p.name,
+                    bloodGroup: p.bloodGroup || p.blood || "",
+                    acceptedAt: r.respondedAt,
+                    unreadCount: 0
+                });
+            }
+        }
+    }
+    return list;
+}
+
+// Get Authorized Patient Details for Doctor (STRICT PRIVACY ENFORCEMENT)
+async function getAuthorizedPatientDetailsForDoctor(doctorId, patientId) {
+    await initializeDatabase();
+    const cleanDoc = String(doctorId || "").trim().toLowerCase();
+    const cleanPat = String(patientId || "").trim().toUpperCase();
+
+    // Check authorization
+    const isAccepted = await isDoctorAccessAccepted(cleanDoc, cleanPat);
+    if (!isAccepted) {
+        return null;
+    }
+
+    const fullPatient = await getPatientDetails(cleanPat);
+    if (!fullPatient) return null;
+
+    // Get authorized medical documents
+    const allDocs = await getPatientDocuments(cleanPat);
+    const authorizedDocs = (allDocs || [])
+        .filter(d => d.is_authorized_for_doctors !== false)
+        .map(d => ({
+            id: d.id,
+            documentId: d.document_id,
+            originalFilename: d.original_filename,
+            fileType: d.file_type,
+            fileSize: d.file_size,
+            uploadedAt: d.uploaded_at
+        }));
+
+    // Return ONLY permitted fields:
+    // Patient Name, Patient ID, Blood Group, Health Information, Authorized Medical Records
+    // DO NOT return: phone, email, address, guardians, credentials, password hashes!
+    return {
+        id: fullPatient.patientId || fullPatient.id,
+        patientId: fullPatient.patientId || fullPatient.id,
+        name: fullPatient.name,
+        bloodGroup: fullPatient.bloodGroup || fullPatient.blood || "Not specified",
+        healthInformation: fullPatient.healthInformation || {},
+        authorizedDocuments: authorizedDocs
+    };
+}
+
+// Toggle Medical Document Doctor Authorization
+async function toggleDocumentDoctorAuthorization(patientId, documentId, isAuthorized) {
+    await initializeDatabase();
+    const cleanPat = String(patientId || "").trim().toUpperCase();
+
+    if (!isMockActive) {
+        try {
+            await query(
+                `UPDATE medical_documents
+                 SET is_authorized_for_doctors = $1
+                 WHERE UPPER(patient_id) = UPPER($2) AND (document_id = $3 OR CAST(id AS VARCHAR) = $3)`,
+                [Boolean(isAuthorized), cleanPat, documentId]
+            );
+        } catch (e) {
+            console.warn("Postgres toggle doc auth error:", e.message);
+        }
+    }
+
+    for (const d of mockStore.documents.values()) {
+        if (d.patient_id && d.patient_id.toUpperCase() === cleanPat) {
+            if (d.document_id === documentId || String(d.id) === String(documentId)) {
+                d.is_authorized_for_doctors = Boolean(isAuthorized);
+                return d;
+            }
+        }
+    }
+    return { success: true };
+}
+
+/* ================= CHAT BOARD & MESSAGING METHODS ================= */
+
+// List available doctors for patient chat (Strictly Accepted Doctors only)
+async function getDoctorsList(patientId = null) {
+    await initializeDatabase();
+    if (patientId) {
+        return getAcceptedDoctorsForPatient(patientId);
+    }
+
+    if (!isMockActive) {
+        try {
+            const res = await query(
+                `SELECT doctor_id AS "doctorId", full_name AS "name", phone,
+                        COALESCE(specialization, 'General Medicine') AS "specialization",
+                        COALESCE(department, 'General Medicine') AS "department"
                  FROM doctors
                  ORDER BY full_name ASC`
             );
@@ -1226,18 +1809,21 @@ async function getDoctorsList() {
     return Array.from(mockStore.doctors.values()).map(d => ({
         doctorId: d.doctorId,
         name: d.name,
-        phone: d.phone
+        phone: d.phone,
+        specialization: d.specialization || "General Medicine",
+        department: d.department || "General Medicine"
     }));
 }
 
-// List patients for doctor chat (with unread counts & last active timestamp)
+// List patients for doctor chat (STRICT: ONLY ACCEPTED PATIENTS)
 async function getDoctorPatientsList(doctorId) {
     await initializeDatabase();
+    const cleanDoc = String(doctorId || "").trim().toLowerCase();
 
     if (!isMockActive) {
         try {
             const res = await query(
-                `SELECT p.patient_id AS "patientId", p.full_name AS "name", p.phone, p.blood_group AS "bloodGroup",
+                `SELECT p.patient_id AS "patientId", p.full_name AS "name", p.blood_group AS "bloodGroup",
                         COALESCE((
                             SELECT COUNT(*)
                             FROM chat_messages cm
@@ -1253,8 +1839,9 @@ async function getDoctorPatientsList(doctorId) {
                               AND cm2.doctor_id = $1
                         ) AS "lastMessageTime"
                  FROM patients p
+                 JOIN doctor_patient_requests r ON UPPER(r.patient_id) = UPPER(p.patient_id) AND LOWER(r.doctor_id) = LOWER($1) AND r.status = 'accepted'
                  ORDER BY "lastMessageTime" DESC NULLS LAST, p.patient_id ASC`,
-                [doctorId]
+                [cleanDoc]
             );
             if (res.rows.length > 0) {
                 return res.rows.map(r => ({
@@ -1269,22 +1856,25 @@ async function getDoctorPatientsList(doctorId) {
 
     const list = [];
     for (const p of mockStore.patients.values()) {
-        const unreadCount = mockStore.chatMessages.filter(
-            m => m.patientId === p.patientId && m.doctorId === doctorId && m.receiverId === doctorId && !m.isRead
-        ).length;
-        const patientMessages = mockStore.chatMessages.filter(
-            m => m.patientId === p.patientId && m.doctorId === doctorId
-        );
-        const lastMessage = patientMessages[patientMessages.length - 1];
+        const key = `${cleanDoc}:${p.patientId.toUpperCase()}`;
+        const req = mockStore.accessRequests.get(key);
+        if (req && req.status === "accepted") {
+            const unreadCount = mockStore.chatMessages.filter(
+                m => m.patientId === p.patientId && m.doctorId === cleanDoc && m.receiverId === cleanDoc && !m.isRead
+            ).length;
+            const patientMessages = mockStore.chatMessages.filter(
+                m => m.patientId === p.patientId && m.doctorId === cleanDoc
+            );
+            const lastMessage = patientMessages[patientMessages.length - 1];
 
-        list.push({
-            patientId: p.patientId,
-            name: p.name,
-            phone: p.phone,
-            bloodGroup: p.bloodGroup,
-            unreadCount,
-            lastMessageTime: lastMessage ? lastMessage.timestamp : null
-        });
+            list.push({
+                patientId: p.patientId,
+                name: p.name,
+                bloodGroup: p.bloodGroup,
+                unreadCount,
+                lastMessageTime: lastMessage ? lastMessage.timestamp : null
+            });
+        }
     }
     return list;
 }
@@ -1478,6 +2068,7 @@ module.exports = {
     updateVerificationRecord,
     findOrCreatePatientByPhone,
     registerPatient,
+    registerDoctor,
     verifyDoctorUser,
     verifyPatientUser,
     insertAuditLog,

@@ -469,6 +469,53 @@ app.post("/api/auth/register-patient", async (req, res) => {
     }
 });
 
+// Doctor Self-Registration in PostgreSQL
+app.post("/api/auth/register-doctor", async (req, res) => {
+    try {
+        const {
+            fullName,
+            username,
+            doctorId,
+            phone,
+            password,
+            specialization
+        } = req.body;
+
+        if (!fullName || !fullName.trim() || !password) {
+            return res.status(400).json({
+                success: false,
+                message: "Full Name and Password are required."
+            });
+        }
+
+        const newDoctor = await db.registerDoctor({
+            fullName: fullName.trim(),
+            username: (username || doctorId || "").trim(),
+            phone: phone ? phone.trim() : "",
+            password: password,
+            specialization: specialization ? specialization.trim() : ""
+        });
+
+        await db.insertAuditLog(newDoctor.doctorId, "doctor_registration", null, {
+            fullName: newDoctor.fullName,
+            role: "doctor",
+            phone: newDoctor.phone
+        });
+
+        res.json({
+            success: true,
+            doctorId: newDoctor.doctorId,
+            message: `Doctor registration successful! Your Doctor Username is "${newDoctor.doctorId}". You can now log in.`
+        });
+    } catch (err) {
+        console.error("Doctor registration error:", err.message);
+        res.status(400).json({
+            success: false,
+            message: err.message || "Doctor registration failed."
+        });
+    }
+});
+
 // Patient Profile from PostgreSQL
 app.get("/api/patient/me", auth("patient"), async (req, res) => {
     try {

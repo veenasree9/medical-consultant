@@ -66,7 +66,31 @@ CREATE TABLE IF NOT EXISTS doctors (
     doctor_id VARCHAR(50) UNIQUE NOT NULL,
     full_name VARCHAR(150) NOT NULL,
     phone VARCHAR(50),
+    specialization VARCHAR(100) DEFAULT 'General Medicine',
+    department VARCHAR(100) DEFAULT 'General Medicine',
     created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Doctor-Patient Access Requests
+CREATE TABLE IF NOT EXISTS doctor_patient_requests (
+    id SERIAL PRIMARY KEY,
+    doctor_id VARCHAR(50) NOT NULL REFERENCES doctors(doctor_id) ON DELETE CASCADE,
+    patient_id VARCHAR(50) NOT NULL REFERENCES patients(patient_id) ON DELETE CASCADE,
+    status VARCHAR(20) NOT NULL DEFAULT 'pending', -- 'pending', 'accepted', 'rejected'
+    requested_at TIMESTAMPTZ DEFAULT NOW(),
+    responded_at TIMESTAMPTZ,
+    CONSTRAINT uq_doctor_patient_requests UNIQUE (doctor_id, patient_id)
+);
+
+-- Doctor-Patient Access State
+CREATE TABLE IF NOT EXISTS doctor_patient_access (
+    id SERIAL PRIMARY KEY,
+    doctor_id VARCHAR(50) NOT NULL REFERENCES doctors(doctor_id) ON DELETE CASCADE,
+    patient_id VARCHAR(50) NOT NULL REFERENCES patients(patient_id) ON DELETE CASCADE,
+    status VARCHAR(20) NOT NULL DEFAULT 'active', -- 'active', 'revoked'
+    granted_at TIMESTAMPTZ DEFAULT NOW(),
+    revoked_at TIMESTAMPTZ,
+    CONSTRAINT uq_doctor_patient_access UNIQUE (doctor_id, patient_id)
 );
 
 CREATE TABLE IF NOT EXISTS helpers (
@@ -98,6 +122,7 @@ CREATE TABLE IF NOT EXISTS medical_documents (
     storage_reference TEXT NOT NULL,
     uploaded_by VARCHAR(100) DEFAULT 'patient',
     extracted_text TEXT,
+    is_authorized_for_doctors BOOLEAN NOT NULL DEFAULT TRUE,
     uploaded_at TIMESTAMPTZ DEFAULT NOW(),
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -227,3 +252,8 @@ CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs(action);
 CREATE INDEX IF NOT EXISTS idx_chat_messages_patient_doctor ON chat_messages(patient_id, doctor_id, created_at ASC);
 CREATE INDEX IF NOT EXISTS idx_chat_messages_receiver_read ON chat_messages(receiver_id, is_read);
 CREATE INDEX IF NOT EXISTS idx_ai_chat_messages_session ON ai_chat_messages(session_id, created_at ASC);
+CREATE INDEX IF NOT EXISTS idx_doc_pat_requests_doctor ON doctor_patient_requests(doctor_id);
+CREATE INDEX IF NOT EXISTS idx_doc_pat_requests_patient ON doctor_patient_requests(patient_id);
+CREATE INDEX IF NOT EXISTS idx_doc_pat_requests_status ON doctor_patient_requests(status);
+CREATE INDEX IF NOT EXISTS idx_doc_pat_access_doctor ON doctor_patient_access(doctor_id);
+CREATE INDEX IF NOT EXISTS idx_doc_pat_access_patient ON doctor_patient_access(patient_id);

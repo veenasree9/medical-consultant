@@ -92,7 +92,12 @@ function openLogin(type) {
             "Enter your password";
 
         if ($("registerPrompt")) {
-            $("registerPrompt").classList.add("hidden");
+            $("registerPrompt").classList.remove("hidden");
+            if ($("registerPromptText")) $("registerPromptText").textContent = "New doctor? ";
+            if ($("registerPromptBtn")) {
+                $("registerPromptBtn").textContent = "Register here";
+                $("registerPromptBtn").setAttribute("onclick", "openDoctorRegisterModal()");
+            }
         }
 
     }
@@ -113,6 +118,11 @@ function openLogin(type) {
 
         if ($("registerPrompt")) {
             $("registerPrompt").classList.remove("hidden");
+            if ($("registerPromptText")) $("registerPromptText").textContent = "New patient? ";
+            if ($("registerPromptBtn")) {
+                $("registerPromptBtn").textContent = "Register here";
+                $("registerPromptBtn").setAttribute("onclick", "openRegisterModal()");
+            }
         }
 
     }
@@ -642,10 +652,12 @@ async function loadPatientDashboard() {
     if ($("pMedicalHistory")) $("pMedicalHistory").value = p.medicalHistory || "";
     if ($("pNotes")) $("pNotes").value = p.notes || "";
 
-    // Ensure inputs are initially disabled until "Update Details" / "Edit Profile" is clicked
+    // Ensure inputs are initially disabled until "Edit Profile" is clicked
     [
         "pName", "pAge", "pGender", "pBlood", "pPhone", "pEmail", "pAddress",
-        "pGuardianName", "pGuardianPhone", "pGuardianRelationship", "pMedicalHistory", "pNotes"
+        "pGuardianName", "pGuardianPhone", "pGuardianRelationship",
+        "pGuardian2Name", "pGuardian2Phone", "pGuardian2Relationship",
+        "pMedicalHistory", "pNotes"
     ].forEach(id => {
         if ($(id)) $(id).disabled = true;
     });
@@ -656,10 +668,6 @@ async function loadPatientDashboard() {
 
     if ($("profileSummaryView")) $("profileSummaryView").classList.remove("hidden");
     if ($("profileEditView")) $("profileEditView").classList.add("hidden");
-    if ($("secondarySummaryView")) $("secondarySummaryView").classList.remove("hidden");
-    if ($("secondaryEditView")) $("secondaryEditView").classList.add("hidden");
-    if ($("healthSummaryView")) $("healthSummaryView").classList.remove("hidden");
-    if ($("healthEditView")) $("healthEditView").classList.add("hidden");
 
     // Secondary Guardian Details
     if ($("pGuardian2Name")) $("pGuardian2Name").value = p.guardian2Name || "";
@@ -693,13 +701,27 @@ async function loadPatientDashboard() {
         updateVerifBadge("verifCameraBadge", p.verifications.camera_live);
         updateVerifBadge("verifLivenessBadge", p.verifications.liveness);
 
+        const isFaceActive = p.verifications.face === "verified";
         if ($("sumFaceStatus")) {
-            $("sumFaceStatus").textContent = p.verifications.face === "verified" ? "Verified" : "Not configured";
+            $("sumFaceStatus").textContent = isFaceActive ? "Active" : "Not configured";
+            $("sumFaceStatus").style.color = isFaceActive ? "#16a34a" : "#64748b";
         }
+        if ($("sumFaceIcon")) {
+            $("sumFaceIcon").textContent = isFaceActive ? "✓" : "○";
+        }
+
+        const isPasskeyActive = p.verifications.passkey === "verified" || p.verifications.passkey === "configured";
         if ($("sumPasskeyStatus")) {
-            $("sumPasskeyStatus").textContent = p.verifications.passkey === "verified" || p.verifications.passkey === "configured" ? "Configured" : "Not configured";
+            $("sumPasskeyStatus").textContent = isPasskeyActive ? "Active" : "Not configured";
+            $("sumPasskeyStatus").style.color = isPasskeyActive ? "#16a34a" : "#64748b";
+        }
+        if ($("sumPasskeyIcon")) {
+            $("sumPasskeyIcon").textContent = isPasskeyActive ? "✓" : "○";
         }
     }
+
+    // Load Medical Documents from PostgreSQL
+    await loadPatientDocuments();
 
     hideAll();
     if ($("patientDashboard")) {
@@ -726,12 +748,14 @@ function updateVerifBadge(badgeId, status) {
     }
 }
 
-/* ================= UPDATE PRIMARY DETAILS ================= */
+/* ================= UPDATE PRIMARY & UNIFIED PROFILE DETAILS ================= */
 
 function showProfileEdit() {
     [
         "pName", "pAge", "pGender", "pBlood", "pPhone", "pEmail", "pAddress",
-        "pGuardianName", "pGuardianPhone", "pGuardianRelationship", "pMedicalHistory", "pNotes"
+        "pGuardianName", "pGuardianPhone", "pGuardianRelationship",
+        "pGuardian2Name", "pGuardian2Phone", "pGuardian2Relationship",
+        "pMedicalHistory", "pNotes"
     ].forEach(id => {
         if ($(id)) $(id).disabled = false;
     });
@@ -749,7 +773,9 @@ function showProfileEdit() {
 function hideProfileEdit() {
     [
         "pName", "pAge", "pGender", "pBlood", "pPhone", "pEmail", "pAddress",
-        "pGuardianName", "pGuardianPhone", "pGuardianRelationship", "pMedicalHistory", "pNotes"
+        "pGuardianName", "pGuardianPhone", "pGuardianRelationship",
+        "pGuardian2Name", "pGuardian2Phone", "pGuardian2Relationship",
+        "pMedicalHistory", "pNotes"
     ].forEach(id => {
         if ($(id)) $(id).disabled = true;
     });
@@ -770,27 +796,19 @@ function enableEdit() {
 }
 
 function showSecondaryEdit() {
-    if ($("secondarySummaryView")) $("secondarySummaryView").classList.add("hidden");
-    if ($("secondaryEditView")) $("secondaryEditView").classList.remove("hidden");
-    const el = $("secondaryEditView") || $("secondaryDetailsCard");
-    if (el) el.scrollIntoView({ behavior: "smooth" });
+    showProfileEdit();
 }
 
 function hideSecondaryEdit() {
-    if ($("secondarySummaryView")) $("secondarySummaryView").classList.remove("hidden");
-    if ($("secondaryEditView")) $("secondaryEditView").classList.add("hidden");
+    hideProfileEdit();
 }
 
 function showHealthEdit() {
-    if ($("healthSummaryView")) $("healthSummaryView").classList.add("hidden");
-    if ($("healthEditView")) $("healthEditView").classList.remove("hidden");
-    const el = $("healthEditView") || $("healthInfoCard");
-    if (el) el.scrollIntoView({ behavior: "smooth" });
+    showProfileEdit();
 }
 
 function hideHealthEdit() {
-    if ($("healthSummaryView")) $("healthSummaryView").classList.remove("hidden");
-    if ($("healthEditView")) $("healthEditView").classList.add("hidden");
+    hideProfileEdit();
 }
 
 function scrollToCard(cardId) {
@@ -801,60 +819,23 @@ function scrollToCard(cardId) {
 }
 
 function showVerificationManage() {
-    showSecondaryEdit();
-    const el = $("secondaryEditView") || $("secondaryDetailsCard");
-    if (el) el.scrollIntoView({ behavior: "smooth" });
+    showProfileEdit();
 }
 
 async function saveSecondaryDetailsFromPanel() {
-    const name = ($("secGuardian2Name") && $("secGuardian2Name").value.trim()) ||
-                 ($("pGuardian2Name") && $("pGuardian2Name").value.trim()) || "";
-    const phone = ($("secGuardian2Phone") && $("secGuardian2Phone").value.trim()) ||
-                  ($("pGuardian2Phone") && $("pGuardian2Phone").value.trim()) || "";
-    const rel = ($("secGuardian2Relationship") && $("secGuardian2Relationship").value.trim()) ||
-                ($("pGuardian2Relationship") && $("pGuardian2Relationship").value.trim()) || "";
-
-    const details = {
-        guardian2Name: name,
-        guardian2Phone: phone,
-        guardian2Relationship: rel
-    };
-
-    try {
-        const response = await fetch(`${API_URL}/api/patient/me`, {
-            method: "PUT",
-            headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${patientToken}`
-            },
-            body: JSON.stringify(details)
-        });
-
-        const data = await response.json();
-        if (!response.ok || !data.success) {
-            throw new Error(data.message || "Failed to save secondary guardian.");
-        }
-
-        if ($("sumGuardian2")) {
-            $("sumGuardian2").textContent = name ? `${name} (${rel || "Secondary"}, ${phone || "No phone"})` : "None recorded";
-        }
-        if ($("pGuardian2Name")) $("pGuardian2Name").value = name;
-        if ($("pGuardian2Phone")) $("pGuardian2Phone").value = phone;
-        if ($("pGuardian2Relationship")) $("pGuardian2Relationship").value = rel;
-        if ($("secGuardian2Name")) $("secGuardian2Name").value = name;
-        if ($("secGuardian2Phone")) $("secGuardian2Phone").value = phone;
-        if ($("secGuardian2Relationship")) $("secGuardian2Relationship").value = rel;
-
-        showToast("Secondary Guardian details saved permanently!");
-        hideSecondaryEdit();
-    } catch (err) {
-        showToast(err.message);
-    }
+    await saveDetails();
 }
 
-/* ================= SAVE PRIMARY DETAILS ================= */
+/* ================= SAVE UNIFIED PROFILE (PRIMARY, SECONDARY & HEALTH TO POSTGRESQL) ================= */
 
 async function saveDetails() {
+    const saveBtn = $("saveBtn");
+    const origText = saveBtn ? saveBtn.textContent : "";
+    if (saveBtn) {
+        saveBtn.disabled = true;
+        saveBtn.textContent = "⏳ Saving to PostgreSQL...";
+    }
+
     const bloodVal = $("pBlood") ? $("pBlood").value : "O+";
     const details = {
         name: $("pName") ? $("pName").value.trim() : "",
@@ -868,11 +849,15 @@ async function saveDetails() {
         guardianName: $("pGuardianName") ? $("pGuardianName").value.trim() : "",
         guardianPhone: $("pGuardianPhone") ? $("pGuardianPhone").value.trim() : "",
         guardianRelationship: $("pGuardianRelationship") ? $("pGuardianRelationship").value.trim() : "",
+        guardian2Name: ($("pGuardian2Name") && $("pGuardian2Name").value.trim()) || ($("secGuardian2Name") && $("secGuardian2Name").value.trim()) || "",
+        guardian2Phone: ($("pGuardian2Phone") && $("pGuardian2Phone").value.trim()) || ($("secGuardian2Phone") && $("secGuardian2Phone").value.trim()) || "",
+        guardian2Relationship: ($("pGuardian2Relationship") && $("pGuardian2Relationship").value.trim()) || ($("secGuardian2Relationship") && $("secGuardian2Relationship").value.trim()) || "",
         medicalHistory: $("pMedicalHistory") ? $("pMedicalHistory").value.trim() : "",
         notes: $("pNotes") ? $("pNotes").value.trim() : ""
     };
 
     try {
+        // 1. Save Primary & Secondary details to PostgreSQL
         const response = await fetch(`${API_URL}/api/patient/me`, {
             method: "PUT",
             headers: {
@@ -884,14 +869,34 @@ async function saveDetails() {
 
         const data = await response.json();
         if (!response.ok || !data.success) {
-            throw new Error(data.message || "Update failed.");
+            throw new Error(data.message || "Failed to update profile details.");
+        }
+
+        // 2. Save Structured Health Information to PostgreSQL
+        const healthResponse = await fetch(`${API_URL}/api/patient/health-information`, {
+            method: "PUT",
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${patientToken}`
+            },
+            body: JSON.stringify(currentHealthInfo)
+        });
+
+        const healthData = await healthResponse.json();
+        if (!healthResponse.ok || !healthData.success) {
+            throw new Error(healthData.message || "Failed to update health information.");
         }
 
         hideProfileEdit();
         await loadPatientDashboard();
-        showToast("Primary patient details saved to PostgreSQL.");
+        showToast("Profile, secondary details, and health information saved to PostgreSQL!");
     } catch (error) {
         showToast(error.message);
+    } finally {
+        if (saveBtn) {
+            saveBtn.disabled = false;
+            saveBtn.textContent = origText || "💾 Save Profile";
+        }
     }
 }
 
@@ -905,31 +910,7 @@ function cancelUpdate() {
 /* ================= SECONDARY GUARDIAN SAVE ================= */
 
 async function saveSecondaryGuardian() {
-    const details = {
-        guardian2Name: $("pGuardian2Name") ? $("pGuardian2Name").value.trim() : "",
-        guardian2Phone: $("pGuardian2Phone") ? $("pGuardian2Phone").value.trim() : "",
-        guardian2Relationship: $("pGuardian2Relationship") ? $("pGuardian2Relationship").value.trim() : ""
-    };
-
-    try {
-        const response = await fetch(`${API_URL}/api/patient/me`, {
-            method: "PUT",
-            headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${patientToken}`
-            },
-            body: JSON.stringify(details)
-        });
-
-        const data = await response.json();
-        if (!response.ok || !data.success) {
-            throw new Error(data.message || "Failed to save secondary guardian.");
-        }
-
-        showToast("Secondary Guardian details saved permanently in PostgreSQL!");
-    } catch (err) {
-        showToast(err.message);
-    }
+    await saveDetails();
 }
 
 /* ================= HEALTH INFORMATION (STRUCTURED BOOLEANS) ================= */
@@ -941,14 +922,24 @@ function setHealthValue(questionKey, val) {
 
 function updateHealthUI() {
     const questions = [
-        "allergies", "diabetes", "hypertension", "asthma", "heart_condition",
-        "major_surgery", "regular_medication", "chronic_condition", "drug_reaction", "emergency_condition"
+        { key: "allergies", label: "Allergies" },
+        { key: "diabetes", label: "Diabetes" },
+        { key: "hypertension", label: "Hypertension / High BP" },
+        { key: "asthma", label: "Asthma" },
+        { key: "heart_condition", label: "Heart Condition" },
+        { key: "major_surgery", label: "Prior Major Surgery" },
+        { key: "regular_medication", label: "Regular Medication" },
+        { key: "chronic_condition", label: "Chronic Condition" },
+        { key: "drug_reaction", label: "Drug Reaction" },
+        { key: "emergency_condition", label: "Emergency Condition" }
     ];
 
+    const activeConditions = [];
+
     questions.forEach(q => {
-        const group = document.querySelector(`.yn-group[data-q="${q}"]`);
+        const group = document.querySelector(`.yn-group[data-q="${q.key}"]`);
+        const isYes = Boolean(currentHealthInfo[q.key]);
         if (group) {
-            const isYes = Boolean(currentHealthInfo[q]);
             const yesBtn = group.querySelector('.yn-btn[data-val="true"]');
             const noBtn = group.querySelector('.yn-btn[data-val="false"]');
             if (yesBtn && noBtn) {
@@ -961,40 +952,31 @@ function updateHealthUI() {
                 }
             }
         }
+        if (isYes) {
+            activeConditions.push(q.label);
+        }
     });
+
+    const sumGrid = $("healthSummaryGrid");
+    if (sumGrid) {
+        if (activeConditions.length > 0) {
+            sumGrid.innerHTML = activeConditions.map(c => `
+                <span class="badge-tag" style="background: #fef2f2; color: #b91c1c; border: 1px solid #fca5a5; font-size: 11px; padding: 2px 8px; border-radius: 4px;">
+                    ⚠️ ${escapeHTML(c)}: YES
+                </span>
+            `).join("");
+        } else {
+            sumGrid.innerHTML = `
+                <span style="font-size: 12px; color: #16a34a;">
+                    ✓ No chronic conditions or drug reactions flagged
+                </span>
+            `;
+        }
+    }
 }
 
 async function saveHealthInformation() {
-    const btn = $("saveHealthBtn");
-    if (btn) {
-        btn.disabled = true;
-        btn.textContent = "⏳ Saving...";
-    }
-
-    try {
-        const response = await fetch(`${API_URL}/api/patient/health-information`, {
-            method: "PUT",
-            headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${patientToken}`
-            },
-            body: JSON.stringify(currentHealthInfo)
-        });
-
-        const data = await response.json();
-        if (!response.ok || !data.success) {
-            throw new Error(data.message || "Failed to save health information.");
-        }
-
-        showToast("Health Information answers saved to PostgreSQL!");
-    } catch (err) {
-        showToast(err.message);
-    } finally {
-        if (btn) {
-            btn.disabled = false;
-            btn.textContent = "💾 Save Health Information to PostgreSQL";
-        }
-    }
+    await saveDetails();
 }
 
 /* ================= IDENTITY & VERIFICATIONS ================= */
@@ -1429,6 +1411,65 @@ async function submitRegistration() {
     }
 }
 
+/* ================= DOCTOR REGISTRATION ================= */
+
+function openDoctorRegisterModal() {
+    if ($("regDocName")) $("regDocName").value = "";
+    if ($("regDocUsername")) $("regDocUsername").value = "";
+    if ($("regDocPhone")) $("regDocPhone").value = "";
+    if ($("regDocSpecialization")) $("regDocSpecialization").value = "";
+    if ($("regDocPassword")) $("regDocPassword").value = "";
+    if ($("regDocMessage")) $("regDocMessage").textContent = "";
+    if ($("doctorRegisterModal")) $("doctorRegisterModal").classList.remove("hidden");
+}
+
+function closeDoctorRegisterModal() {
+    if ($("doctorRegisterModal")) $("doctorRegisterModal").classList.add("hidden");
+}
+
+async function submitDoctorRegistration() {
+    const fullName = $("regDocName") ? $("regDocName").value.trim() : "";
+    const username = $("regDocUsername") ? $("regDocUsername").value.trim() : "";
+    const phone = $("regDocPhone") ? $("regDocPhone").value.trim() : "";
+    const specialization = $("regDocSpecialization") ? $("regDocSpecialization").value.trim() : "";
+    const password = $("regDocPassword") ? $("regDocPassword").value.trim() : "";
+
+    if (!fullName || !password) {
+        if ($("regDocMessage")) $("regDocMessage").textContent = "Please enter Doctor Full Name and Password.";
+        return;
+    }
+
+    try {
+        const response = await fetch(`${API_URL}/api/auth/register-doctor`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                fullName,
+                username,
+                phone,
+                specialization,
+                password
+            })
+        });
+
+        const data = await response.json();
+        if (!response.ok || !data.success) {
+            throw new Error(data.message || "Doctor registration failed.");
+        }
+
+        closeDoctorRegisterModal();
+        showToast(`Doctor registration complete! Your Doctor Username is "${data.doctorId}"`);
+        if ($("username")) $("username").value = data.doctorId;
+        if ($("password")) $("password").value = password;
+        if ($("loginMessage")) {
+            $("loginMessage").className = "success-text";
+            $("loginMessage").textContent = `Doctor registered successfully! Your Doctor Username is "${data.doctorId}". You can now log in.`;
+        }
+    } catch (err) {
+        if ($("regDocMessage")) $("regDocMessage").textContent = err.message;
+    }
+}
+
 
 /* ================= LOGOUT ================= */
 
@@ -1542,6 +1583,35 @@ function switchChatMode(mode) {
         checkAiStatus();
         loadAiChatHistory();
     }
+}
+
+function openDoctorChatMode() {
+    const authInfo = getCurrentChatAuth();
+    if (!authInfo || authInfo.role !== "patient") {
+        showToast("Please log in as a patient to access Doctor Chat.");
+        return;
+    }
+    const chatFab = $("chatFab");
+    if (chatFab) chatFab.classList.remove("hidden");
+    const chatBox = $("chatBox");
+    if (chatBox) chatBox.classList.remove("hidden");
+    updateChatAuthUI();
+    switchChatMode("doctor");
+    startChatPolling();
+}
+
+function openAiChatMode() {
+    const authInfo = getCurrentChatAuth();
+    if (!authInfo || authInfo.role !== "patient") {
+        showToast("Please log in as a patient to access AI Health Assistant.");
+        return;
+    }
+    const chatFab = $("chatFab");
+    if (chatFab) chatFab.classList.remove("hidden");
+    const chatBox = $("chatBox");
+    if (chatBox) chatBox.classList.remove("hidden");
+    updateChatAuthUI();
+    switchChatMode("ai");
 }
 
 function updateChatAuthUI() {
@@ -1950,13 +2020,18 @@ async function sendAiChatMessage() {
     if (btn) btn.disabled = true;
 
     try {
+        const payload = { message: text };
+        if (currentAiDocumentContext && currentAiDocumentContext.documentId) {
+            payload.documentId = currentAiDocumentContext.documentId;
+        }
+
         const res = await fetch(`${API_URL}/api/chat/ai`, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
                 Authorization: `Bearer ${authInfo.token}`
             },
-            body: JSON.stringify({ message: text })
+            body: JSON.stringify(payload)
         });
 
         const data = await res.json();
@@ -1981,10 +2056,17 @@ async function sendAiChatMessage() {
         if (msgContainer) {
             const aiDiv = document.createElement("div");
             aiDiv.className = "ai-msg";
-            aiDiv.innerHTML = formatAiResponse(data.reply);
+            let contentHtml = "";
+            if (data.documentAnalyzed) {
+                contentHtml += `<div style="display:inline-block; font-size: 11px; color: #0d9488; background: #f0fdfa; border: 1px solid #ccfbf1; padding: 2px 8px; border-radius: 4px; font-weight: 600; margin-bottom: 8px;">📄 Analyzed Document: ${escapeHTML(data.documentAnalyzed)}</div>`;
+            }
+            contentHtml += formatAiResponse(data.reply);
+            aiDiv.innerHTML = contentHtml;
             msgContainer.appendChild(aiDiv);
             msgContainer.scrollTop = msgContainer.scrollHeight;
         }
+
+        currentAiDocumentContext = null;
     } catch (err) {
         if (msgContainer) {
             const errDiv = document.createElement("div");
@@ -2459,3 +2541,317 @@ async function loadEmergencyAuditLogs() {
         console.warn("Failed to load audit logs:", err);
     }
 }
+
+/* ================= MEDICAL DOCUMENTS & FILE UPLOADS ================= */
+
+let selectedFileToUpload = null;
+let currentAiDocumentContext = null;
+
+function openFileUploadModal() {
+    const pToken = patientToken || localStorage.getItem("patientToken");
+    if (!pToken) {
+        showToast("Please log in as a patient to upload files.");
+        return;
+    }
+    const modal = $("fileUploadModal");
+    if (modal) modal.classList.remove("hidden");
+    const input = $("docFileInput");
+    if (input) input.value = "";
+    selectedFileToUpload = null;
+    const info = $("selectedFileInfo");
+    if (info) info.classList.add("hidden");
+    const err = $("uploadErrorMessage");
+    if (err) {
+        err.classList.add("hidden");
+        err.textContent = "";
+    }
+    const btn = $("confirmUploadBtn");
+    if (btn) btn.disabled = true;
+}
+
+function closeFileUploadModal() {
+    const modal = $("fileUploadModal");
+    if (modal) modal.classList.add("hidden");
+    selectedFileToUpload = null;
+    const input = $("docFileInput");
+    if (input) input.value = "";
+}
+
+function handleFileSelected(event) {
+    const file = event.target.files && event.target.files[0];
+    const err = $("uploadErrorMessage");
+    const btn = $("confirmUploadBtn");
+    const info = $("selectedFileInfo");
+    const nameEl = $("selectedFileName");
+    const sizeEl = $("selectedFileSize");
+
+    if (!file) return;
+
+    const allowed = [".pdf", ".jpg", ".jpeg", ".png", ".doc", ".docx"];
+    const ext = "." + file.name.split(".").pop().toLowerCase();
+    if (!allowed.includes(ext)) {
+        if (err) {
+            err.textContent = `Unsupported file type: ${ext}. Supported formats: PDF, JPG, JPEG, PNG, DOC, DOCX.`;
+            err.classList.remove("hidden");
+        }
+        if (btn) btn.disabled = true;
+        if (info) info.classList.add("hidden");
+        selectedFileToUpload = null;
+        return;
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+        if (err) {
+            err.textContent = "File size exceeds 10MB limit.";
+            err.classList.remove("hidden");
+        }
+        if (btn) btn.disabled = true;
+        if (info) info.classList.add("hidden");
+        selectedFileToUpload = null;
+        return;
+    }
+
+    selectedFileToUpload = file;
+    if (err) err.classList.add("hidden");
+    if (nameEl) nameEl.textContent = file.name;
+    if (sizeEl) sizeEl.textContent = `${(file.size / 1024).toFixed(1)} KB`;
+    if (info) info.classList.remove("hidden");
+    if (btn) btn.disabled = false;
+}
+
+async function submitFileUpload() {
+    if (!selectedFileToUpload) {
+        showToast("Please choose a medical file to upload.");
+        return;
+    }
+
+    const btn = $("confirmUploadBtn");
+    const origText = btn ? btn.textContent : "";
+    if (btn) {
+        btn.disabled = true;
+        btn.textContent = "⏳ Uploading to PostgreSQL...";
+    }
+
+    try {
+        const base64Data = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = error => reject(error);
+            reader.readAsDataURL(selectedFileToUpload);
+        });
+
+        const response = await fetch(`${API_URL}/api/patient/documents/upload`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${patientToken}`
+            },
+            body: JSON.stringify({
+                filename: selectedFileToUpload.name,
+                fileType: selectedFileToUpload.type,
+                fileData: base64Data,
+                fileSize: selectedFileToUpload.size
+            })
+        });
+
+        const data = await response.json();
+        if (!response.ok || !data.success) {
+            throw new Error(data.message || "Failed to upload document.");
+        }
+
+        showToast("Medical document uploaded successfully to PostgreSQL!");
+        closeFileUploadModal();
+        await loadPatientDocuments();
+    } catch (err) {
+        const errEl = $("uploadErrorMessage");
+        if (errEl) {
+            errEl.textContent = err.message;
+            errEl.classList.remove("hidden");
+        }
+        showToast(err.message);
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = origText || "⬆️ Upload to PostgreSQL";
+        }
+    }
+}
+
+async function loadPatientDocuments() {
+    const container = $("medicalFilesContainer");
+    if (!container) return;
+    if (!patientToken) return;
+
+    try {
+        const res = await fetch(`${API_URL}/api/patient/documents`, {
+            headers: { Authorization: `Bearer ${patientToken}` }
+        });
+        const data = await res.json();
+        if (res.ok && data.success && Array.isArray(data.documents)) {
+            renderPatientDocuments(data.documents);
+        } else {
+            renderPatientDocuments([]);
+        }
+    } catch (err) {
+        console.warn("Could not load patient documents:", err);
+        renderPatientDocuments([]);
+    }
+}
+
+function renderPatientDocuments(docs) {
+    const container = $("medicalFilesContainer");
+    if (!container) return;
+
+    if (!docs || docs.length === 0) {
+        container.innerHTML = `
+            <div style="text-align: center; padding: 24px; color: #94a3b8; background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 10px;">
+                <div style="font-size: 28px; margin-bottom: 6px;">📂</div>
+                <p style="margin: 0; font-size: 14px;">No medical documents uploaded yet.</p>
+                <p style="margin: 4px 0 0 0; font-size: 12px; color: #94a3b8;">Upload blood reports, prescriptions, or doctor summaries to analyze with AI.</p>
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = docs.map(doc => {
+        const ext = (doc.original_filename || "").split(".").pop().toUpperCase();
+        const sizeKb = doc.file_size ? `${(doc.file_size / 1024).toFixed(1)} KB` : "";
+        const uploadDate = doc.uploaded_at ? new Date(doc.uploaded_at).toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" }) : "";
+
+        return `
+            <div class="file-item-card" style="display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; margin-bottom: 10px; flex-wrap: wrap; gap: 10px;">
+                <div style="display: flex; align-items: center; gap: 12px; min-width: 0;">
+                    <div style="font-size: 24px;">📄</div>
+                    <div style="min-width: 0;">
+                        <div style="font-weight: 600; color: #0f172a; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${escapeHTML(doc.original_filename)}">
+                            ${escapeHTML(doc.original_filename)}
+                        </div>
+                        <div style="font-size: 12px; color: #64748b; display: flex; gap: 8px;">
+                            <span class="badge-tag" style="padding: 2px 6px; font-size: 10px;">${escapeHTML(ext)}</span>
+                            <span>${sizeKb}</span>
+                            <span>•</span>
+                            <span>${uploadDate}</span>
+                        </div>
+                    </div>
+                </div>
+                <div style="display: flex; gap: 8px; flex-shrink: 0;">
+                    <button type="button" class="btn-small secondary" onclick="downloadPatientDocument('${escapeHTML(doc.document_id)}', '${escapeHTML(doc.original_filename)}')">
+                        ⬇️ Download
+                    </button>
+                    <button type="button" class="btn-small primary" style="background: #0d9488;" onclick="askAiAboutDocument('${escapeHTML(doc.document_id)}', '${escapeHTML(doc.original_filename)}')">
+                        🤖 Ask AI
+                    </button>
+                    <button type="button" class="btn-small danger" style="background: #fee2e2; color: #dc2626; border: 1px solid #fca5a5;" onclick="deletePatientDocument('${escapeHTML(doc.document_id)}')">
+                        🗑️
+                    </button>
+                </div>
+            </div>
+        `;
+    }).join("");
+}
+
+async function downloadPatientDocument(documentId, filename) {
+    try {
+        const response = await fetch(`${API_URL}/api/patient/documents/${encodeURIComponent(documentId)}/download`, {
+            headers: { Authorization: `Bearer ${patientToken}` }
+        });
+        if (!response.ok) {
+            throw new Error("Failed to download document.");
+        }
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename || "medical_document";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+    } catch (err) {
+        showToast(err.message);
+    }
+}
+
+async function deletePatientDocument(documentId) {
+    if (!confirm("Are you sure you want to delete this medical file?")) return;
+    try {
+        const response = await fetch(`${API_URL}/api/patient/documents/${encodeURIComponent(documentId)}`, {
+            method: "DELETE",
+            headers: { Authorization: `Bearer ${patientToken}` }
+        });
+        const data = await response.json();
+        if (!response.ok || !data.success) {
+            throw new Error(data.message || "Failed to delete document.");
+        }
+        showToast("Medical document deleted from PostgreSQL.");
+        await loadPatientDocuments();
+    } catch (err) {
+        showToast(err.message);
+    }
+}
+
+function askAiAboutDocument(documentId, filename) {
+    currentAiDocumentContext = { documentId, filename };
+    openAiChatMode();
+    const input = $("aiChatInput");
+    if (input) {
+        input.value = `Explain my uploaded file "${filename}".`;
+        input.focus();
+    }
+}
+
+/* ================= SESSION RESUME ON DOMContentLoaded ================= */
+
+window.addEventListener("DOMContentLoaded", () => {
+    const pToken = localStorage.getItem("patientToken");
+    if (pToken) {
+        patientToken = pToken;
+        loadPatientDashboard().catch(err => {
+            console.warn("Auto-load patient dashboard notice:", err.message);
+            goHome();
+        });
+    } else {
+        const dToken = localStorage.getItem("doctorToken");
+        if (dToken) {
+            hideAll();
+            if ($("doctorDashboard")) $("doctorDashboard").classList.remove("hidden");
+        } else {
+            goHome();
+        }
+    }
+});
+
+/* ================= EXPOSE TO GLOBAL WINDOW SCOPE ================= */
+
+window.openDoctorRegisterModal = openDoctorRegisterModal;
+window.closeDoctorRegisterModal = closeDoctorRegisterModal;
+window.submitDoctorRegistration = submitDoctorRegistration;
+window.openRegisterModal = openRegisterModal;
+window.closeRegisterModal = closeRegisterModal;
+window.submitRegistration = submitRegistration;
+window.openDoctorChatMode = openDoctorChatMode;
+window.openAiChatMode = openAiChatMode;
+window.openFileUploadModal = openFileUploadModal;
+window.closeFileUploadModal = closeFileUploadModal;
+window.handleFileSelected = handleFileSelected;
+window.submitFileUpload = submitFileUpload;
+window.loadPatientDocuments = loadPatientDocuments;
+window.renderPatientDocuments = renderPatientDocuments;
+window.downloadPatientDocument = downloadPatientDocument;
+window.deletePatientDocument = deletePatientDocument;
+window.askAiAboutDocument = askAiAboutDocument;
+window.showProfileEdit = showProfileEdit;
+window.hideProfileEdit = hideProfileEdit;
+window.saveDetails = saveDetails;
+window.showSecondaryEdit = showSecondaryEdit;
+window.hideSecondaryEdit = hideSecondaryEdit;
+window.showHealthEdit = showHealthEdit;
+window.hideHealthEdit = hideHealthEdit;
+window.saveSecondaryDetailsFromPanel = saveSecondaryDetailsFromPanel;
+window.saveHealthInformation = saveHealthInformation;
+window.saveSecondaryGuardian = saveSecondaryGuardian;
+window.showVerificationManage = showVerificationManage;
+window.setHealthValue = setHealthValue;
+window.toggleChat = toggleChat;
+window.switchChatMode = switchChatMode;
+
