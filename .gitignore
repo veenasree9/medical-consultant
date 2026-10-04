@@ -1,4 +1,6 @@
 node_modules/
 .env
 .env.local
+.dev.env.json
 *.log
+backend/data/pgdata/
