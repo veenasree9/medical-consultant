@@ -1,17 +1,22 @@
 {
-  "name": "medicare-consultant",
+  "name": "@veenasree9/medical-consultant",
   "version": "1.0.0",
-  "private": true,
+  "description": "Medical consultant application package published to GitHub Packages",
+  "private": false,
   "main": "backend/server.js",
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
   "scripts": {
     "dev": "node backend/server.js",
     "start": "node backend/server.js",
     "build": "node -e \"console.log('Build complete')\"",
-    "lint": "node -c backend/server.js backend/db.js backend/aiService.js backend/pdfExport.js"
+    "lint": "node -c backend/server.js backend/db.js backend/aiService.js backend/pdfExport.js",
+    "prepublishOnly": "npm run build"
   },
   "dependencies": {
     "@google/genai": "^2.24.0",
-    "bcryptjs": "^3.0.3",
+    "bcryptjs": "^0.4.1",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
