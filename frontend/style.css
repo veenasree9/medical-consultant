@@ -1110,6 +1110,45 @@ hr {
     opacity: 0.75;
 }
 
+.msg-meta-ai-user {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 4px;
+    font-size: 10px;
+    margin-top: 5px;
+    color: rgba(255, 255, 255, 0.88);
+}
+
+.msg-meta-ai {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 6px;
+    font-size: 10px;
+    margin-top: 8px;
+    padding-top: 6px;
+    border-top: 1px solid #f1f5f9;
+    color: #64748b;
+}
+
+.ai-role-tag {
+    font-size: 10.5px;
+    font-weight: 600;
+    color: #0f766e;
+    background: #f0fdfa;
+    padding: 1px 6px;
+    border-radius: 4px;
+    border: 1px solid #ccfbf1;
+}
+
+.chat-time {
+    font-size: 10px;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.2px;
+    white-space: nowrap;
+}
+
 .msg-read-status {
     font-weight: bold;
     font-size: 11px;
@@ -1850,9 +1889,12 @@ hr {
 
 .input-readonly {
     background: #f1f5f9 !important;
-    color: #475569 !important;
-    cursor: not-allowed;
-    font-weight: 600;
+    color: #64748b !important;
+    cursor: not-allowed !important;
+    font-weight: 700 !important;
+    border: 1px dashed #cbd5e1 !important;
+    pointer-events: none !important;
+    user-select: none !important;
 }
 
 .section-title-row {
@@ -2470,6 +2512,114 @@ hr {
 
 .file-dropzone:hover {
     background: #e0f2fe;
+}
+
+/* Show All Files Quicknav Button Styling */
+.btn-quicknav-files {
+    background: #0f766e !important;
+    color: #ffffff !important;
+    border-color: #0d9488 !important;
+    box-shadow: 0 2px 8px rgba(15, 118, 110, 0.25);
+    font-weight: 700 !important;
+}
+
+.btn-quicknav-files:hover {
+    background: #0d9488 !important;
+    transform: translateY(-1px);
+}
+
+.highlight-pulse {
+    animation: cardHighlightPulse 1.8s ease-in-out;
+}
+
+@keyframes cardHighlightPulse {
+    0% {
+        box-shadow: 0 0 0 0 rgba(15, 118, 110, 0.5);
+        border-color: #0f766e;
+    }
+    50% {
+        box-shadow: 0 0 0 10px rgba(15, 118, 110, 0);
+        border-color: #0f766e;
+    }
+    100% {
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05);
+        border-color: #e2e8f0;
+    }
+}
+
+/* Report Camera Viewport & Scanner Document Guide */
+.report-camera-viewport {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    max-height: 380px;
+    background: #0f172a;
+    border-radius: 12px;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.report-camera-viewport video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.report-scanner-frame {
+    position: absolute;
+    width: 82%;
+    height: 82%;
+    border: 2px dashed rgba(255, 255, 255, 0.55);
+    border-radius: 8px;
+    pointer-events: none;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    padding-bottom: 12px;
+}
+
+.frame-corner {
+    position: absolute;
+    width: 18px;
+    height: 18px;
+    border-color: #14b8a6;
+    border-style: solid;
+}
+
+.frame-corner.top-left {
+    top: -2px;
+    left: -2px;
+    border-width: 4px 0 0 4px;
+}
+
+.frame-corner.top-right {
+    top: -2px;
+    right: -2px;
+    border-width: 4px 4px 0 0;
+}
+
+.frame-corner.bottom-left {
+    bottom: -2px;
+    left: -2px;
+    border-width: 0 0 4px 4px;
+}
+
+.frame-corner.bottom-right {
+    bottom: -2px;
+    right: -2px;
+    border-width: 0 4px 4px 0;
+}
+
+.scanner-text {
+    background: rgba(15, 23, 42, 0.75);
+    color: #ffffff;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 12px;
+    letter-spacing: 0.3px;
 }
 
 

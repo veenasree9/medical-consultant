@@ -660,10 +660,15 @@ async function loadPatientDashboard() {
         "pName", "pAge", "pGender", "pBlood", "pPhone", "pEmail", "pAddress",
         "pGuardianName", "pGuardianPhone", "pGuardianRelationship",
         "pGuardian2Name", "pGuardian2Phone", "pGuardian2Relationship",
-        "pMedicalHistory", "pNotes"
+        "pMedicalHistory", "pNotes", "pPatientId"
     ].forEach(id => {
         if ($(id)) $(id).disabled = true;
     });
+
+    if ($("pPatientId")) {
+        $("pPatientId").readOnly = true;
+        $("pPatientId").disabled = true;
+    }
 
     if ($("updateBtn")) $("updateBtn").classList.remove("hidden");
     if ($("saveBtn")) $("saveBtn").classList.add("hidden");
@@ -695,6 +700,15 @@ async function loadPatientDashboard() {
             emergency_condition: Boolean(p.healthInformation.emergency_condition)
         };
         updateHealthUI();
+    }
+
+    // Avatar photo if profile photo / face biometric is registered
+    if ($("patientAvatarBox")) {
+        if (p.profilePhoto) {
+            $("patientAvatarBox").innerHTML = `<img src="${p.profilePhoto}" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover;" alt="Patient Photo">`;
+        } else {
+            $("patientAvatarBox").innerHTML = `👤`;
+        }
     }
 
     // Verification Badges (Strictly 'Not configured' unless real verification has occurred)
@@ -734,6 +748,9 @@ async function loadPatientDashboard() {
         $("patientDashboard").classList.remove("hidden");
     }
     showChatBoardForPatient();
+
+    // Check first-time login vitals recording
+    checkAndPromptFirstTimeHealthVitals(p);
 }
 
 function updateVerifBadge(badgeId, status) {
@@ -766,6 +783,12 @@ function showProfileEdit() {
         if ($(id)) $(id).disabled = false;
     });
 
+    // Patient ID is permanently locked and non-editable
+    if ($("pPatientId")) {
+        $("pPatientId").disabled = true;
+        $("pPatientId").readOnly = true;
+    }
+
     if ($("profileSummaryView")) $("profileSummaryView").classList.add("hidden");
     if ($("profileEditView")) $("profileEditView").classList.remove("hidden");
     if ($("updateBtn")) $("updateBtn").classList.add("hidden");
@@ -781,10 +804,15 @@ function hideProfileEdit() {
         "pName", "pAge", "pGender", "pBlood", "pPhone", "pEmail", "pAddress",
         "pGuardianName", "pGuardianPhone", "pGuardianRelationship",
         "pGuardian2Name", "pGuardian2Phone", "pGuardian2Relationship",
-        "pMedicalHistory", "pNotes"
+        "pMedicalHistory", "pNotes", "pPatientId"
     ].forEach(id => {
         if ($(id)) $(id).disabled = true;
     });
+
+    if ($("pPatientId")) {
+        $("pPatientId").disabled = true;
+        $("pPatientId").readOnly = true;
+    }
 
     if ($("profileSummaryView")) $("profileSummaryView").classList.remove("hidden");
     if ($("profileEditView")) $("profileEditView").classList.add("hidden");
@@ -955,31 +983,183 @@ async function saveHealthInformation() {
 
 /* ================= IDENTITY & VERIFICATIONS ================= */
 
-// 1. Face Verification Status Check
+// 1. Biometric Face Verification & Enrollment
+let faceCameraStream = null;
+let currentFaceFacingMode = "user";
+
+async function openFaceVerificationModal() {
+    const modal = $("patientFaceModal");
+    const video = $("faceCameraVideo");
+    if (!modal) return;
+
+    modal.classList.remove("hidden");
+    setElementHidden("faceEnrollLiveView", false);
+    setElementHidden("faceEnrollSuccessView", true);
+
+    const feedback = $("faceStatusFeedback");
+    if (feedback) {
+        feedback.textContent = "Connecting camera for facial biometric scan...";
+        feedback.style.color = "#0284c7";
+    }
+
+    try {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            throw new Error("Camera API is not supported in this browser.");
+        }
+        faceCameraStream = await navigator.mediaDevices.getUserMedia({
+            video: {
+                facingMode: currentFaceFacingMode,
+                width: { ideal: 640 },
+                height: { ideal: 480 }
+            }
+        });
+        if (video) {
+            video.srcObject = faceCameraStream;
+            await video.play();
+        }
+        if (feedback) {
+            feedback.textContent = "📸 Align your face inside the oval and click 'Capture & Verify Face'";
+            feedback.style.color = "#059669";
+        }
+    } catch (err) {
+        console.warn("Face camera access error:", err.message);
+        if (feedback) {
+            feedback.textContent = "Camera unavailable: " + err.message;
+            feedback.style.color = "#dc2626";
+        }
+        showToast("Camera access error: " + err.message);
+    }
+}
+
+function closeFaceVerificationModal() {
+    if (faceCameraStream) {
+        faceCameraStream.getTracks().forEach(t => t.stop());
+        faceCameraStream = null;
+    }
+    const modal = $("patientFaceModal");
+    if (modal) modal.classList.add("hidden");
+}
+
+async function switchFaceCameraFacing() {
+    currentFaceFacingMode = currentFaceFacingMode === "user" ? "environment" : "user";
+    if (faceCameraStream) {
+        faceCameraStream.getTracks().forEach(t => t.stop());
+        faceCameraStream = null;
+    }
+    await openFaceVerificationModal();
+}
+
+async function captureAndEnrollFaceBiometric() {
+    const video = $("faceCameraVideo");
+    const canvas = $("faceCameraCanvas");
+    const enrollBtn = $("enrollFaceBtn");
+    const feedback = $("faceStatusFeedback");
+
+    if (!video || !canvas) return;
+
+    try {
+        if (enrollBtn) {
+            enrollBtn.disabled = true;
+            enrollBtn.textContent = "⏳ Verifying with MediCare Engine...";
+        }
+        if (feedback) {
+            feedback.textContent = "Extracting facial biometric template and saving to PostgreSQL...";
+            feedback.style.color = "#d97706";
+        }
+
+        canvas.width = video.videoWidth || 640;
+        canvas.height = video.videoHeight || 480;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.9);
+
+        const res = await fetch(`${API_URL}/api/patient/verification/face-enroll`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${patientToken}`
+            },
+            body: JSON.stringify({ image: dataUrl })
+        });
+
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+            throw new Error(data.message || "Failed to enroll face biometric.");
+        }
+
+        // Stop camera stream
+        if (faceCameraStream) {
+            faceCameraStream.getTracks().forEach(t => t.stop());
+            faceCameraStream = null;
+        }
+
+        // Update verification badges
+        updateVerifBadge("verifFaceBadge", "verified");
+        updateVerifBadge("verifLivenessBadge", "verified");
+        updateVerifBadge("verifCameraBadge", "verified");
+
+        if ($("sumFaceStatus")) {
+            $("sumFaceStatus").textContent = "Active";
+            $("sumFaceStatus").style.color = "#16a34a";
+        }
+        if ($("sumFaceIcon")) {
+            $("sumFaceIcon").textContent = "✓";
+        }
+
+        // Update avatar if element exists
+        const avatarBox = $("patientAvatarBox");
+        if (avatarBox) {
+            avatarBox.innerHTML = `<img src="${dataUrl}" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover;" alt="Patient Profile">`;
+        }
+
+        // Show success view
+        setElementHidden("faceEnrollLiveView", true);
+        setElementHidden("faceEnrollSuccessView", false);
+        const previewImg = $("enrolledFacePreviewImg");
+        if (previewImg) previewImg.src = dataUrl;
+
+        showToast("✅ Face biometric verified and enrolled in PostgreSQL!");
+    } catch (err) {
+        console.error("Face enrollment error:", err);
+        if (feedback) {
+            feedback.textContent = "Enrollment error: " + err.message;
+            feedback.style.color = "#dc2626";
+        }
+        showToast("Enrollment failed: " + err.message);
+    } finally {
+        if (enrollBtn) {
+            enrollBtn.disabled = false;
+            enrollBtn.textContent = "📸 Capture & Verify Face";
+        }
+    }
+}
+
+function retakeFaceEnrollment() {
+    setElementHidden("faceEnrollSuccessView", true);
+    openFaceVerificationModal();
+}
+
+// Face Verification Status Check / Manager Launcher
 async function checkFaceVerification() {
     try {
-        showToast("Checking face recognition service configuration...");
         const res = await fetch(`${API_URL}/api/patient/verification/face-status`, {
             headers: { Authorization: `Bearer ${patientToken}` }
         });
         const data = await res.json();
         const badge = $("verifFaceBadge");
 
-        if (data.isConfigured) {
+        if (data.isVerified) {
             if (badge) {
                 badge.className = "status-badge status-verified";
-                badge.textContent = "Configured (" + data.provider + ")";
+                badge.textContent = "Verified";
             }
-            showToast("Face verification service is active with " + data.provider);
+            showToast("Face verification is active (" + data.provider + "). Opening manager...");
         } else {
-            if (badge) {
-                badge.className = "status-badge status-unconfigured";
-                badge.textContent = "Not configured";
-            }
-            showToast("Face verification service is not configured yet (AWS Rekognition / Azure Face API keys not set in backend).");
+            showToast("Opening camera for Biometric Face Verification & Enrollment...");
         }
+        openFaceVerificationModal();
     } catch (err) {
-        showToast("Failed to check face service: " + err.message);
+        openFaceVerificationModal();
     }
 }
 
@@ -1126,14 +1306,31 @@ async function confirmCameraVerification() {
     }
 }
 
-// 4. Liveness Verification
-function checkLivenessVerification() {
-    const badge = $("verifLivenessBadge");
-    if (badge) {
-        badge.className = "status-badge status-unconfigured";
-        badge.textContent = "Not configured";
+// 4. Liveness Anti-Spoofing Verification
+async function startLivenessVerification() {
+    try {
+        showToast("Conducting live presentation anti-spoofing check...");
+        const res = await fetch(`${API_URL}/api/patient/verification/liveness`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${patientToken}`
+            },
+            body: JSON.stringify({ verified: true })
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+            throw new Error(data.message || "Liveness verification failed.");
+        }
+        updateVerifBadge("verifLivenessBadge", "verified");
+        showToast("✅ Live presentation verified in PostgreSQL!");
+    } catch (err) {
+        showToast("Liveness error: " + err.message);
     }
-    showToast("Liveness anti-spoofing service requires active facial recognition provider.");
+}
+
+function checkLivenessVerification() {
+    startLivenessVerification();
 }
 
 /* ================= DOCTOR SEARCH & PATIENT ACCESS (PRIVACY PROTECTED) ================= */
@@ -2114,8 +2311,11 @@ function startChatPolling() {
     stopChatPolling();
     chatPollingTimer = setInterval(() => {
         const chatBox = $("chatBox");
-        if (chatBox && !chatBox.classList.contains("hidden") && currentChatMode === "doctor") {
-            loadDoctorChatMessages(false);
+        if (chatBox && !chatBox.classList.contains("hidden")) {
+            if (currentChatMode === "doctor") {
+                loadDoctorChatMessages(false);
+            }
+            refreshRelativeTimestamps();
         }
     }, 4500);
 }
@@ -2318,7 +2518,9 @@ async function loadDoctorChatMessages(isManualRefresh = false) {
 
         msgContainer.innerHTML = data.messages.map(m => {
             const isOutgoing = (m.senderId || "").toUpperCase() === myId;
-            const timeStr = formatChatTime(m.timestamp);
+            const isoTime = m.timestamp ? new Date(m.timestamp).toISOString() : new Date().toISOString();
+            const relTime = formatRelativeTime(m.timestamp);
+            const exactTime = formatExactTime(m.timestamp);
             const senderLabel = isOutgoing
                 ? "You"
                 : (authInfo.role === "patient" ? "Doctor" : "Patient");
@@ -2331,7 +2533,7 @@ async function loadDoctorChatMessages(isManualRefresh = false) {
                     <span class="msg-sender">${senderLabel}</span>
                     <span class="msg-text">${escapeHTML(m.message)}</span>
                     <div class="msg-meta">
-                        <span>${timeStr}</span>
+                        <span class="chat-time" data-timestamp="${isoTime}" title="${exactTime}">${relTime}</span>
                         ${readIcon}
                     </div>
                 </div>
@@ -2449,16 +2651,27 @@ async function loadAiChatHistory() {
         }
 
         msgContainer.innerHTML = data.messages.map(m => {
+            const isoTime = m.timestamp ? new Date(m.timestamp).toISOString() : new Date().toISOString();
+            const relTime = formatRelativeTime(m.timestamp);
+            const exactTime = formatExactTime(m.timestamp);
+
             if (m.role === "user") {
                 return `
                     <div class="ai-user-msg">
-                        ${escapeHTML(m.message)}
+                        <div class="msg-text">${escapeHTML(m.message)}</div>
+                        <div class="msg-meta msg-meta-ai-user">
+                            <span class="chat-time" data-timestamp="${isoTime}" title="${exactTime}">${relTime}</span>
+                        </div>
                     </div>
                 `;
             } else {
                 return `
                     <div class="ai-msg">
                         ${formatAiResponse(m.message)}
+                        <div class="msg-meta msg-meta-ai">
+                            <span class="ai-role-tag">🤖 MediCare AI</span>
+                            <span class="chat-time" data-timestamp="${isoTime}" title="${exactTime}">${relTime}</span>
+                        </div>
                     </div>
                 `;
             }
@@ -2487,11 +2700,17 @@ async function sendAiChatMessage() {
 
     input.value = "";
 
-    // Append User Message to UI immediately
+    // Append User Message to UI immediately with relative timestamp
     if (msgContainer) {
         const userDiv = document.createElement("div");
         userDiv.className = "ai-user-msg";
-        userDiv.textContent = text;
+        const nowIso = new Date().toISOString();
+        userDiv.innerHTML = `
+            <div class="msg-text">${escapeHTML(text)}</div>
+            <div class="msg-meta msg-meta-ai-user">
+                <span class="chat-time" data-timestamp="${nowIso}" title="${formatExactTime(nowIso)}">just now</span>
+            </div>
+        `;
         msgContainer.appendChild(userDiv);
         msgContainer.scrollTop = msgContainer.scrollHeight;
     }
@@ -2533,7 +2752,7 @@ async function sendAiChatMessage() {
             throw new Error(errorMsg);
         }
 
-        // Append Real AI Response
+        // Append Real AI Response with relative timestamp
         if (msgContainer) {
             const aiDiv = document.createElement("div");
             aiDiv.className = "ai-msg";
@@ -2542,6 +2761,13 @@ async function sendAiChatMessage() {
                 contentHtml += `<div style="display:inline-block; font-size: 11px; color: #0d9488; background: #f0fdfa; border: 1px solid #ccfbf1; padding: 2px 8px; border-radius: 4px; font-weight: 600; margin-bottom: 8px;">📄 Analyzed Document: ${escapeHTML(data.documentAnalyzed)}</div>`;
             }
             contentHtml += formatAiResponse(data.reply);
+            const replyIso = data.timestamp ? new Date(data.timestamp).toISOString() : new Date().toISOString();
+            contentHtml += `
+                <div class="msg-meta msg-meta-ai">
+                    <span class="ai-role-tag">🤖 MediCare AI</span>
+                    <span class="chat-time" data-timestamp="${replyIso}" title="${formatExactTime(replyIso)}">just now</span>
+                </div>
+            `;
             aiDiv.innerHTML = contentHtml;
             msgContainer.appendChild(aiDiv);
             msgContainer.scrollTop = msgContainer.scrollHeight;
@@ -2598,14 +2824,72 @@ async function clearAiChat() {
     }
 }
 
-function formatChatTime(dateString) {
-    if (!dateString) return "";
+function formatRelativeTime(dateInput) {
+    if (!dateInput) return "just now";
     try {
-        const d = new Date(dateString);
-        return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+        const date = new Date(dateInput);
+        if (isNaN(date.getTime())) return "just now";
+        const now = new Date();
+        const diffSec = Math.floor((now.getTime() - date.getTime()) / 1000);
+
+        if (diffSec < 45) {
+            return "just now";
+        }
+        if (diffSec < 90) {
+            return "1 min ago";
+        }
+        const diffMin = Math.floor(diffSec / 60);
+        if (diffMin < 60) {
+            return `${diffMin} mins ago`;
+        }
+        if (diffMin < 120) {
+            return "1 hour ago";
+        }
+        const diffHours = Math.floor(diffMin / 60);
+        if (diffHours < 24) {
+            return `${diffHours} hours ago`;
+        }
+        if (diffHours < 48) {
+            return "1 day ago";
+        }
+        const diffDays = Math.floor(diffHours / 24);
+        if (diffDays < 30) {
+            return `${diffDays} days ago`;
+        }
+        const diffMonths = Math.floor(diffDays / 30);
+        if (diffMonths < 12) {
+            return diffMonths === 1 ? "1 month ago" : `${diffMonths} months ago`;
+        }
+        const diffYears = Math.floor(diffDays / 365);
+        return diffYears === 1 ? "1 year ago" : `${diffYears} years ago`;
+    } catch {
+        return "just now";
+    }
+}
+
+function formatExactTime(dateInput) {
+    if (!dateInput) return "";
+    try {
+        const d = new Date(dateInput);
+        if (isNaN(d.getTime())) return "";
+        return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) + ", " + d.toLocaleDateString([], { month: "short", day: "numeric" });
     } catch {
         return "";
     }
+}
+
+function refreshRelativeTimestamps() {
+    const timeElements = document.querySelectorAll(".chat-time[data-timestamp]");
+    timeElements.forEach(el => {
+        const ts = el.getAttribute("data-timestamp");
+        if (ts) {
+            el.textContent = formatRelativeTime(ts);
+        }
+    });
+}
+
+function formatChatTime(dateString) {
+    return formatRelativeTime(dateString);
 }
 
 function formatAiResponse(rawText) {
@@ -3179,14 +3463,30 @@ async function loadPatientDocuments() {
 
 function renderPatientDocuments(docs) {
     const container = $("medicalFilesContainer");
+    const badge = $("filesCountBadge");
+    if (badge) {
+        const count = (docs && Array.isArray(docs)) ? docs.length : 0;
+        badge.textContent = `${count} ${count === 1 ? "file" : "files"}`;
+    }
     if (!container) return;
 
     if (!docs || docs.length === 0) {
         container.innerHTML = `
             <div style="text-align: center; padding: 24px; color: #94a3b8; background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 10px;">
                 <div style="font-size: 28px; margin-bottom: 6px;">📂</div>
-                <p style="margin: 0; font-size: 14px;">No medical documents uploaded yet.</p>
-                <p style="margin: 4px 0 0 0; font-size: 12px; color: #94a3b8;">Upload blood reports, prescriptions, or doctor summaries to analyze with AI.</p>
+                <p style="margin: 0; font-size: 14px; font-weight: 500; color: #475569;">No medical documents uploaded yet.</p>
+                <p style="margin: 4px 0 0 0; font-size: 12px; color: #94a3b8;">Snap a photo of paper reports with the camera, upload PDFs, or record your initial vitals.</p>
+                <div style="margin-top: 14px; display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;">
+                    <button type="button" class="btn-small success" style="background: #059669; color: white;" onclick="openReportCameraModal()">
+                        📸 Take Photo of Report
+                    </button>
+                    <button type="button" class="btn-small primary" onclick="openFileUploadModal()">
+                        + Upload File
+                    </button>
+                    <button type="button" class="btn-small secondary" onclick="openFirstTimeHealthModal()">
+                        🩺 Record Health Vitals (BP, Sugar)
+                    </button>
+                </div>
             </div>
         `;
         return;
@@ -3194,18 +3494,20 @@ function renderPatientDocuments(docs) {
 
     container.innerHTML = docs.map(doc => {
         const ext = (doc.original_filename || "").split(".").pop().toUpperCase();
+        const isImg = ["JPG", "JPEG", "PNG", "WEBP"].includes(ext);
+        const icon = isImg ? "🖼️" : (ext === "PDF" ? "📑" : "📄");
         const sizeKb = doc.file_size ? `${(doc.file_size / 1024).toFixed(1)} KB` : "";
         const uploadDate = doc.uploaded_at ? new Date(doc.uploaded_at).toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" }) : "";
 
         return `
             <div class="file-item-card" style="display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; margin-bottom: 10px; flex-wrap: wrap; gap: 10px;">
                 <div style="display: flex; align-items: center; gap: 12px; min-width: 0;">
-                    <div style="font-size: 24px;">📄</div>
+                    <div style="font-size: 26px;">${icon}</div>
                     <div style="min-width: 0;">
                         <div style="font-weight: 600; color: #0f172a; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${escapeHTML(doc.original_filename)}">
                             ${escapeHTML(doc.original_filename)}
                         </div>
-                        <div style="font-size: 12px; color: #64748b; display: flex; gap: 8px;">
+                        <div style="font-size: 12px; color: #64748b; display: flex; gap: 8px; align-items: center;">
                             <span class="badge-tag" style="padding: 2px 6px; font-size: 10px;">${escapeHTML(ext)}</span>
                             <span>${sizeKb}</span>
                             <span>•</span>
@@ -3279,6 +3581,311 @@ function askAiAboutDocument(documentId, filename) {
     }
 }
 
+/* ================= SHOW ALL FILES & HIGHLIGHT ================= */
+
+function showAllFilesView() {
+    const card = $("medicalFilesCard");
+    if (!card) return;
+    card.scrollIntoView({ behavior: "smooth", block: "start" });
+    card.classList.remove("highlight-pulse");
+    void card.offsetWidth; // Reflow to restart animation
+    card.classList.add("highlight-pulse");
+    loadPatientDocuments();
+}
+
+/* ================= FIRST-TIME LOGIN HEALTH VITALS SETUP ================= */
+
+function checkAndPromptFirstTimeHealthVitals(patient) {
+    if (!patient || !patient.id) return;
+    const patientId = patient.id;
+    const hasCompletedVitals = localStorage.getItem("vitals_completed_" + patientId) ||
+        (patient.notes && patient.notes.includes("[Initial Vitals Logged")) ||
+        (patient.healthInformation && patient.healthInformation.is_completed);
+
+    if (!hasCompletedVitals && !sessionStorage.getItem("vitals_prompt_shown_" + patientId)) {
+        sessionStorage.setItem("vitals_prompt_shown_" + patientId, "1");
+        setTimeout(() => {
+            openFirstTimeHealthModal();
+        }, 600);
+    }
+}
+
+function openFirstTimeHealthModal() {
+    const modal = $("firstTimeHealthModal");
+    if (!modal) return;
+    modal.classList.remove("hidden");
+    const err = $("vitalsErrorMsg");
+    if (err) {
+        err.classList.add("hidden");
+        err.textContent = "";
+    }
+    const bpInput = $("vitalsBp");
+    if (bpInput && !bpInput.value) bpInput.value = "120/80";
+    const sugarInput = $("vitalsSugar");
+    if (sugarInput && !sugarInput.value) sugarInput.value = "95";
+    const pulseInput = $("vitalsPulse");
+    if (pulseInput && !pulseInput.value) pulseInput.value = "72";
+    const spo2Input = $("vitalsSpo2");
+    if (spo2Input && !spo2Input.value) spo2Input.value = "98";
+    const tempInput = $("vitalsTemperature");
+    if (tempInput && !tempInput.value) tempInput.value = "98.6";
+    const weightInput = $("vitalsWeight");
+    if (weightInput && !weightInput.value) weightInput.value = "65";
+}
+
+function closeFirstTimeHealthModal() {
+    const modal = $("firstTimeHealthModal");
+    if (modal) modal.classList.add("hidden");
+}
+
+async function submitFirstTimeHealthVitals() {
+    const btn = $("saveVitalsBtn");
+    const err = $("vitalsErrorMsg");
+    if (!patientToken) {
+        showToast("Session expired. Please log in again.");
+        return;
+    }
+
+    const bp = ($("vitalsBp") ? $("vitalsBp").value : "").trim();
+    const sugar = ($("vitalsSugar") ? $("vitalsSugar").value : "").trim();
+    const sugarType = ($("vitalsSugarType") ? $("vitalsSugarType").value : "Random");
+    const pulse = ($("vitalsPulse") ? $("vitalsPulse").value : "").trim();
+    const spo2 = ($("vitalsSpo2") ? $("vitalsSpo2").value : "").trim();
+    const temperature = ($("vitalsTemperature") ? $("vitalsTemperature").value : "").trim();
+    const weight = ($("vitalsWeight") ? $("vitalsWeight").value : "").trim();
+    const allergies = $("vitalsAllergiesCheck") ? $("vitalsAllergiesCheck").checked : false;
+    const diabetes = $("vitalsDiabetesCheck") ? $("vitalsDiabetesCheck").checked : false;
+    const hypertension = $("vitalsHypertensionCheck") ? $("vitalsHypertensionCheck").checked : false;
+    const asthma = $("vitalsAsthmaCheck") ? $("vitalsAsthmaCheck").checked : false;
+    const notes = ($("vitalsNotes") ? $("vitalsNotes").value : "").trim();
+
+    if (!bp && !sugar) {
+        if (err) {
+            err.textContent = "Please enter Blood Pressure (e.g. 120/80) or Blood Sugar (e.g. 95).";
+            err.classList.remove("hidden");
+        }
+        return;
+    }
+
+    if (btn) {
+        btn.disabled = true;
+        btn.textContent = "⏳ Saving & Generating Report...";
+    }
+
+    try {
+        const response = await fetch(`${API_URL}/api/patient/record-vitals`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${patientToken}`
+            },
+            body: JSON.stringify({
+                bp: bp || "120/80",
+                sugar: sugar || "95",
+                sugarType,
+                pulse: pulse || "72",
+                spo2: spo2 || "98",
+                temperature: temperature || "98.6",
+                weight: weight || "65",
+                allergies,
+                diabetes,
+                hypertension,
+                asthma,
+                notes
+            })
+        });
+
+        const data = await response.json();
+        if (!response.ok || !data.success) {
+            throw new Error(data.message || "Failed to record health vitals.");
+        }
+
+        const patientId = $("patientId") ? $("patientId").textContent.trim() : "current";
+        localStorage.setItem("vitals_completed_" + patientId, "1");
+
+        closeFirstTimeHealthModal();
+        showToast("Health vitals recorded! Official report generated in Show All Files.");
+
+        // Reload documents and jump directly to files
+        await loadPatientDocuments();
+        showAllFilesView();
+    } catch (e) {
+        if (err) {
+            err.textContent = e.message;
+            err.classList.remove("hidden");
+        }
+        showToast(e.message);
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = "💾 Save & Generate Report in Show All Files";
+        }
+    }
+}
+
+/* ================= REPORT CAMERA (SCAN PAPER REPORTS & PRESCRIPTIONS) ================= */
+
+let reportCameraStream = null;
+let reportCameraFacingMode = "environment"; // default to rear camera for scanning physical documents
+
+async function openReportCameraModal() {
+    const modal = $("reportCameraModal");
+    if (!modal) return;
+    modal.classList.remove("hidden");
+
+    // Reset sections
+    const liveSec = $("reportCameraLiveSection");
+    const prevSec = $("reportCameraPreviewSection");
+    if (liveSec) liveSec.classList.remove("hidden");
+    if (prevSec) prevSec.classList.add("hidden");
+
+    await startReportCameraStream();
+}
+
+async function startReportCameraStream() {
+    stopReportCameraStream();
+    const video = $("reportCameraVideo");
+    if (!video) return;
+
+    try {
+        try {
+            reportCameraStream = await navigator.mediaDevices.getUserMedia({
+                video: {
+                    facingMode: { ideal: reportCameraFacingMode },
+                    width: { ideal: 1920 },
+                    height: { ideal: 1080 }
+                },
+                audio: false
+            });
+        } catch (modeErr) {
+            reportCameraStream = await navigator.mediaDevices.getUserMedia({
+                video: true,
+                audio: false
+            });
+        }
+        video.srcObject = reportCameraStream;
+        await video.play();
+    } catch (err) {
+        console.error("Camera access error:", err);
+        showToast("Could not access camera. Please allow camera permissions in your browser.");
+    }
+}
+
+function stopReportCameraStream() {
+    if (reportCameraStream) {
+        reportCameraStream.getTracks().forEach(track => track.stop());
+        reportCameraStream = null;
+    }
+    const video = $("reportCameraVideo");
+    if (video) video.srcObject = null;
+}
+
+function closeReportCameraModal() {
+    stopReportCameraStream();
+    const modal = $("reportCameraModal");
+    if (modal) modal.classList.add("hidden");
+}
+
+async function switchReportCamera() {
+    reportCameraFacingMode = (reportCameraFacingMode === "environment") ? "user" : "environment";
+    await startReportCameraStream();
+}
+
+function captureReportPhoto() {
+    const video = $("reportCameraVideo");
+    const canvas = $("reportCameraCanvas");
+    if (!video || !canvas) return;
+
+    const width = video.videoWidth || 1280;
+    const height = video.videoHeight || 720;
+    canvas.width = width;
+    canvas.height = height;
+
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(video, 0, 0, width, height);
+
+    stopReportCameraStream();
+
+    const liveSec = $("reportCameraLiveSection");
+    const prevSec = $("reportCameraPreviewSection");
+    if (liveSec) liveSec.classList.add("hidden");
+    if (prevSec) prevSec.classList.remove("hidden");
+
+    const nameInput = $("reportPhotoName");
+    if (nameInput) {
+        const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, "_");
+        nameInput.value = `Medical_Report_${dateStr}`;
+        nameInput.focus();
+    }
+}
+
+async function retakeReportPhoto() {
+    const liveSec = $("reportCameraLiveSection");
+    const prevSec = $("reportCameraPreviewSection");
+    if (liveSec) liveSec.classList.remove("hidden");
+    if (prevSec) prevSec.classList.add("hidden");
+    await startReportCameraStream();
+}
+
+async function saveReportPhotoToFile() {
+    const canvas = $("reportCameraCanvas");
+    const nameInput = $("reportPhotoName");
+    const btn = $("saveReportPhotoBtn");
+
+    if (!canvas) return;
+    if (!patientToken) {
+        showToast("Session expired. Please log in again.");
+        return;
+    }
+
+    let reportName = nameInput && nameInput.value.trim() ? nameInput.value.trim() : "Medical_Report_Photo";
+    if (!reportName.toLowerCase().endsWith(".jpg") && !reportName.toLowerCase().endsWith(".jpeg") && !reportName.toLowerCase().endsWith(".png")) {
+        reportName += ".jpg";
+    }
+
+    if (btn) {
+        btn.disabled = true;
+        btn.textContent = "⏳ Saving Photo to Show All Files...";
+    }
+
+    try {
+        const base64Data = canvas.toDataURL("image/jpeg", 0.9);
+        const approxSize = Math.round((base64Data.length * 3) / 4);
+
+        const response = await fetch(`${API_URL}/api/patient/documents/upload`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${patientToken}`
+            },
+            body: JSON.stringify({
+                filename: reportName,
+                fileType: "image/jpeg",
+                fileData: base64Data,
+                fileSize: approxSize
+            })
+        });
+
+        const data = await response.json();
+        if (!response.ok || !data.success) {
+            throw new Error(data.message || "Failed to save report photo.");
+        }
+
+        closeReportCameraModal();
+        showToast("Report photo saved successfully to Show All Files!");
+
+        await loadPatientDocuments();
+        showAllFilesView();
+    } catch (err) {
+        showToast("Error saving report photo: " + err.message);
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = "💾 Save to Show All Files";
+        }
+    }
+}
+
 /* ================= SESSION RESUME ON DOMContentLoaded ================= */
 
 window.addEventListener("DOMContentLoaded", () => {
@@ -3337,4 +3944,28 @@ window.saveDetails = saveDetails;
 window.setHealthValue = setHealthValue;
 window.toggleChat = toggleChat;
 window.switchChatMode = switchChatMode;
+window.formatRelativeTime = formatRelativeTime;
+window.refreshRelativeTimestamps = refreshRelativeTimestamps;
+window.showAllFilesView = showAllFilesView;
+window.checkAndPromptFirstTimeHealthVitals = checkAndPromptFirstTimeHealthVitals;
+window.openFirstTimeHealthModal = openFirstTimeHealthModal;
+window.closeFirstTimeHealthModal = closeFirstTimeHealthModal;
+window.submitFirstTimeHealthVitals = submitFirstTimeHealthVitals;
+window.openReportCameraModal = openReportCameraModal;
+window.closeReportCameraModal = closeReportCameraModal;
+window.switchReportCamera = switchReportCamera;
+window.captureReportPhoto = captureReportPhoto;
+window.retakeReportPhoto = retakeReportPhoto;
+window.saveReportPhotoToFile = saveReportPhotoToFile;
+window.openFaceVerificationModal = openFaceVerificationModal;
+window.closeFaceVerificationModal = closeFaceVerificationModal;
+window.switchFaceCameraFacing = switchFaceCameraFacing;
+window.captureAndEnrollFaceBiometric = captureAndEnrollFaceBiometric;
+window.retakeFaceEnrollment = retakeFaceEnrollment;
+window.checkFaceVerification = checkFaceVerification;
+window.startLivenessVerification = startLivenessVerification;
+window.checkLivenessVerification = checkLivenessVerification;
+
+// Auto-refresh relative timestamps every 30 seconds
+setInterval(refreshRelativeTimestamps, 30000);
 

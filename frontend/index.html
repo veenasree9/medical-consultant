@@ -256,6 +256,7 @@
         <!-- ================= PATIENT DASHBOARD QUICKNAV ================= -->
         <div class="dashboard-quicknav">
             <button type="button" onclick="scrollToCard('profileCard')">📋 Profile</button>
+            <button type="button" id="showAllFilesQuickBtn" class="btn-quicknav-files" onclick="showAllFilesView()">📂 Show All Files</button>
             <button type="button" onclick="scrollToCard('medicalFilesCard')">📁 Medical Files</button>
             <button type="button" onclick="scrollToCard('doctorAccessRequestsCard')">🔒 Doctor Requests</button>
             <button type="button" onclick="downloadPatientPdf()">📥 Download Medical Record (PDF)</button>
@@ -266,7 +267,7 @@
 
             <div class="profile-head" style="justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
                 <div style="display: flex; align-items: center; gap: 16px;">
-                    <div class="avatar">
+                    <div class="avatar" id="patientAvatarBox">
                         👤
                     </div>
                     <div>
@@ -280,7 +281,16 @@
                     </div>
                 </div>
 
-                <div class="export-pdf-actions" style="display: flex; gap: 8px;">
+                <div class="export-pdf-actions" style="display: flex; gap: 8px; flex-wrap: wrap;">
+                    <button
+                        type="button"
+                        id="showAllFilesHeaderBtn"
+                        class="btn-small"
+                        style="background: #0284c7; color: white; font-weight: 600; padding: 7px 14px; border-radius: 6px; border: none; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;"
+                        onclick="showAllFilesView()"
+                        title="View all medical records, blood tests, and uploaded reports">
+                        📂 Show All Files
+                    </button>
                     <button
                         type="button"
                         id="downloadPdfBtn"
@@ -296,14 +306,25 @@
 
             <!-- PROFILE SUMMARY VIEW (DEFAULT) -->
             <div id="profileSummaryView">
-                <div class="summary-card-header">
-                    <h3>📋 Patient Profile</h3>
-                    <button type="button" id="updateBtn" class="btn-small primary" onclick="showProfileEdit()">
-                        ✏️ Edit Profile
-                    </button>
+                <div class="summary-card-header" style="border-bottom: none; margin-bottom: 0; padding-bottom: 0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                    <div>
+                        <h3 style="margin: 0; font-size: 18px; color: #0f172a;">📋 Patient Profile</h3>
+                        <p style="color: #64748b; font-size: 13px; margin: 4px 0 0 0;">
+                            Personal details and medical records are protected. Click <b>Edit Profile</b> to view or modify your details.
+                        </p>
+                    </div>
+                    <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
+                        <button type="button" id="showAllFilesSummaryBtn" class="btn-small" style="background: #0284c7; color: white; font-weight: 600; padding: 7px 14px; border-radius: 6px; border: none; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;" onclick="showAllFilesView()" title="View all medical documents, lab reports, and vitals history">
+                            📂 Show All Files
+                        </button>
+                        <button type="button" id="updateBtn" class="btn-small primary" onclick="showProfileEdit()">
+                            ✏️ Edit Profile
+                        </button>
+                    </div>
                 </div>
 
-                <div class="summary-grid">
+                <!-- DETAILS HIDDEN BY DEFAULT: ONLY REVEALED IN PROFILE EDIT VIEW WHEN 'EDIT PROFILE' CLICKED -->
+                <div id="summaryDetailsGrid" class="summary-grid hidden" style="display: none;">
                     <div class="summary-item">
                         <span class="s-label">Patient ID</span>
                         <b id="sumPatientId">-</b>
@@ -346,8 +367,8 @@
                     </div>
                 </div>
 
-                <!-- SECONDARY DETAILS & HEALTH INFORMATION SUMMARY STATUS -->
-                <div class="summary-verification-health" style="margin-top: 20px; padding-top: 16px; border-top: 1px solid #e2e8f0;">
+                <!-- SECONDARY DETAILS & HEALTH INFORMATION SUMMARY STATUS (HIDDEN BY DEFAULT) -->
+                <div id="summaryVerificationHealth" class="summary-verification-health hidden" style="display: none; margin-top: 20px; padding-top: 16px; border-top: 1px solid #e2e8f0;">
                     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px;">
                         <div class="summary-status-box" style="padding: 14px; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0;">
                             <div style="font-size: 13px; font-weight: 600; color: #475569; margin-bottom: 8px;">🛡️ Identity & Secondary Details</div>
@@ -385,8 +406,9 @@
                     </h4>
                     <div class="details-grid">
                         <div>
-                            <label>Patient ID</label>
-                            <input id="pPatientId" class="input-readonly" readonly>
+                            <label>Patient ID <span style="font-size: 11px; color: #dc2626; font-weight: 600;">🔒 (Non-editable)</span></label>
+                            <input id="pPatientId" class="input-readonly" readonly disabled style="background: #f1f5f9; cursor: not-allowed; color: #64748b; font-weight: bold; border-color: #cbd5e1; pointer-events: none;" title="Patient ID is locked and cannot be edited" tabindex="-1">
+                            <small style="color: #64748b; font-size: 11px; display: block; margin-top: 3px;">Permanently assigned identifier</small>
                         </div>
 
                         <div>
@@ -505,12 +527,12 @@
                                 <span class="verif-icon">👤</span>
                                 <div>
                                     <b>Face Verification</b>
-                                    <div class="verif-desc">Biometric facial verification using configured cloud vision services.</div>
+                                    <div class="verif-desc">Biometric facial verification and enrollment using device camera and MediCare Vision Engine.</div>
                                 </div>
                             </div>
                             <div class="verif-actions">
                                 <span id="verifFaceBadge" class="status-badge status-unconfigured">Not configured</span>
-                                <button type="button" class="btn-small secondary" onclick="checkFaceVerification()">
+                                <button type="button" class="btn-small primary" onclick="openFaceVerificationModal()">
                                     Manage Face Verification
                                 </button>
                             </div>
@@ -561,8 +583,8 @@
                             </div>
                             <div class="verif-actions">
                                 <span id="verifLivenessBadge" class="status-badge status-unconfigured">Not configured</span>
-                                <button type="button" class="btn-small secondary" onclick="checkLivenessVerification()">
-                                    Check Liveness Service
+                                <button type="button" class="btn-small secondary" onclick="startLivenessVerification()">
+                                    Verify Liveness Presence
                                 </button>
                             </div>
                         </div>
@@ -705,18 +727,28 @@
         </div>
 
 
-        <!-- ================= 2. MEDICAL FILES CARD ================= -->
+        <!-- ================= 2. MEDICAL FILES CARD (SHOW ALL FILES) ================= -->
         <div id="medicalFilesCard" class="profile-card" style="margin-top: 25px;">
-            <div class="summary-card-header">
-                <h3>📁 Medical Files</h3>
-                <button type="button" class="btn-small primary" onclick="openFileUploadModal()">
-                    + Add New Medical File
-                </button>
+            <div class="summary-card-header" style="justify-content: space-between; align-items: center; display: flex; flex-wrap: wrap; gap: 10px;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <h3 style="margin: 0;">📁 Medical Files & Reports</h3>
+                    <span id="filesCountBadge" class="badge-tag" style="background:#e0f2fe; color:#0369a1; font-size:11px; padding:3px 8px;">0 files</span>
+                </div>
+                <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                    <button type="button" class="btn-small success" style="background: #059669; color: white;" onclick="openReportCameraModal()" title="Take a live photo of a paper medical report or prescription">
+                        📸 Take Photo of Report
+                    </button>
+                    <button type="button" class="btn-small primary" onclick="openFileUploadModal()" title="Upload existing report file (PDF, JPG, PNG)">
+                        + Upload File
+                    </button>
+                    <button type="button" class="btn-small secondary" onclick="openFirstTimeHealthModal()" title="Record or update your blood pressure and sugar readings">
+                        🩺 Record Health Vitals (BP, Sugar)
+                    </button>
+                </div>
             </div>
 
             <p style="color: #64748b; font-size: 14px; margin-bottom: 14px;">
-                Securely upload and store your health records, blood reports, prescriptions, or scans (PDF, JPG, JPEG, PNG, DOC, DOCX).
-                Metadata is stored in PostgreSQL and files can be analyzed directly with the <b>AI Health Assistant</b>.
+                Securely store your health records, blood reports, prescriptions, and baseline vitals. Snap a photo of physical reports with the camera, upload files, and analyze them directly with the <b>AI Health Assistant</b>.
             </p>
 
             <div id="medicalFilesContainer" class="files-container">
@@ -1151,8 +1183,8 @@
         </div>
 
 
-        <!-- AUDIT LOG SECTION -->
-        <div class="audit-section">
+        <!-- AUDIT LOG SECTION (HIDDEN) -->
+        <div id="auditLogSection" class="audit-section hidden" style="display: none;">
 
             <div class="audit-header">
 
@@ -1490,6 +1522,72 @@
     </div>
 </div>
 
+<!-- ================= PATIENT BIOMETRIC FACE VERIFICATION & ENROLLMENT MODAL ================= -->
+<div id="patientFaceModal" class="modal-overlay hidden">
+    <div class="modal-card camera-modal-card" style="max-width: 540px;">
+        <div class="modal-header">
+            <h2>👤 Biometric Face Verification & Enrollment</h2>
+            <button class="close-modal" onclick="closeFaceVerificationModal()">✕</button>
+        </div>
+        <div class="modal-body">
+            <p style="color: #64748b; font-size: 13.5px; margin-bottom: 12px;">
+                Align your face inside the oval guide below. The <b>MediCare Biometric Vision Engine</b> will capture and register your facial template in PostgreSQL for emergency identification and profile verification.
+            </p>
+
+            <!-- LIVE CAMERA VIEW -->
+            <div id="faceEnrollLiveView">
+                <div class="patient-camera-viewport" style="position: relative; border-radius: 12px; overflow: hidden; background: #0f172a; height: 320px; display: flex; align-items: center; justify-content: center;">
+                    <video id="faceCameraVideo" autoplay playsinline muted style="width: 100%; height: 100%; object-fit: cover;"></video>
+                    <div class="patient-camera-guide"></div>
+                    <canvas id="faceCameraCanvas" style="display:none;"></canvas>
+                    <div id="faceLiveIndicator" style="position: absolute; top: 12px; left: 12px; background: rgba(16, 185, 129, 0.9); color: white; padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: bold; display: flex; align-items: center; gap: 6px;">
+                        <span style="width: 8px; height: 8px; border-radius: 50%; background: #ffffff;"></span>
+                        Biometric Scanner Active
+                    </div>
+                </div>
+
+                <div id="faceStatusFeedback" style="text-align: center; margin-top: 10px; font-size: 13px; font-weight: 600; color: #0284c7;">
+                    📸 Align your face and click "Capture & Enroll Face"
+                </div>
+
+                <div class="button-row" style="margin-top: 16px; display: flex; gap: 8px; justify-content: space-between; flex-wrap: wrap;">
+                    <button type="button" class="btn-small secondary" onclick="switchFaceCameraFacing()">
+                        🔄 Switch Camera
+                    </button>
+                    <div style="display: flex; gap: 8px;">
+                        <button type="button" class="btn-secondary" onclick="closeFaceVerificationModal()">
+                            Cancel
+                        </button>
+                        <button type="button" id="enrollFaceBtn" class="btn-success" style="padding: 9px 18px; font-weight: bold; background: #059669; color: white;" onclick="captureAndEnrollFaceBiometric()">
+                            📸 Capture & Verify Face
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ENROLLMENT SUCCESS PREVIEW -->
+            <div id="faceEnrollSuccessView" class="hidden" style="text-align: center; padding: 16px 0;">
+                <div style="font-size: 40px; margin-bottom: 8px;">✅</div>
+                <h3 style="color: #0f172a; margin: 0 0 6px 0;">Face Biometric Verified & Active</h3>
+                <p style="color: #64748b; font-size: 13px; margin-bottom: 14px;">
+                    Your facial biometric template has been registered and verified in PostgreSQL with <b>MediCare Biometric Vision Engine</b>.
+                </p>
+                <div style="display: flex; justify-content: center; margin-bottom: 16px;">
+                    <img id="enrolledFacePreviewImg" style="width: 140px; height: 140px; border-radius: 50%; object-fit: cover; border: 3px solid #10b981; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.25);" alt="Enrolled Face">
+                </div>
+                <div style="display: flex; gap: 10px; justify-content: center;">
+                    <button type="button" class="btn-small secondary" onclick="retakeFaceEnrollment()">
+                        🔄 Re-Enroll Face
+                    </button>
+                    <button type="button" class="btn-success" style="background: #059669; color: white; padding: 8px 20px;" onclick="closeFaceVerificationModal()">
+                        Done
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- ================= PATIENT CAMERA VERIFICATION MODAL ================= -->
 <div id="patientCameraModal" class="modal-overlay hidden">
     <div class="modal-card camera-modal-card">
@@ -1536,6 +1634,14 @@
                 <div style="font-size: 12px; color: #64748b; margin-top: 4px;">PDF, JPG, JPEG, PNG, DOC, DOCX</div>
                 <input type="file" id="docFileInput" style="display: none;" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" onchange="handleFileSelected(event)">
             </div>
+            <div style="text-align: center; margin: 10px 0 14px 0;">
+                <span style="font-size: 12px; color: #64748b;">— OR —</span>
+                <div style="margin-top: 6px;">
+                    <button type="button" class="btn-small success" style="background: #059669; color: white; width: 100%; padding: 8px;" onclick="closeFileUploadModal(); openReportCameraModal();">
+                        📸 Snap Photo of Report with Camera
+                    </button>
+                </div>
+            </div>
             <div id="selectedFileInfo" class="hidden" style="margin-bottom: 14px; padding: 10px 14px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;">
                 <div style="font-weight: 600; color: #0f172a; font-size: 13px;" id="selectedFileName">-</div>
                 <div style="font-size: 12px; color: #64748b;" id="selectedFileSize">-</div>
@@ -1547,6 +1653,192 @@
                 </button>
                 <button type="button" id="confirmUploadBtn" class="primary" onclick="submitFileUpload()" disabled>
                     ⬆️ Upload to PostgreSQL
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ================= REPORT CAMERA MODAL (CAPTURE PHOTOS OF PHYSICAL MEDICAL REPORTS) ================= -->
+<div id="reportCameraModal" class="modal-backdrop hidden">
+    <div class="modal-box" style="max-width: 560px;">
+        <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-size: 20px;">📸</span>
+                <h3 style="margin: 0; font-size: 18px; color: #0f172a;">Capture Medical Report Photo</h3>
+            </div>
+            <button type="button" class="close-modal" onclick="closeReportCameraModal()" style="background: none; border: none; font-size: 20px; cursor: pointer; color: #64748b;">✕</button>
+        </div>
+        <div class="modal-body">
+            <p style="color: #64748b; font-size: 13px; margin-bottom: 12px;">
+                Align your physical medical prescription, lab report, or diagnostic paper inside the frame and snap a clear photo. It will be saved directly into your <b>Show All Files</b> library.
+            </p>
+
+            <!-- LIVE CAMERA VIEW -->
+            <div id="reportCameraLiveSection">
+                <div class="report-camera-viewport">
+                    <video id="reportCameraVideo" autoplay playsinline muted></video>
+                    <div class="report-scanner-frame">
+                        <div class="frame-corner top-left"></div>
+                        <div class="frame-corner top-right"></div>
+                        <div class="frame-corner bottom-left"></div>
+                        <div class="frame-corner bottom-right"></div>
+                        <div class="scanner-text">📄 Align Report Document Here</div>
+                    </div>
+                </div>
+
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 14px; gap: 10px; flex-wrap: wrap;">
+                    <button type="button" class="btn-small secondary" onclick="switchReportCamera()">
+                        🔄 Switch Camera
+                    </button>
+                    <button type="button" id="snapReportBtn" class="btn-success" style="padding: 10px 22px; font-size: 14px; font-weight: bold; background: #059669; color: white;" onclick="captureReportPhoto()">
+                        📸 Snap Photo
+                    </button>
+                    <button type="button" class="btn-small secondary" onclick="closeReportCameraModal()">
+                        Cancel
+                    </button>
+                </div>
+            </div>
+
+            <!-- SNAPSHOT PREVIEW & CONFIRM SECTION (HIDDEN INITIALLY) -->
+            <div id="reportCameraPreviewSection" class="hidden">
+                <div class="report-preview-container" style="text-align: center; background: #0f172a; border-radius: 10px; overflow: hidden; max-height: 320px; display: flex; align-items: center; justify-content: center;">
+                    <canvas id="reportCameraCanvas" style="max-width: 100%; max-height: 320px; object-fit: contain;"></canvas>
+                </div>
+
+                <div style="margin-top: 14px;">
+                    <label style="display: block; font-size: 12.5px; font-weight: bold; color: #334155; margin-bottom: 5px;">Report Document Name *</label>
+                    <input id="reportPhotoName" type="text" placeholder="e.g. Blood_Test_Report_Oct" style="width: 100%; padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 14px;">
+                </div>
+
+                <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 16px;">
+                    <button type="button" class="btn-small secondary" onclick="retakeReportPhoto()">
+                        🔄 Retake
+                    </button>
+                    <button type="button" id="saveReportPhotoBtn" class="btn-small primary" style="background: #0f766e; color: white; padding: 9px 18px;" onclick="saveReportPhotoToFile()">
+                        💾 Save to Show All Files
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ================= FIRST-TIME LOGIN HEALTH DETAILS SETUP MODAL ================= -->
+<div id="firstTimeHealthModal" class="modal-backdrop hidden">
+    <div class="modal-box" style="max-width: 580px; max-height: 90vh; overflow-y: auto;">
+        <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-size: 22px;">🩺</span>
+                <h3 style="margin: 0; font-size: 18px; color: #0f172a;">First-Time Health Details Setup</h3>
+            </div>
+            <button type="button" class="close-modal" onclick="closeFirstTimeHealthModal()" style="background: none; border: none; font-size: 20px; cursor: pointer; color: #64748b;">✕</button>
+        </div>
+        <div class="modal-body">
+            <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 12px; margin-bottom: 16px; font-size: 13px; color: #166534; line-height: 1.5;">
+                👋 <b>Welcome to MediCare!</b> Please enter your baseline health indicators (Blood Pressure, Sugar level, Heart Rate, etc.). We will automatically compile an official <b>Initial Health & Vitals Report (PDF)</b> and store it in your <b>Show All Files</b> vault.
+            </div>
+
+            <div class="vitals-form-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-bottom: 14px;">
+                <!-- Blood Pressure -->
+                <div class="vitals-input-card" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px;">
+                    <label style="font-size: 12px; font-weight: bold; color: #1e293b; display: block; margin-bottom: 4px;">
+                        ❤️ Blood Pressure (BP)
+                    </label>
+                    <input id="vitalsBp" type="text" placeholder="e.g. 120/80" style="width: 100%; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
+                    <small style="color: #64748b; font-size: 11px;">Systolic / Diastolic (mmHg)</small>
+                </div>
+
+                <!-- Blood Sugar -->
+                <div class="vitals-input-card" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px;">
+                    <label style="font-size: 12px; font-weight: bold; color: #1e293b; display: block; margin-bottom: 4px;">
+                        🩸 Blood Sugar / Glucose
+                    </label>
+                    <div style="display: flex; gap: 6px;">
+                        <input id="vitalsSugar" type="number" placeholder="e.g. 95" style="flex: 1; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
+                        <select id="vitalsSugarType" style="padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 12px; background: white;">
+                            <option value="Random">Random</option>
+                            <option value="Fasting">Fasting</option>
+                            <option value="Post-Meal">Post-Meal</option>
+                        </select>
+                    </div>
+                    <small style="color: #64748b; font-size: 11px;">mg/dL (Glucose)</small>
+                </div>
+
+                <!-- Heart Rate / Pulse -->
+                <div class="vitals-input-card" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px;">
+                    <label style="font-size: 12px; font-weight: bold; color: #1e293b; display: block; margin-bottom: 4px;">
+                        💓 Heart Rate / Pulse
+                    </label>
+                    <input id="vitalsPulse" type="number" placeholder="e.g. 72" style="width: 100%; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
+                    <small style="color: #64748b; font-size: 11px;">beats per minute (bpm)</small>
+                </div>
+
+                <!-- SpO2 Oxygen -->
+                <div class="vitals-input-card" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px;">
+                    <label style="font-size: 12px; font-weight: bold; color: #1e293b; display: block; margin-bottom: 4px;">
+                        🫁 Oxygen Saturation (SpO2)
+                    </label>
+                    <input id="vitalsSpo2" type="number" placeholder="e.g. 98" style="width: 100%; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
+                    <small style="color: #64748b; font-size: 11px;">Percentage (%)</small>
+                </div>
+
+                <!-- Body Temperature -->
+                <div class="vitals-input-card" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px;">
+                    <label style="font-size: 12px; font-weight: bold; color: #1e293b; display: block; margin-bottom: 4px;">
+                        🌡️ Body Temperature
+                    </label>
+                    <input id="vitalsTemperature" type="text" placeholder="e.g. 98.6" style="width: 100%; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
+                    <small style="color: #64748b; font-size: 11px;">Degrees Fahrenheit (°F)</small>
+                </div>
+
+                <!-- Body Weight -->
+                <div class="vitals-input-card" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px;">
+                    <label style="font-size: 12px; font-weight: bold; color: #1e293b; display: block; margin-bottom: 4px;">
+                        ⚖️ Body Weight
+                    </label>
+                    <input id="vitalsWeight" type="text" placeholder="e.g. 68" style="width: 100%; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
+                    <small style="color: #64748b; font-size: 11px;">Kilograms (kg)</small>
+                </div>
+            </div>
+
+            <!-- Health Screening Checkboxes -->
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; margin-bottom: 14px;">
+                <label style="font-size: 12.5px; font-weight: bold; color: #1e293b; display: block; margin-bottom: 8px;">
+                    📋 Known Clinical Conditions (Select all that apply)
+                </label>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px; font-size: 13px;">
+                    <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                        <input type="checkbox" id="vitalsHypertensionCheck"> High Blood Pressure
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                        <input type="checkbox" id="vitalsDiabetesCheck"> Diabetes / High Sugar
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                        <input type="checkbox" id="vitalsAllergiesCheck"> Drug / Food Allergies
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                        <input type="checkbox" id="vitalsAsthmaCheck"> Asthma / Breathing Issues
+                    </label>
+                </div>
+            </div>
+
+            <!-- Notes & Medications -->
+            <div style="margin-bottom: 14px;">
+                <label style="font-size: 12.5px; font-weight: bold; color: #334155; display: block; margin-bottom: 4px;">
+                    Current Medications / Doctor Recommendations (Optional)
+                </label>
+                <textarea id="vitalsNotes" placeholder="e.g. Daily multivitamins, Metformin 500mg, Paracetamol as needed" style="width: 100%; height: 60px; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;"></textarea>
+            </div>
+
+            <p id="vitalsErrorMsg" class="error hidden" style="font-size: 13px; color: #dc2626; margin-bottom: 10px;"></p>
+
+            <div style="display: flex; gap: 10px; justify-content: flex-end; align-items: center;">
+                <button type="button" class="btn-small secondary" onclick="closeFirstTimeHealthModal()">
+                    Fill Later
+                </button>
+                <button type="button" id="saveVitalsBtn" class="btn-small primary" style="background: #0f766e; color: white; padding: 9px 20px; font-size: 13.5px;" onclick="submitFirstTimeHealthVitals()">
+                    💾 Save & Generate Report in Show All Files
                 </button>
             </div>
         </div>

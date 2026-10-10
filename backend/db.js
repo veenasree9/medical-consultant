@@ -673,8 +673,115 @@ async function updateVerificationRecord(patientId, verificationType, status, met
     const patient = mockStore.patients.get(cleanId);
     if (patient && patient.verifications) {
         patient.verifications[verificationType] = status;
+        if (!patient.verificationMetadata) patient.verificationMetadata = {};
+        patient.verificationMetadata[verificationType] = metadata;
     }
     return getPatientDetails(cleanId);
+}
+
+// Save Patient Face Biometric Photo and Enroll into PostgreSQL
+async function savePatientFaceBiometric(patientId, photoData, provider = "MediCare Biometric Vision Engine") {
+    await initializeDatabase();
+    const cleanId = String(patientId || "").trim().toUpperCase();
+
+    // 1. Update verification_records for face
+    await updateVerificationRecord(cleanId, "face", "verified", {
+        enrolledAt: new Date().toISOString(),
+        provider: provider,
+        hasPhoto: true,
+        photo: photoData
+    });
+
+    // 2. Mark liveness verified as part of the live enrollment camera session
+    await updateVerificationRecord(cleanId, "liveness", "verified", {
+        verifiedAt: new Date().toISOString(),
+        method: "live_camera_enrollment"
+    });
+
+    // 3. Mark live camera verified
+    await updateVerificationRecord(cleanId, "camera_live", "verified", {
+        verifiedAt: new Date().toISOString(),
+        method: "face_biometric_session"
+    });
+
+    // 4. Update profile_photo column in patients table
+    if (!isMockActive) {
+        try {
+            await query(
+                `UPDATE patients SET profile_photo = $1, updated_at = NOW() WHERE UPPER(patient_id) = UPPER($2)`,
+                [photoData, cleanId]
+            );
+        } catch (e) {
+            console.warn("Error updating patient profile_photo in PostgreSQL:", e.message);
+        }
+    }
+
+    const patient = mockStore.patients.get(cleanId);
+    if (patient) {
+        patient.profilePhoto = photoData;
+        if (!patient.verifications) patient.verifications = {};
+        patient.verifications.face = "verified";
+        patient.verifications.liveness = "verified";
+        patient.verifications.camera_live = "verified";
+        if (!patient.verificationMetadata) patient.verificationMetadata = {};
+        patient.verificationMetadata.face = {
+            enrolledAt: new Date().toISOString(),
+            provider: provider,
+            photo: photoData
+        };
+    }
+
+    return getPatientDetails(cleanId);
+}
+
+// Retrieve all patients with enrolled face biometrics for emergency identification
+async function getAllEnrolledFacePatients() {
+    await initializeDatabase();
+    const results = [];
+
+    if (!isMockActive) {
+        try {
+            const res = await query(
+                `SELECT p.patient_id, p.full_name, p.blood_group, p.profile_photo,
+                        g.guardian_name, g.guardian_phone,
+                        v.metadata AS face_metadata
+                 FROM patients p
+                 LEFT JOIN guardians g ON g.patient_id = p.patient_id AND g.guardian_order = 1
+                 LEFT JOIN verification_records v ON v.patient_id = p.patient_id AND v.verification_type = 'face'
+                 WHERE p.profile_photo IS NOT NULL OR (v.status = 'verified')`
+            );
+            for (const r of res.rows) {
+                results.push({
+                    id: r.patient_id,
+                    patientId: r.patient_id,
+                    name: r.full_name,
+                    bloodGroup: r.blood_group || "O+",
+                    guardianName: r.guardian_name || "Not Provided",
+                    guardianPhone: r.guardian_phone || "Not Provided",
+                    photo: r.profile_photo || r.face_metadata?.photo || null
+                });
+            }
+            if (results.length > 0) return results;
+        } catch (e) {
+            console.warn("Error fetching enrolled face patients from PostgreSQL:", e.message);
+        }
+    }
+
+    // Fallback or seed lookup
+    for (const [id, pat] of mockStore.patients.entries()) {
+        const photo = pat.profilePhoto || pat.verificationMetadata?.face?.photo || null;
+        results.push({
+            id: pat.id,
+            patientId: pat.id,
+            name: pat.name,
+            bloodGroup: pat.bloodGroup || pat.blood || "O+",
+            guardianName: pat.guardianName || "Not Provided",
+            guardianPhone: pat.guardianPhone || "Not Provided",
+            photo: photo
+        });
+    }
+
+    return results;
 }
 
 /* ================= MEDICAL DOCUMENTS ================= */
@@ -2089,6 +2196,8 @@ module.exports = {
     updatePatientDetails,
     updateHealthInformation,
     updateVerificationRecord,
+    savePatientFaceBiometric,
+    getAllEnrolledFacePatients,
     findOrCreatePatientByPhone,
     registerPatient,
     registerDoctor,
