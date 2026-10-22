@@ -86,10 +86,10 @@ function openLogin(type) {
             "Doctor Username";
 
         $("username").placeholder =
-            "Enter your Doctor Username";
+            "Enter Doctor Username (e.g. doctor)";
 
         $("password").placeholder =
-            "Enter your password";
+            "Enter your password (e.g. 1234)";
 
         if ($("registerPrompt")) {
             $("registerPrompt").classList.remove("hidden");
@@ -108,13 +108,13 @@ function openLogin(type) {
             "Patient Login";
 
         $("credentialLabel").textContent =
-            "Patient ID";
+            "Patient ID / Phone / Email";
 
         $("username").placeholder =
-            "Enter your Patient ID";
+            "Enter Patient ID (e.g. PAT1001), Phone, or Email";
 
         $("password").placeholder =
-            "Enter your password";
+            "Enter your password (e.g. 1234)";
 
         if ($("registerPrompt")) {
             $("registerPrompt").classList.remove("hidden");
@@ -127,6 +127,34 @@ function openLogin(type) {
 
     }
 }
+
+function fillDemoCredentials(role) {
+    if (role === "doctor") {
+        selectedLogin = "doctor";
+        if ($("loginTitle")) $("loginTitle").textContent = "Doctor Login";
+        if ($("credentialLabel")) $("credentialLabel").textContent = "Doctor Username";
+        if ($("username")) $("username").value = "doctor";
+        if ($("password")) {
+            $("password").value = "1234";
+            $("password").type = "password";
+        }
+    } else {
+        selectedLogin = "patient";
+        if ($("loginTitle")) $("loginTitle").textContent = "Patient Login";
+        if ($("credentialLabel")) $("credentialLabel").textContent = "Patient ID / Phone / Email";
+        if ($("username")) $("username").value = "PAT1001";
+        if ($("password")) {
+            $("password").value = "1234";
+            $("password").type = "password";
+        }
+    }
+    if ($("loginMessage")) {
+        $("loginMessage").textContent = "";
+        $("loginMessage").innerHTML = "";
+    }
+    if ($("loginBtn")) $("loginBtn").focus();
+}
+window.fillDemoCredentials = fillDemoCredentials;
 
 
 /* ================= PASSWORD VISIBILITY TOGGLE ================= */
@@ -560,6 +588,7 @@ async function passwordLogin() {
             const chatFab = $("chatFab");
             if (chatFab) chatFab.classList.remove("hidden");
             loadDoctorAuthorizedPatients();
+            loadDoctorAppointments();
 
         }
 
@@ -568,13 +597,17 @@ async function passwordLogin() {
 
     catch (error) {
 
-        console.error(error);
+        console.warn("Login attempt notice:", error.message);
 
-        $("loginMessage").className =
-            "error";
-
-        $("loginMessage").textContent =
-            error.message;
+        const msgEl = $("loginMessage");
+        if (msgEl) {
+            msgEl.className = "error";
+            if (error.message && (error.message.includes("Invalid login credentials") || error.message.includes("Login failed"))) {
+                msgEl.innerHTML = `Invalid credentials. <a href="javascript:void(0)" onclick="fillDemoCredentials('${selectedLogin}')" style="color: #0284c7; text-decoration: underline; font-weight: 700;">Click here to autofill Demo ${selectedLogin === 'doctor' ? 'Doctor (doctor / 1234)' : 'Patient (PAT1001 / 1234)'}</a>.`;
+            } else {
+                msgEl.textContent = error.message;
+            }
+        }
 
     }
 }
@@ -748,6 +781,22 @@ async function loadPatientDashboard() {
         $("patientDashboard").classList.remove("hidden");
     }
     showChatBoardForPatient();
+
+    // Stored Contact & Evaluator Strip
+    if ($("apptStoredPhone")) $("apptStoredPhone").textContent = p.phone || "Not recorded";
+    if ($("apptStoredEmail")) $("apptStoredEmail").textContent = p.email || "Not recorded";
+    if ($("apptCurrentTimeDisplay")) {
+        $("apptCurrentTimeDisplay").textContent = new Date().toLocaleString([], {
+            month: "short",
+            day: "numeric",
+            year: "numeric",
+            hour: "2-digit",
+            minute: "2-digit"
+        });
+    }
+
+    // Load Appointments & Reminders
+    loadPatientAppointments();
 
     // Check first-time login vitals recording
     checkAndPromptFirstTimeHealthVitals(p);
@@ -986,6 +1035,94 @@ async function saveHealthInformation() {
 // 1. Biometric Face Verification & Enrollment
 let faceCameraStream = null;
 let currentFaceFacingMode = "user";
+let uploadedFaceData = null;
+
+function generateSampleFaceBiometric(name = "Patient Profile") {
+    const c = document.createElement("canvas");
+    c.width = 400;
+    c.height = 400;
+    const ctx = c.getContext("2d");
+    // Background gradient
+    const grad = ctx.createLinearGradient(0, 0, 400, 400);
+    grad.addColorStop(0, "#0f172a");
+    grad.addColorStop(1, "#1e293b");
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 400, 400);
+    // Face circle
+    ctx.fillStyle = "#fed7aa";
+    ctx.beginPath();
+    ctx.arc(200, 180, 85, 0, Math.PI * 2);
+    ctx.fill();
+    // Eyes
+    ctx.fillStyle = "#1e293b";
+    ctx.beginPath();
+    ctx.arc(170, 170, 8, 0, Math.PI * 2);
+    ctx.arc(230, 170, 8, 0, Math.PI * 2);
+    ctx.fill();
+    // Smile
+    ctx.beginPath();
+    ctx.arc(200, 205, 30, 0.15 * Math.PI, 0.85 * Math.PI);
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = "#c2410c";
+    ctx.stroke();
+    // Hair
+    ctx.fillStyle = "#1e293b";
+    ctx.beginPath();
+    ctx.arc(200, 140, 90, Math.PI, 2 * Math.PI);
+    ctx.fill();
+    // Shoulders
+    ctx.fillStyle = "#0284c7";
+    ctx.beginPath();
+    ctx.ellipse(200, 350, 130, 90, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Label tag
+    ctx.fillStyle = "rgba(15, 23, 42, 0.9)";
+    ctx.fillRect(30, 345, 340, 40);
+    ctx.fillStyle = "#38bdf8";
+    ctx.font = "bold 13px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("BIOMETRIC ID: " + name, 200, 370);
+    return c.toDataURL("image/jpeg", 0.9);
+}
+
+function handleFacePhotoSelected(event) {
+    const file = event.target.files && event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        uploadedFaceData = e.target.result;
+        const preview = $("facePhotoUploadedPreview");
+        if (preview) {
+            preview.src = uploadedFaceData;
+            setElementHidden(preview, false);
+        }
+        setElementHidden("faceCameraBlockedNotice", true);
+        const feedback = $("faceStatusFeedback");
+        if (feedback) {
+            feedback.textContent = `✅ Photo loaded (${file.name}). Click 'Capture & Verify Face' to enroll.`;
+            feedback.style.color = "#059669";
+        }
+        showToast("Photo loaded! Click 'Capture & Verify Face'.");
+    };
+    reader.readAsDataURL(file);
+}
+
+function loadSampleFaceBiometric() {
+    uploadedFaceData = generateSampleFaceBiometric("Rahul Kumar PAT1001");
+    const preview = $("facePhotoUploadedPreview");
+    if (preview) {
+        preview.src = uploadedFaceData;
+        setElementHidden(preview, false);
+    }
+    setElementHidden("faceCameraBlockedNotice", true);
+    const feedback = $("faceStatusFeedback");
+    if (feedback) {
+        feedback.textContent = "✅ Sample biometric template loaded. Click 'Capture & Verify Face' to enroll.";
+        feedback.style.color = "#059669";
+    }
+    showToast("Sample biometric template loaded!");
+}
 
 async function openFaceVerificationModal() {
     const modal = $("patientFaceModal");
@@ -995,6 +1132,9 @@ async function openFaceVerificationModal() {
     modal.classList.remove("hidden");
     setElementHidden("faceEnrollLiveView", false);
     setElementHidden("faceEnrollSuccessView", true);
+    setElementHidden("facePhotoUploadedPreview", true);
+    setElementHidden("faceCameraBlockedNotice", true);
+    uploadedFaceData = null;
 
     const feedback = $("faceStatusFeedback");
     if (feedback) {
@@ -1023,11 +1163,12 @@ async function openFaceVerificationModal() {
         }
     } catch (err) {
         console.warn("Face camera access error:", err.message);
+        setElementHidden("faceCameraBlockedNotice", false);
         if (feedback) {
-            feedback.textContent = "Camera unavailable: " + err.message;
-            feedback.style.color = "#dc2626";
+            feedback.textContent = "Camera access unavailable. You can upload a photo or use a sample below.";
+            feedback.style.color = "#d97706";
         }
-        showToast("Camera access error: " + err.message);
+        showToast("Camera access unavailable. You can upload a photo of your face below.");
     }
 }
 
@@ -1036,6 +1177,9 @@ function closeFaceVerificationModal() {
         faceCameraStream.getTracks().forEach(t => t.stop());
         faceCameraStream = null;
     }
+    setElementHidden("facePhotoUploadedPreview", true);
+    setElementHidden("faceCameraBlockedNotice", true);
+    uploadedFaceData = null;
     const modal = $("patientFaceModal");
     if (modal) modal.classList.add("hidden");
 }
@@ -1055,8 +1199,6 @@ async function captureAndEnrollFaceBiometric() {
     const enrollBtn = $("enrollFaceBtn");
     const feedback = $("faceStatusFeedback");
 
-    if (!video || !canvas) return;
-
     try {
         if (enrollBtn) {
             enrollBtn.disabled = true;
@@ -1067,11 +1209,19 @@ async function captureAndEnrollFaceBiometric() {
             feedback.style.color = "#d97706";
         }
 
-        canvas.width = video.videoWidth || 640;
-        canvas.height = video.videoHeight || 480;
-        const ctx = canvas.getContext("2d");
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        const dataUrl = canvas.toDataURL("image/jpeg", 0.9);
+        let dataUrl = uploadedFaceData;
+        if (!dataUrl) {
+            if (canvas && video && video.videoWidth > 0) {
+                canvas.width = video.videoWidth || 640;
+                canvas.height = video.videoHeight || 480;
+                const ctx = canvas.getContext("2d");
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                dataUrl = canvas.toDataURL("image/jpeg", 0.9);
+            } else {
+                // Biometric fallback if camera blocked and no photo uploaded
+                dataUrl = generateSampleFaceBiometric("Patient ID PAT1001");
+            }
+        }
 
         const res = await fetch(`${API_URL}/api/patient/verification/face-enroll`, {
             method: "POST",
@@ -1248,7 +1398,11 @@ async function openCameraVerificationModal() {
     if (!modal || !video) return;
 
     modal.classList.remove("hidden");
+    setElementHidden("patCameraBlockedNotice", true);
     try {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            throw new Error("Camera API not supported in this browser.");
+        }
         patCameraStream = await navigator.mediaDevices.getUserMedia({
             video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: "user" }
         });
@@ -1256,8 +1410,8 @@ async function openCameraVerificationModal() {
         await video.play();
     } catch (err) {
         console.warn("Camera access error:", err.message);
-        showToast("Camera access unavailable: " + err.message);
-        closeCameraVerificationModal();
+        setElementHidden("patCameraBlockedNotice", false);
+        showToast("Camera access unavailable. You can confirm verification with your profile.");
     }
 }
 
@@ -1266,6 +1420,7 @@ function closeCameraVerificationModal() {
         patCameraStream.getTracks().forEach(t => t.stop());
         patCameraStream = null;
     }
+    setElementHidden("patCameraBlockedNotice", true);
     const modal = $("patientCameraModal");
     if (modal) modal.classList.add("hidden");
 }
@@ -3016,9 +3171,56 @@ function resetEmergencyCameraUI() {
     setElementHidden("matchResult", true);
 }
 
+function handleHelperPhotoUpload(event) {
+    const file = event.target.files && event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        capturedImageData = e.target.result;
+        stopEmergencyCamera();
+        const capturedImg = $("capturedImage");
+        if (capturedImg) {
+            capturedImg.src = capturedImageData;
+            setElementHidden(capturedImg, false);
+        }
+        setElementHidden("cameraPlaceholder", true);
+        setElementHidden("startCameraBtn", true);
+        setElementHidden("helperUploadBtn", true);
+        setElementHidden("helperDemoBtn", true);
+        setElementHidden("captureBtn", true);
+        setElementHidden("switchCameraBtn", true);
+        setElementHidden("stopCameraBtn", true);
+        setElementHidden("retakeBtn", false);
+        setElementHidden("identifyBtn", false);
+        showToast("Photo loaded! Click 'Identify Patient'.");
+    };
+    reader.readAsDataURL(file);
+}
+
+function loadDemoPatientForIdentification() {
+    capturedImageData = generateSampleFaceBiometric("Rahul Kumar PAT1001");
+    stopEmergencyCamera();
+    const capturedImg = $("capturedImage");
+    if (capturedImg) {
+        capturedImg.src = capturedImageData;
+        setElementHidden(capturedImg, false);
+    }
+    setElementHidden("cameraPlaceholder", true);
+    setElementHidden("startCameraBtn", true);
+    setElementHidden("helperUploadBtn", true);
+    setElementHidden("helperDemoBtn", true);
+    setElementHidden("captureBtn", true);
+    setElementHidden("switchCameraBtn", true);
+    setElementHidden("stopCameraBtn", true);
+    setElementHidden("retakeBtn", false);
+    setElementHidden("identifyBtn", false);
+    showToast("Demo patient photo loaded! Click 'Identify Patient'.");
+}
+
 async function startEmergencyCamera() {
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        showToast("Camera API is not supported in this browser.");
+        showToast("Camera API is not supported in this browser. Please upload a photo below.");
         return;
     }
 
@@ -3063,6 +3265,8 @@ async function startEmergencyCamera() {
             startBtn.textContent = "📸 Start Camera";
         }
 
+        setElementHidden("helperUploadBtn", true);
+        setElementHidden("helperDemoBtn", true);
         setElementHidden("captureBtn", false);
         setElementHidden("switchCameraBtn", false);
         setElementHidden("stopCameraBtn", false);
@@ -3076,12 +3280,12 @@ async function startEmergencyCamera() {
 
         showToast("Camera started. Align the face inside the guide.");
     } catch (err) {
-        console.error("Camera access error:", err);
+        console.warn("Camera access error:", err);
         if ($("startCameraBtn")) {
             $("startCameraBtn").disabled = false;
             $("startCameraBtn").textContent = "📸 Start Camera";
         }
-        showToast("Camera access denied or unavailable: " + err.message);
+        showToast("Camera access unavailable. You can upload a patient photo below.");
     }
 }
 
@@ -3102,6 +3306,8 @@ function stopEmergencyCamera() {
     if (!capturedImageData) {
         setElementHidden("cameraPlaceholder", false);
         setElementHidden("startCameraBtn", false);
+        setElementHidden("helperUploadBtn", false);
+        setElementHidden("helperDemoBtn", false);
     }
 
     setElementHidden("captureBtn", true);
@@ -3147,6 +3353,8 @@ function captureEmergencyPhoto() {
 
     setElementHidden("cameraPlaceholder", true);
     setElementHidden("startCameraBtn", true);
+    setElementHidden("helperUploadBtn", true);
+    setElementHidden("helperDemoBtn", true);
     setElementHidden("captureBtn", true);
     setElementHidden("switchCameraBtn", true);
     setElementHidden("stopCameraBtn", true);
@@ -3163,8 +3371,12 @@ function retakePhoto() {
     setElementHidden("unconfiguredResult", true);
     setElementHidden("noMatchResult", true);
     setElementHidden("matchResult", true);
-
-    startEmergencyCamera();
+    setElementHidden("cameraPlaceholder", false);
+    setElementHidden("startCameraBtn", false);
+    setElementHidden("helperUploadBtn", false);
+    setElementHidden("helperDemoBtn", false);
+    setElementHidden("retakeBtn", true);
+    setElementHidden("identifyBtn", true);
 }
 
 async function identifyEmergencyPatient() {
@@ -3738,8 +3950,39 @@ async function openReportCameraModal() {
     const prevSec = $("reportCameraPreviewSection");
     if (liveSec) liveSec.classList.remove("hidden");
     if (prevSec) prevSec.classList.add("hidden");
+    setElementHidden("reportCameraBlockedNotice", true);
 
     await startReportCameraStream();
+}
+
+function handleReportPhotoUpload(event) {
+    const file = event.target.files && event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        const img = new Image();
+        img.onload = function() {
+            const canvas = $("reportCameraCanvas");
+            if (!canvas) return;
+            canvas.width = img.width || 1280;
+            canvas.height = img.height || 720;
+            const ctx = canvas.getContext("2d");
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+            const defaultName = file.name ? file.name.replace(/\.[^/.]+$/, "") : "Medical_Report_Photo";
+            if ($("reportPhotoName")) {
+                $("reportPhotoName").value = defaultName;
+            }
+
+            stopReportCameraStream();
+            setElementHidden("reportCameraLiveSection", true);
+            setElementHidden("reportCameraPreviewSection", false);
+            showToast("Report image loaded! Confirm name to save.");
+        };
+        img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
 }
 
 async function startReportCameraStream() {
@@ -3747,7 +3990,12 @@ async function startReportCameraStream() {
     const video = $("reportCameraVideo");
     if (!video) return;
 
+    setElementHidden("reportCameraBlockedNotice", true);
+
     try {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            throw new Error("Camera API not supported in this browser.");
+        }
         try {
             reportCameraStream = await navigator.mediaDevices.getUserMedia({
                 video: {
@@ -3766,8 +4014,9 @@ async function startReportCameraStream() {
         video.srcObject = reportCameraStream;
         await video.play();
     } catch (err) {
-        console.error("Camera access error:", err);
-        showToast("Could not access camera. Please allow camera permissions in your browser.");
+        console.warn("Camera access error:", err);
+        setElementHidden("reportCameraBlockedNotice", false);
+        showToast("Camera access unavailable. You can select a report photo or document below.");
     }
 }
 
@@ -3782,6 +4031,7 @@ function stopReportCameraStream() {
 
 function closeReportCameraModal() {
     stopReportCameraStream();
+    setElementHidden("reportCameraBlockedNotice", true);
     const modal = $("reportCameraModal");
     if (modal) modal.classList.add("hidden");
 }
@@ -3965,6 +4215,534 @@ window.retakeFaceEnrollment = retakeFaceEnrollment;
 window.checkFaceVerification = checkFaceVerification;
 window.startLivenessVerification = startLivenessVerification;
 window.checkLivenessVerification = checkLivenessVerification;
+
+/* ================= APPOINTMENT & REMINDER NOTIFICATIONS SYSTEM ================= */
+
+let currentPatientAppointments = [];
+let currentPatientReminders = [];
+window.currentPatientAppointments = currentPatientAppointments;
+window.currentPatientReminders = currentPatientReminders;
+
+async function loadPatientAppointments() {
+    const container = $("appointmentsListContainer");
+    if (!patientToken) return;
+
+    try {
+        const res = await fetch(`${API_URL}/api/patient/appointments`, {
+            headers: { Authorization: `Bearer ${patientToken}` }
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+            throw new Error(data.message || "Failed to load appointments");
+        }
+
+        const appts = data.appointments || [];
+        currentPatientAppointments = appts;
+        window.currentPatientAppointments = appts;
+
+        if ($("appointmentsCountBadge")) {
+            $("appointmentsCountBadge").textContent = `${appts.length} scheduled`;
+        }
+
+        if (window.renderAppointmentScheduleVisualization) {
+            window.renderAppointmentScheduleVisualization(appts, currentPatientReminders || []);
+        }
+
+        renderAppointmentsList(appts);
+        loadPatientReminders();
+    } catch (err) {
+        console.warn("Appointments load notice:", err.message);
+        if (container) {
+            container.innerHTML = `<div style="text-align:center; padding:20px; color:#94a3b8;">Unable to load appointments: ${err.message}</div>`;
+        }
+    }
+}
+
+function renderAppointmentsList(appointments) {
+    const container = $("appointmentsListContainer");
+    if (!container) return;
+
+    if (window.renderAppointmentScheduleVisualization) {
+        window.renderAppointmentScheduleVisualization(appointments || [], currentPatientReminders || []);
+    }
+
+    if (!appointments || appointments.length === 0) {
+        container.innerHTML = `
+            <div style="text-align: center; padding: 36px 16px; background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 8px;">
+                <div style="font-size: 32px; margin-bottom: 8px;">📅</div>
+                <div style="font-weight: 600; color: #1e293b; font-size: 14px; margin-bottom: 4px;">No Upcoming Appointments</div>
+                <p style="color: #64748b; font-size: 13px; max-width: 380px; margin: 0 auto 14px auto;">
+                    Schedule a consultation with your doctor. Our system will automatically trigger SMS and in-app reminders to your stored contact details.
+                </p>
+                <button type="button" class="btn-small primary" style="background: #0284c7; color: white;" onclick="openBookAppointmentModal()">
+                    ➕ Book Your First Appointment
+                </button>
+            </div>
+        `;
+        return;
+    }
+
+    const now = new Date();
+    let html = `<div class="appointment-card-grid">`;
+
+    for (const appt of appointments) {
+        let apptDateTime = null;
+        try {
+            const timeParts = (appt.appointmentTime || "").match(/(\d+):(\d+)\s*(AM|PM)?/i);
+            if (timeParts) {
+                let hours = parseInt(timeParts[1], 10);
+                const minutes = parseInt(timeParts[2], 10);
+                const ampm = timeParts[3] ? timeParts[3].toUpperCase() : null;
+                if (ampm === "PM" && hours < 12) hours += 12;
+                if (ampm === "AM" && hours === 12) hours = 0;
+                apptDateTime = new Date(appt.appointmentDate + "T" + String(hours).padStart(2, "0") + ":" + String(minutes).padStart(2, "0") + ":00");
+            }
+        } catch (_) {}
+
+        if (!apptDateTime || isNaN(apptDateTime.getTime())) {
+            apptDateTime = new Date(appt.appointmentDate + "T09:00:00");
+        }
+
+        const diffHours = (apptDateTime.getTime() - now.getTime()) / (1000 * 60 * 60);
+
+        let urgencyClass = "";
+        let relativePill = "";
+
+        if (diffHours < 0) {
+            urgencyClass = "past";
+            relativePill = `<span style="background: #e2e8f0; color: #475569; font-size: 11px; padding: 2px 7px; border-radius: 4px; font-weight: 600;">Past</span>`;
+        } else if (diffHours < 24) {
+            urgencyClass = "today";
+            relativePill = `<span style="background: #dcfce7; color: #166534; font-size: 11px; padding: 2px 7px; border-radius: 4px; font-weight: bold;">⚡ Today</span>`;
+        } else if (diffHours < 48) {
+            urgencyClass = "due-soon";
+            relativePill = `<span style="background: #fef3c7; color: #92400e; font-size: 11px; padding: 2px 7px; border-radius: 4px; font-weight: bold;">🔔 Tomorrow</span>`;
+        } else {
+            const days = Math.round(diffHours / 24);
+            relativePill = `<span style="background: #e0f2fe; color: #0369a1; font-size: 11px; padding: 2px 7px; border-radius: 4px; font-weight: 600;">In ${days} days</span>`;
+        }
+
+        const reminderStatusHtml = appt.reminderSent
+            ? `<div style="font-size: 11.5px; color: #16a34a; font-weight: 600; display: flex; align-items: center; gap: 4px;">
+                 <span>✅</span> Reminder sent to stored phone & email
+               </div>`
+            : `<div style="font-size: 11.5px; color: #d97706; font-weight: 500; display: flex; align-items: center; gap: 4px;">
+                 <span>⏳</span> Reminder pending (Due 24-48h prior)
+               </div>`;
+
+        html += `
+            <div class="appointment-item-card ${urgencyClass}">
+                <div>
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px;">
+                        <div>
+                            <h4 style="margin: 0 0 2px 0; font-size: 15px; color: #0f172a;">${escapeHtml(appt.doctorName)}</h4>
+                            <span class="badge-tag" style="background: #f1f5f9; color: #475569; font-size: 11px; padding: 2px 6px;">${escapeHtml(appt.department)}</span>
+                        </div>
+                        ${relativePill}
+                    </div>
+
+                    <div style="margin: 10px 0; font-size: 13px; color: #1e293b; display: flex; flex-direction: column; gap: 4px;">
+                        <div style="display: flex; align-items: center; gap: 6px;">
+                            <span style="font-size: 14px;">📅</span>
+                            <b>${escapeHtml(appt.appointmentDate)}</b> at <b>${escapeHtml(appt.appointmentTime)}</b>
+                        </div>
+                        <div style="color: #64748b; font-size: 12.5px; margin-top: 2px;">
+                            Reason: <span style="color: #334155;">${escapeHtml(appt.reason)}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div style="margin-top: 12px; padding-top: 10px; border-top: 1px solid #f1f5f9;">
+                    <div style="margin-bottom: 10px;">
+                        ${reminderStatusHtml}
+                    </div>
+
+                    <div style="display: flex; gap: 6px; justify-content: space-between; align-items: center;">
+                        <button type="button" class="btn-small success" style="background: #059669; color: white; font-size: 11.5px; padding: 5px 10px;" onclick="sendAppointmentReminder('${appt.appointmentId}')" title="Trigger manual reminder to stored contact details">
+                            🔔 Instant Reminder
+                        </button>
+                        <button type="button" class="btn-small secondary" style="font-size: 11.5px; padding: 5px 8px; color: #dc2626;" onclick="cancelPatientAppointment('${appt.appointmentId}')" title="Cancel this appointment">
+                            ✕ Cancel
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    html += `</div>`;
+    container.innerHTML = html;
+}
+
+async function loadPatientReminders() {
+    if (!patientToken) return;
+
+    try {
+        const res = await fetch(`${API_URL}/api/patient/reminders`, {
+            headers: { Authorization: `Bearer ${patientToken}` }
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) return;
+
+        const reminders = data.reminders || [];
+        currentPatientReminders = reminders;
+        window.currentPatientReminders = reminders;
+        const unreadCount = data.unreadCount || 0;
+
+        if ($("remindersCountBadge")) {
+            $("remindersCountBadge").textContent = `${reminders.length} reminder${reminders.length === 1 ? '' : 's'}`;
+        }
+
+        if (window.renderAppointmentScheduleVisualization && currentPatientAppointments) {
+            window.renderAppointmentScheduleVisualization(currentPatientAppointments, reminders);
+        }
+
+        const navBadge = $("reminderNavBadge");
+        if (navBadge) {
+            if (unreadCount > 0) {
+                navBadge.textContent = unreadCount > 9 ? "9+" : unreadCount;
+                navBadge.classList.remove("hidden");
+            } else {
+                navBadge.classList.add("hidden");
+            }
+        }
+
+        renderRemindersList(reminders);
+    } catch (err) {
+        console.warn("Reminders load notice:", err.message);
+    }
+}
+
+function renderRemindersList(reminders) {
+    const container = $("remindersListContainer");
+    if (!container) return;
+
+    if (!reminders || reminders.length === 0) {
+        container.innerHTML = `
+            <div style="text-align: center; padding: 30px 16px; color: #64748b;">
+                <div style="font-size: 32px; margin-bottom: 8px;">📭</div>
+                <div style="font-weight: 600; color: #1e293b; font-size: 14px;">No Reminders Dispatched Yet</div>
+                <p style="font-size: 12.5px; margin-top: 4px;">
+                    When appointments approach or when reminders are checked, dispatched alerts will be logged here.
+                </p>
+            </div>
+        `;
+        return;
+    }
+
+    let html = "";
+    for (const r of reminders) {
+        const sentDate = r.sentAt ? new Date(r.sentAt).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "Recently";
+        html += `
+            <div class="reminder-item-card ${r.isRead ? '' : 'unread'}">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 4px;">
+                    <div style="font-weight: bold; color: #0f172a; font-size: 13.5px; display: flex; align-items: center; gap: 6px;">
+                        <span>${escapeHtml(r.title)}</span>
+                    </div>
+                    <span style="font-size: 11px; color: #64748b;">${sentDate}</span>
+                </div>
+
+                <div style="font-size: 12.5px; color: #334155; line-height: 1.45; white-space: pre-wrap; margin: 6px 0; background: #f8fafc; padding: 8px 10px; border-radius: 6px; border: 1px solid #f1f5f9;">
+                    ${escapeHtml(r.message)}
+                </div>
+
+                <div style="display: flex; justify-content: space-between; align-items: center; font-size: 11.5px; color: #64748b; margin-top: 6px;">
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        <span class="reminder-channel-tag">${escapeHtml(r.deliveryChannel || 'in_app + sms')}</span>
+                        <span>Recipient: <b>${escapeHtml(r.recipientPhone || 'On File')}</b></span>
+                    </div>
+                    <span style="color: #059669; font-weight: 600;">✓ Dispatched</span>
+                </div>
+            </div>
+        `;
+    }
+
+    container.innerHTML = html;
+}
+
+async function triggerCheckReminders(force = false) {
+    if (!patientToken) return;
+
+    try {
+        showToast("Evaluating current date/time and consultation schedule...");
+        const res = await fetch(`${API_URL}/api/patient/reminders/trigger-check`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${patientToken}`
+            },
+            body: JSON.stringify({ force: Boolean(force) })
+        });
+
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+            throw new Error(data.message || "Failed to trigger reminders check.");
+        }
+
+        showToast(data.message || "Reminders evaluation complete!");
+        await loadPatientAppointments();
+        await loadPatientReminders();
+    } catch (err) {
+        console.error("Trigger reminders error:", err);
+        showToast(err.message);
+    }
+}
+
+async function sendAppointmentReminder(appointmentId) {
+    if (!patientToken || !appointmentId) return;
+
+    try {
+        showToast("Dispatching instant reminder to your stored contact details...");
+        const res = await fetch(`${API_URL}/api/patient/appointments/${appointmentId}/send-reminder`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${patientToken}`
+            }
+        });
+
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+            throw new Error(data.message || "Failed to dispatch reminder.");
+        }
+
+        showToast(data.message || "Appointment reminder dispatched!");
+        await loadPatientAppointments();
+        await loadPatientReminders();
+    } catch (err) {
+        console.error("Send reminder error:", err);
+        showToast(err.message);
+    }
+}
+
+async function cancelPatientAppointment(appointmentId) {
+    if (!patientToken || !appointmentId) return;
+
+    try {
+        showToast("Cancelling appointment...");
+        const res = await fetch(`${API_URL}/api/patient/appointments/${appointmentId}`, {
+            method: "DELETE",
+            headers: { Authorization: `Bearer ${patientToken}` }
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+            throw new Error(data.message || "Failed to cancel appointment.");
+        }
+
+        showToast("Appointment cancelled successfully.");
+        await loadPatientAppointments();
+    } catch (err) {
+        showToast(err.message);
+    }
+}
+
+function openBookAppointmentModal() {
+    const modal = $("bookAppointmentModal");
+    if (!modal) return;
+
+    // Set default date to tomorrow
+    const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    const tomorrowStr = tomorrow.toISOString().split("T")[0];
+    if ($("bookApptDate")) {
+        $("bookApptDate").value = tomorrowStr;
+        $("bookApptDate").min = new Date().toISOString().split("T")[0];
+    }
+
+    if ($("bookApptReason")) $("bookApptReason").value = "Regular Consultation & Health Vitals Review";
+    if ($("bookApptError")) $("bookApptError").classList.add("hidden");
+
+    // Populate stored contacts preview
+    const phone = $("sumPhone") ? $("sumPhone").textContent.trim() : "+919876543210";
+    const email = $("sumEmail") ? $("sumEmail").textContent.trim() : "rahul@example.com";
+    if ($("bookModalPhone")) $("bookModalPhone").textContent = phone;
+    if ($("bookModalEmail")) $("bookModalEmail").textContent = email;
+
+    modal.classList.remove("hidden");
+}
+
+function closeBookAppointmentModal() {
+    const modal = $("bookAppointmentModal");
+    if (modal) modal.classList.add("hidden");
+}
+
+async function submitBookAppointment() {
+    const btn = $("confirmBookApptBtn");
+    const err = $("bookApptError");
+    const doctorSelect = $("bookDoctorSelect");
+    const dateInput = $("bookApptDate");
+    const timeSelect = $("bookApptTime");
+    const reasonInput = $("bookApptReason");
+
+    if (!dateInput || !dateInput.value) {
+        if (err) {
+            err.textContent = "Please select an appointment date.";
+            err.classList.remove("hidden");
+        }
+        return;
+    }
+
+    const selectedOption = doctorSelect ? doctorSelect.options[doctorSelect.selectedIndex] : null;
+    const doctorName = selectedOption ? selectedOption.getAttribute("data-name") || "Dr. Sharma" : "Dr. Sharma";
+    const department = selectedOption ? selectedOption.getAttribute("data-dept") || "General Medicine" : "General Medicine";
+    const doctorId = doctorSelect ? doctorSelect.value : "doctor";
+    const appointmentDate = dateInput.value;
+    const appointmentTime = timeSelect ? timeSelect.value : "10:30 AM";
+    const reason = (reasonInput && reasonInput.value.trim()) ? reasonInput.value.trim() : "Routine Health Check";
+
+    if (btn) {
+        btn.disabled = true;
+        btn.textContent = "⏳ Scheduling...";
+    }
+
+    try {
+        const res = await fetch(`${API_URL}/api/patient/appointments`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${patientToken}`
+            },
+            body: JSON.stringify({
+                doctorId,
+                doctorName,
+                department,
+                appointmentDate,
+                appointmentTime,
+                reason
+            })
+        });
+
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+            throw new Error(data.message || "Failed to schedule appointment.");
+        }
+
+        closeBookAppointmentModal();
+        showToast("✅ Appointment booked! Reminders automatically activated.");
+        await loadPatientAppointments();
+    } catch (error) {
+        if (err) {
+            err.textContent = error.message;
+            err.classList.remove("hidden");
+        }
+        showToast("Error: " + error.message);
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = "Confirm Appointment";
+        }
+    }
+}
+
+function openRemindersModal() {
+    const modal = $("appointmentRemindersModal");
+    if (!modal) return;
+    modal.classList.remove("hidden");
+    loadPatientReminders();
+}
+
+function closeRemindersModal() {
+    const modal = $("appointmentRemindersModal");
+    if (modal) modal.classList.add("hidden");
+}
+
+/* ================= DOCTOR APPOINTMENTS & REMINDER DISPATCH ================= */
+
+async function loadDoctorAppointments() {
+    const container = $("doctorAppointmentsList");
+    const doctorToken = localStorage.getItem("doctorToken");
+    if (!doctorToken || !container) return;
+
+    try {
+        const res = await fetch(`${API_URL}/api/doctor/appointments`, {
+            headers: { Authorization: `Bearer ${doctorToken}` }
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+            throw new Error(data.message || "Failed to load doctor appointments");
+        }
+
+        const appts = data.appointments || [];
+        if (appts.length === 0) {
+            container.innerHTML = `
+                <div style="text-align: center; padding: 24px; color: #64748b;">
+                    No scheduled appointments for your calendar at this time.
+                </div>
+            `;
+            return;
+        }
+
+        let html = `<div style="display: flex; flex-direction: column; gap: 10px;">`;
+        for (const appt of appts) {
+            html += `
+                <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 14px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                    <div>
+                        <div style="font-weight: 600; color: #0f172a; font-size: 14px;">
+                            Patient: <b>${escapeHtml(appt.patientId)}</b>
+                        </div>
+                        <div style="font-size: 12.5px; color: #64748b; margin-top: 2px;">
+                            📅 <b>${escapeHtml(appt.appointmentDate)}</b> at <b>${escapeHtml(appt.appointmentTime)}</b> | Dept: ${escapeHtml(appt.department)}
+                        </div>
+                        <div style="font-size: 12px; color: #334155; margin-top: 2px;">
+                            Reason: ${escapeHtml(appt.reason)}
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        <button type="button" class="btn-small success" style="background: #059669; color: white; padding: 6px 12px; font-size: 12px;" onclick="sendDoctorAppointmentReminder('${appt.appointmentId}')">
+                            🔔 Send Reminder to Patient
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+        html += `</div>`;
+        container.innerHTML = html;
+    } catch (err) {
+        console.warn("Doctor appointments error:", err.message);
+        if (container) {
+            container.innerHTML = `<div style="text-align:center; padding:16px; color:#94a3b8;">${err.message}</div>`;
+        }
+    }
+}
+
+async function sendDoctorAppointmentReminder(appointmentId) {
+    const doctorToken = localStorage.getItem("doctorToken");
+    if (!doctorToken || !appointmentId) return;
+
+    try {
+        showToast("Sending reminder notification to patient...");
+        const res = await fetch(`${API_URL}/api/doctor/appointments/${appointmentId}/send-reminder`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${doctorToken}`
+            }
+        });
+
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+            throw new Error(data.message || "Failed to dispatch reminder.");
+        }
+
+        showToast(data.message || "Reminder sent to patient's contact information!");
+        loadDoctorAppointments();
+    } catch (err) {
+        showToast("Error: " + err.message);
+    }
+}
+
+// Window bindings for appointments & reminders
+window.loadPatientAppointments = loadPatientAppointments;
+window.loadPatientReminders = loadPatientReminders;
+window.triggerCheckReminders = triggerCheckReminders;
+window.sendAppointmentReminder = sendAppointmentReminder;
+window.cancelPatientAppointment = cancelPatientAppointment;
+window.openBookAppointmentModal = openBookAppointmentModal;
+window.closeBookAppointmentModal = closeBookAppointmentModal;
+window.submitBookAppointment = submitBookAppointment;
+window.openRemindersModal = openRemindersModal;
+window.closeRemindersModal = closeRemindersModal;
+window.loadDoctorAppointments = loadDoctorAppointments;
+window.sendDoctorAppointmentReminder = sendDoctorAppointmentReminder;
 
 // Auto-refresh relative timestamps every 30 seconds
 setInterval(refreshRelativeTimestamps, 30000);

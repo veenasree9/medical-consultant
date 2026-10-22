@@ -146,14 +146,33 @@
                 Patient Login
             </h1>
 
+            <!-- Quick Demo Credentials Box -->
+            <div id="demoCredentialsHelper" style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 10px 12px; margin-bottom: 16px; font-size: 12.5px; color: #166534; text-align: left;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                    <span style="font-weight: 600;">⚡ Quick Demo Access</span>
+                    <span style="font-size: 11px; color: #15803d; background: #dcfce7; padding: 2px 6px; border-radius: 4px;">1-Click Fill</span>
+                </div>
+                <div id="demoQuickFillButtons" style="display: flex; gap: 6px; flex-wrap: wrap;">
+                    <button type="button" class="btn-small" style="background: #0284c7; color: white; font-size: 11.5px; padding: 5px 10px; border-radius: 6px; border: none; cursor: pointer;" onclick="fillDemoCredentials('patient')">
+                        👨🦰 Demo Patient (PAT1001 / 1234)
+                    </button>
+                    <button type="button" class="btn-small" style="background: #0f766e; color: white; font-size: 11.5px; padding: 5px 10px; border-radius: 6px; border: none; cursor: pointer;" onclick="fillDemoCredentials('doctor')">
+                        👨⚕️ Demo Doctor (doctor / 1234)
+                    </button>
+                </div>
+                <div id="demoCredentialsTip" style="font-size: 11px; color: #4b5563; margin-top: 6px;">
+                    Also supports phone (+919876543210) or registered email with password <b>1234</b>.
+                </div>
+            </div>
+
             <label id="credentialLabel">
-                Patient ID
+                Patient ID / Phone / Email
             </label>
 
             <input
                 id="username"
                 type="text"
-                placeholder="Enter your Patient ID"
+                placeholder="Enter Patient ID (e.g. PAT1001), Phone, or Email"
                 autocomplete="username">
 
             <label>
@@ -217,7 +236,16 @@
             🏥 MediCare
         </div>
 
-        <div>
+        <div style="display: flex; align-items: center; gap: 12px;">
+
+            <button
+                type="button"
+                id="reminderNavBtn"
+                class="notification-bell-btn"
+                onclick="openRemindersModal()"
+                title="Appointment Reminders">
+                🔔 <span id="reminderNavBadge" class="notification-badge hidden">0</span>
+            </button>
 
             <span id="patientHeaderName"></span>
 
@@ -256,6 +284,7 @@
         <!-- ================= PATIENT DASHBOARD QUICKNAV ================= -->
         <div class="dashboard-quicknav">
             <button type="button" onclick="scrollToCard('profileCard')">📋 Profile</button>
+            <button type="button" onclick="scrollToCard('appointmentsCard')">📅 Appointments & Reminders</button>
             <button type="button" id="showAllFilesQuickBtn" class="btn-quicknav-files" onclick="showAllFilesView()">📂 Show All Files</button>
             <button type="button" onclick="scrollToCard('medicalFilesCard')">📁 Medical Files</button>
             <button type="button" onclick="scrollToCard('doctorAccessRequestsCard')">🔒 Doctor Requests</button>
@@ -727,7 +756,94 @@
         </div>
 
 
-        <!-- ================= 2. MEDICAL FILES CARD (SHOW ALL FILES) ================= -->
+        <!-- ================= 2. APPOINTMENTS & REMINDER NOTIFICATIONS CARD ================= -->
+        <div id="appointmentsCard" class="profile-card" style="margin-top: 25px;">
+            <div class="summary-card-header" style="justify-content: space-between; align-items: center; display: flex; flex-wrap: wrap; gap: 10px;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <h3 style="margin: 0;">📅 Appointments & Reminders</h3>
+                    <span id="appointmentsCountBadge" class="badge-tag" style="background: #e0f2fe; color: #0369a1; font-size: 11px; padding: 3px 8px;">0 scheduled</span>
+                    <span id="remindersCountBadge" class="badge-tag" style="background: #fef3c7; color: #92400e; font-size: 11px; padding: 3px 8px;">0 reminders</span>
+                </div>
+                <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                    <button type="button" class="btn-small primary" style="background: #0284c7; color: white;" onclick="openBookAppointmentModal()">
+                        ➕ Book Appointment
+                    </button>
+                    <button type="button" class="btn-small success" style="background: #059669; color: white;" onclick="triggerCheckReminders(true)">
+                        🔔 Check & Dispatch Reminders
+                    </button>
+                    <button type="button" class="btn-small secondary" onclick="openRemindersModal()">
+                        📬 Reminders History
+                    </button>
+                </div>
+            </div>
+
+            <!-- Stored Contact & Real-Time Evaluator Strip -->
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 14px; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; font-size: 12.5px;">
+                <div style="display: flex; gap: 18px; flex-wrap: wrap; color: #334155;">
+                    <div>📱 Stored Phone: <b id="apptStoredPhone" style="color: #0369a1;">+919876543210</b></div>
+                    <div>✉️ Stored Email: <b id="apptStoredEmail" style="color: #0369a1;">rahul@example.com</b></div>
+                    <div>🕒 System Evaluator: <span id="apptCurrentTimeDisplay" style="color: #059669; font-weight: 600;">Active</span></div>
+                </div>
+                <div style="font-size: 11.5px; color: #64748b;">
+                    Auto-dispatches SMS & In-App alerts using current date/time
+                </div>
+            </div>
+
+            <!-- ================= RECHARTS TIMELINE & CALENDAR VISUALIZATION ================= -->
+            <div id="appointmentVisualizerCard" style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 18px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
+                <!-- Visualizer Header & Mode Switcher -->
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid #f1f5f9;">
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <span style="font-size: 22px;">📊</span>
+                        <div>
+                            <h4 style="margin: 0; font-size: 15px; color: #0f172a; font-weight: 700;">Upcoming Schedule & Timeline</h4>
+                            <span style="font-size: 12px; color: #64748b;">Recharts-powered interactive schedule distribution & reminder timeline</span>
+                        </div>
+                    </div>
+                    
+                    <!-- View Mode Tabs -->
+                    <div class="timeline-view-tabs" style="display: flex; background: #f1f5f9; padding: 3px; border-radius: 8px; gap: 2px;">
+                        <button type="button" id="tabViewTimeline" class="timeline-tab-btn active" onclick="switchScheduleView('timeline')" style="padding: 6px 12px; font-size: 12px; font-weight: 600; border: none; border-radius: 6px; cursor: pointer; background: #ffffff; color: #0284c7; box-shadow: 0 1px 2px rgba(0,0,0,0.06);">
+                            📈 Timeline Chart
+                        </button>
+                        <button type="button" id="tabViewCalendar" class="timeline-tab-btn" onclick="switchScheduleView('calendar')" style="padding: 6px 12px; font-size: 12px; font-weight: 600; border: none; border-radius: 6px; cursor: pointer; background: transparent; color: #64748b;">
+                            🗓️ Calendar Distribution
+                        </button>
+                        <button type="button" id="tabViewWeekly" class="timeline-tab-btn" onclick="switchScheduleView('weekly')" style="padding: 6px 12px; font-size: 12px; font-weight: 600; border: none; border-radius: 6px; cursor: pointer; background: transparent; color: #64748b;">
+                            ⏱️ Consultation Hours
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Schedule Metric Highlights -->
+                <div id="scheduleHighlightsRow" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; margin-bottom: 16px;">
+                    <!-- Populated dynamically: Next appt countdown, Total hours, Reminder readiness -->
+                </div>
+
+                <!-- React / Recharts Mount Root -->
+                <div id="appointmentTimelineRoot" style="min-height: 240px; position: relative;">
+                    <!-- Rendered by React + Recharts -->
+                    <div style="text-align: center; padding: 36px 16px; color: #94a3b8; font-size: 13px;">
+                        Loading schedule visualization...
+                    </div>
+                </div>
+
+                <!-- Selected Appointment Interactive Inspector / Details Bar -->
+                <div id="timelineSelectedApptInspector" style="margin-top: 14px; padding: 12px 14px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; display: none; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+                    <!-- Dynamic details upon clicking points in Recharts -->
+                </div>
+            </div>
+
+            <!-- Appointments List Container -->
+            <div id="appointmentsListContainer">
+                <div style="text-align: center; padding: 24px; color: #64748b;">
+                    Loading appointments...
+                </div>
+            </div>
+        </div>
+
+
+        <!-- ================= 3. MEDICAL FILES CARD (SHOW ALL FILES) ================= -->
         <div id="medicalFilesCard" class="profile-card" style="margin-top: 25px;">
             <div class="summary-card-header" style="justify-content: space-between; align-items: center; display: flex; flex-wrap: wrap; gap: 10px;">
                 <div style="display: flex; align-items: center; gap: 10px;">
@@ -892,6 +1008,28 @@
             </div>
         </div>
 
+        <!-- ================= DOCTOR SCHEDULED APPOINTMENTS CARD ================= -->
+        <div id="doctorAppointmentsCard" class="profile-card" style="margin-top: 25px;">
+            <div class="summary-card-header" style="justify-content: space-between; align-items: center; display: flex; flex-wrap: wrap; gap: 8px;">
+                <h2>📅 Scheduled Patient Appointments</h2>
+                <div style="display: flex; gap: 8px;">
+                    <button type="button" class="btn-small secondary" onclick="loadDoctorAppointments()">
+                        🔄 Refresh Appointments
+                    </button>
+                </div>
+            </div>
+
+            <p style="color: #64748b; font-size: 14px; margin-bottom: 14px;">
+                Review consultation schedules and dispatch instant appointment reminders to patient phone numbers and emails.
+            </p>
+
+            <div id="doctorAppointmentsList">
+                <div style="text-align: center; padding: 20px; color: #64748b;">
+                    Loading appointments...
+                </div>
+            </div>
+        </div>
+
     </main>
 
 </section>
@@ -973,8 +1111,18 @@
                     <b>Camera Inactive</b>
 
                     <p>
-                        Click "Start Camera" below to request camera permission and capture the individual's face.
+                        Click "Start Camera" below to request camera permission, or upload a photo of the individual to identify them.
                     </p>
+
+                    <div style="margin-top: 12px; display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;">
+                        <input type="file" id="helperPhotoFile" accept="image/*" style="display:none;" onchange="handleHelperPhotoUpload(event)">
+                        <button type="button" class="btn-small secondary" onclick="$('helperPhotoFile').click()">
+                            📁 Upload Photo
+                        </button>
+                        <button type="button" class="btn-small secondary" onclick="loadDemoPatientForIdentification()">
+                            🌟 Demo Patient (PAT1001)
+                        </button>
+                    </div>
 
                 </div>
 
@@ -1003,6 +1151,28 @@
                     onclick="startEmergencyCamera()">
 
                     📸 Start Camera
+
+                </button>
+
+                <!-- Direct Photo Upload option -->
+                <button
+                    id="helperUploadBtn"
+                    type="button"
+                    class="btn-secondary"
+                    onclick="$('helperPhotoFile').click()">
+
+                    📁 Upload Photo
+
+                </button>
+
+                <!-- Demo Patient option for instant testing -->
+                <button
+                    id="helperDemoBtn"
+                    type="button"
+                    class="btn-secondary"
+                    onclick="loadDemoPatientForIdentification()">
+
+                    🌟 Demo (PAT1001)
 
                 </button>
 
@@ -1538,22 +1708,48 @@
             <div id="faceEnrollLiveView">
                 <div class="patient-camera-viewport" style="position: relative; border-radius: 12px; overflow: hidden; background: #0f172a; height: 320px; display: flex; align-items: center; justify-content: center;">
                     <video id="faceCameraVideo" autoplay playsinline muted style="width: 100%; height: 100%; object-fit: cover;"></video>
-                    <div class="patient-camera-guide"></div>
+                    <div id="faceCameraGuideOverlay" class="patient-camera-guide"></div>
                     <canvas id="faceCameraCanvas" style="display:none;"></canvas>
-                    <div id="faceLiveIndicator" style="position: absolute; top: 12px; left: 12px; background: rgba(16, 185, 129, 0.9); color: white; padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: bold; display: flex; align-items: center; gap: 6px;">
+                    <img id="facePhotoUploadedPreview" class="hidden" style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 4;" alt="Uploaded Face Preview">
+                    <div id="faceCameraBlockedNotice" class="hidden" style="position: absolute; inset: 0; background: #0f172a; color: white; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; text-align: center; z-index: 5;">
+                        <div style="font-size: 34px; margin-bottom: 8px;">📷</div>
+                        <div style="font-weight: bold; font-size: 14.5px; margin-bottom: 6px; color: #f87171;">Camera Access Blocked or Unavailable</div>
+                        <p style="font-size: 12.5px; color: #cbd5e1; max-width: 330px; margin: 0 0 14px 0; line-height: 1.4;">
+                            Camera permission was denied in your browser. You can upload a photo of your face directly or use a sample biometric photo below.
+                        </p>
+                        <div style="display: flex; gap: 8px; flex-wrap: wrap; justify-content: center;">
+                            <button type="button" class="btn-small success" style="background: #059669; color: white; padding: 7px 14px;" onclick="$('facePhotoFileInput').click()">
+                                📁 Upload Face Photo
+                            </button>
+                            <button type="button" class="btn-small secondary" style="background: #334155; color: white; padding: 7px 14px;" onclick="loadSampleFaceBiometric()">
+                                🌟 Use Sample Biometric
+                            </button>
+                        </div>
+                    </div>
+                    <div id="faceLiveIndicator" style="position: absolute; top: 12px; left: 12px; background: rgba(16, 185, 129, 0.9); color: white; padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: bold; display: flex; align-items: center; gap: 6px; z-index: 6;">
                         <span style="width: 8px; height: 8px; border-radius: 50%; background: #ffffff;"></span>
                         Biometric Scanner Active
                     </div>
                 </div>
+
+                <input type="file" id="facePhotoFileInput" accept="image/*" style="display:none;" onchange="handleFacePhotoSelected(event)">
 
                 <div id="faceStatusFeedback" style="text-align: center; margin-top: 10px; font-size: 13px; font-weight: 600; color: #0284c7;">
                     📸 Align your face and click "Capture & Enroll Face"
                 </div>
 
                 <div class="button-row" style="margin-top: 16px; display: flex; gap: 8px; justify-content: space-between; flex-wrap: wrap;">
-                    <button type="button" class="btn-small secondary" onclick="switchFaceCameraFacing()">
-                        🔄 Switch Camera
-                    </button>
+                    <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+                        <button type="button" class="btn-small secondary" onclick="switchFaceCameraFacing()">
+                            🔄 Switch Camera
+                        </button>
+                        <button type="button" class="btn-small secondary" onclick="$('facePhotoFileInput').click()">
+                            📁 Upload Photo
+                        </button>
+                        <button type="button" class="btn-small secondary" onclick="loadSampleFaceBiometric()">
+                            🌟 Sample
+                        </button>
+                    </div>
                     <div style="display: flex; gap: 8px;">
                         <button type="button" class="btn-secondary" onclick="closeFaceVerificationModal()">
                             Cancel
@@ -1599,6 +1795,10 @@
             <p style="color: #64748b; font-size: 14px; margin-bottom: 12px;">
                 Position your face directly in the frame to record a live camera verification session.
             </p>
+            <div id="patCameraBlockedNotice" class="hidden" style="padding: 12px 14px; text-align: center; background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; margin-bottom: 12px;">
+                <div style="font-weight: 600; color: #dc2626; font-size: 13.5px; margin-bottom: 4px;">⚠️ Camera Permission Denied</div>
+                <div style="font-size: 12.5px; color: #7f1d1d; margin-bottom: 8px;">Camera access was blocked by browser permissions. You can verify your session directly using your enrolled biometric profile.</div>
+            </div>
             <div class="patient-camera-viewport">
                 <video id="patCameraVideo" autoplay playsinline muted></video>
                 <div id="patCameraGuide" class="patient-camera-guide"></div>
@@ -1676,6 +1876,16 @@
 
             <!-- LIVE CAMERA VIEW -->
             <div id="reportCameraLiveSection">
+                <div id="reportCameraBlockedNotice" class="hidden" style="margin-bottom: 12px; padding: 12px 14px; background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; text-align: center;">
+                    <div style="font-weight: 600; color: #dc2626; font-size: 13.5px; margin-bottom: 4px;">⚠️ Camera Permission Denied</div>
+                    <div style="font-size: 12.5px; color: #7f1d1d; margin-bottom: 10px;">Camera access was blocked by your browser. You can select an image file of your report directly or upload a document.</div>
+                    <div style="display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;">
+                        <input type="file" id="reportPhotoInput" accept="image/*,.pdf" style="display: none;" onchange="handleReportPhotoUpload(event)">
+                        <button type="button" class="btn-small success" style="background: #059669; color: white;" onclick="$('reportPhotoInput').click()">📁 Select Report Photo</button>
+                        <button type="button" class="btn-small primary" onclick="closeReportCameraModal(); openFileUploadModal();">📄 Open Document Upload</button>
+                    </div>
+                </div>
+
                 <div class="report-camera-viewport">
                     <video id="reportCameraVideo" autoplay playsinline muted></video>
                     <div class="report-scanner-frame">
@@ -1688,9 +1898,14 @@
                 </div>
 
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 14px; gap: 10px; flex-wrap: wrap;">
-                    <button type="button" class="btn-small secondary" onclick="switchReportCamera()">
-                        🔄 Switch Camera
-                    </button>
+                    <div style="display: flex; gap: 6px;">
+                        <button type="button" class="btn-small secondary" onclick="switchReportCamera()">
+                            🔄 Switch Camera
+                        </button>
+                        <button type="button" class="btn-small secondary" onclick="$('reportPhotoInput').click()">
+                            📁 Upload Photo
+                        </button>
+                    </div>
                     <button type="button" id="snapReportBtn" class="btn-success" style="padding: 10px 22px; font-size: 14px; font-weight: bold; background: #059669; color: white;" onclick="captureReportPhoto()">
                         📸 Snap Photo
                     </button>
@@ -1845,7 +2060,113 @@
     </div>
 </div>
 
+<!-- ================= BOOK APPOINTMENT MODAL ================= -->
+<div id="bookAppointmentModal" class="modal-backdrop hidden">
+    <div class="modal-box" style="max-width: 520px;">
+        <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-size: 20px;">📅</span>
+                <h3 style="margin: 0; font-size: 18px; color: #0f172a;">Schedule Doctor Appointment</h3>
+            </div>
+            <button type="button" class="close-modal" onclick="closeBookAppointmentModal()" style="background: none; border: none; font-size: 20px; cursor: pointer; color: #64748b;">✕</button>
+        </div>
+        <div class="modal-body">
+            <p style="color: #64748b; font-size: 13px; margin-bottom: 14px;">
+                Select your preferred doctor, date, and consultation time. Automated reminder notifications will be sent to your stored contact details (phone & email) before the appointment.
+            </p>
+
+            <div style="margin-bottom: 12px;">
+                <label style="display: block; font-size: 12.5px; font-weight: bold; color: #334155; margin-bottom: 4px;">Doctor *</label>
+                <select id="bookDoctorSelect" style="width: 100%; padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13.5px;">
+                    <option value="doctor" data-name="Dr. Sharma" data-dept="General Medicine">Dr. Sharma — General Medicine</option>
+                    <option value="doctor" data-name="Dr. Sharma" data-dept="Cardiology">Dr. Sharma — Cardiology & Preventive Health</option>
+                </select>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+                <div>
+                    <label style="display: block; font-size: 12.5px; font-weight: bold; color: #334155; margin-bottom: 4px;">Appointment Date *</label>
+                    <input id="bookApptDate" type="date" style="width: 100%; padding: 9px 10px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13.5px;">
+                </div>
+                <div>
+                    <label style="display: block; font-size: 12.5px; font-weight: bold; color: #334155; margin-bottom: 4px;">Time Slot *</label>
+                    <select id="bookApptTime" style="width: 100%; padding: 9px 10px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13.5px;">
+                        <option value="09:00 AM">09:00 AM - 09:30 AM</option>
+                        <option value="10:30 AM" selected>10:30 AM - 11:00 AM</option>
+                        <option value="11:30 AM">11:30 AM - 12:00 PM</option>
+                        <option value="02:00 PM">02:00 PM - 02:30 PM</option>
+                        <option value="03:30 PM">03:30 PM - 04:00 PM</option>
+                        <option value="04:30 PM">04:30 PM - 05:00 PM</option>
+                        <option value="06:00 PM">06:00 PM - 06:30 PM</option>
+                    </select>
+                </div>
+            </div>
+
+            <div style="margin-bottom: 14px;">
+                <label style="display: block; font-size: 12.5px; font-weight: bold; color: #334155; margin-bottom: 4px;">Reason for Consultation *</label>
+                <input id="bookApptReason" type="text" placeholder="e.g. Regular Checkup, Vitals Review, Blood Pressure Evaluation" style="width: 100%; padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13.5px;">
+            </div>
+
+            <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 10px 12px; font-size: 12px; color: #166534; margin-bottom: 14px;">
+                🔔 <b>Stored Contact Reminder Guarantee:</b> A notification will be dispatched to your phone (<span id="bookModalPhone">on file</span>) and email (<span id="bookModalEmail">on file</span>).
+            </div>
+
+            <p id="bookApptError" class="error hidden" style="font-size: 13px; color: #dc2626; margin-bottom: 10px;"></p>
+
+            <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                <button type="button" class="btn-small secondary" onclick="closeBookAppointmentModal()">
+                    Cancel
+                </button>
+                <button type="button" id="confirmBookApptBtn" class="btn-small primary" style="background: #0284c7; color: white; padding: 9px 18px;" onclick="submitBookAppointment()">
+                    Confirm Appointment
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ================= APPOINTMENT REMINDERS NOTIFICATION CENTER MODAL ================= -->
+<div id="appointmentRemindersModal" class="modal-backdrop hidden">
+    <div class="modal-box" style="max-width: 580px; max-height: 85vh; display: flex; flex-direction: column;">
+        <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-shrink: 0;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-size: 22px;">🔔</span>
+                <h3 style="margin: 0; font-size: 18px; color: #0f172a;">Appointment Reminders Center</h3>
+            </div>
+            <button type="button" class="close-modal" onclick="closeRemindersModal()" style="background: none; border: none; font-size: 20px; cursor: pointer; color: #64748b;">✕</button>
+        </div>
+        <div class="modal-body" style="overflow-y: auto; flex: 1;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                <p style="color: #64748b; font-size: 13px; margin: 0;">
+                    Log of reminder alerts dispatched to your stored phone & email based on consultation schedules.
+                </p>
+                <button type="button" class="btn-small secondary" style="font-size: 11.5px; padding: 4px 8px;" onclick="triggerCheckReminders(true)">
+                    🔄 Rescan Reminders
+                </button>
+            </div>
+
+            <div id="remindersListContainer">
+                <div style="text-align: center; padding: 24px; color: #64748b;">
+                    Loading reminders...
+                </div>
+            </div>
+        </div>
+        <div style="padding-top: 12px; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end; flex-shrink: 0;">
+            <button type="button" class="btn-small secondary" onclick="closeRemindersModal()">
+                Close
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- React 18, ReactDOM, PropTypes and Recharts Library Scripts -->
+<script src="/vendor/react/umd/react.production.min.js"></script>
+<script src="/vendor/react-dom/umd/react-dom.production.min.js"></script>
+<script src="/vendor/prop-types/prop-types.min.js"></script>
+<script src="/vendor/recharts/umd/Recharts.js"></script>
+
 <script src="config.js"></script>
+<script src="appointmentTimeline.js"></script>
 <script src="app.js"></script>
 
 </body>

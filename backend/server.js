@@ -37,7 +37,7 @@ try {
 }
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
 /* ================= CORS ================= */
 const allowedOrigins = (process.env.FRONTEND_ORIGIN || "*")
@@ -67,6 +67,9 @@ app.use(express.json({ limit: "15mb" }));
 
 const frontendPath = path.join(__dirname, "../frontend");
 app.use(express.static(frontendPath));
+
+const nodeModulesPath = path.join(__dirname, "../node_modules");
+app.use("/vendor", express.static(nodeModulesPath));
 
 const demoOtps = new Map();
 
@@ -1244,6 +1247,180 @@ app.post("/api/patient/access-requests/:doctorId/respond", auth("patient"), asyn
         });
     } catch (err) {
         res.status(500).json({ success: false, message: "Failed to update access request: " + err.message });
+    }
+});
+
+/* ================= APPOINTMENT & REMINDER NOTIFICATION SYSTEM ================= */
+
+// 1. List patient appointments
+app.get("/api/patient/appointments", auth("patient"), async (req, res) => {
+    try {
+        const patientId = req.user.patientId;
+        const appointments = await db.getAppointments(patientId);
+        res.json({
+            success: true,
+            appointments
+        });
+    } catch (err) {
+        console.error("Fetch appointments error:", err);
+        res.status(500).json({ success: false, message: "Failed to fetch appointments: " + err.message });
+    }
+});
+
+// 2. Schedule new appointment
+app.post("/api/patient/appointments", auth("patient"), async (req, res) => {
+    try {
+        const patientId = req.user.patientId;
+        const { doctorId, doctorName, department, appointmentDate, appointmentTime, reason } = req.body || {};
+
+        if (!appointmentDate || !appointmentTime) {
+            return res.status(400).json({
+                success: false,
+                message: "Appointment date and time are required."
+            });
+        }
+
+        const appt = await db.createAppointment({
+            patientId,
+            doctorId: doctorId || "doctor",
+            doctorName: doctorName || "Dr. Sharma",
+            department: department || "General Medicine",
+            appointmentDate,
+            appointmentTime,
+            reason: reason || "General Medical Consultation"
+        });
+
+        await db.insertAuditLog(patientId, "appointment_scheduled", patientId, {
+            appointmentId: appt.appointmentId,
+            doctorName: appt.doctorName,
+            date: appointmentDate,
+            time: appointmentTime
+        });
+
+        // Trigger reminder evaluation automatically
+        await db.triggerPatientAppointmentReminders(patientId);
+
+        res.json({
+            success: true,
+            message: "Appointment scheduled successfully!",
+            appointment: appt
+        });
+    } catch (err) {
+        console.error("Create appointment error:", err);
+        res.status(500).json({ success: false, message: "Failed to schedule appointment: " + err.message });
+    }
+});
+
+// 3. Cancel / Delete an appointment
+app.delete("/api/patient/appointments/:appointmentId", auth("patient"), async (req, res) => {
+    try {
+        const patientId = req.user.patientId;
+        const appointmentId = req.params.appointmentId;
+        const success = await db.deleteAppointment(appointmentId, patientId);
+        if (!success) {
+            return res.status(404).json({ success: false, message: "Appointment not found or already cancelled." });
+        }
+
+        await db.insertAuditLog(patientId, "appointment_cancelled", patientId, { appointmentId });
+        res.json({ success: true, message: "Appointment cancelled successfully." });
+    } catch (err) {
+        res.status(500).json({ success: false, message: "Failed to cancel appointment: " + err.message });
+    }
+});
+
+// 4. Get patient appointment reminder notifications
+app.get("/api/patient/reminders", auth("patient"), async (req, res) => {
+    try {
+        const patientId = req.user.patientId;
+        // Check and generate any due reminders based on current date/time first
+        await db.triggerPatientAppointmentReminders(patientId, false);
+        const reminders = await db.getAppointmentReminders(patientId);
+        const unreadCount = reminders.filter(r => !r.isRead).length;
+
+        res.json({
+            success: true,
+            reminders,
+            unreadCount
+        });
+    } catch (err) {
+        console.error("Fetch reminders error:", err);
+        res.status(500).json({ success: false, message: "Failed to load reminders: " + err.message });
+    }
+});
+
+// 5. Trigger / check due reminders (evaluates current date/time against stored contact info)
+app.post("/api/patient/reminders/trigger-check", auth("patient"), async (req, res) => {
+    try {
+        const patientId = req.user.patientId;
+        const { force } = req.body || {};
+        const generated = await db.triggerPatientAppointmentReminders(patientId, Boolean(force));
+        const reminders = await db.getAppointmentReminders(patientId);
+
+        res.json({
+            success: true,
+            message: generated.length > 0
+                ? `Generated ${generated.length} appointment reminder(s) based on your scheduled time and stored contact info.`
+                : "All appointment reminders are up to date.",
+            newlySent: generated.length,
+            reminders
+        });
+    } catch (err) {
+        console.error("Trigger reminders error:", err);
+        res.status(500).json({ success: false, message: "Failed to trigger reminders: " + err.message });
+    }
+});
+
+// 6. Send instant reminder for a specific appointment to patient's stored phone/email
+app.post("/api/patient/appointments/:appointmentId/send-reminder", auth("patient"), async (req, res) => {
+    try {
+        const appointmentId = req.params.appointmentId;
+        const reminder = await db.sendSingleAppointmentReminder(appointmentId, true);
+        res.json({
+            success: true,
+            message: `Appointment reminder dispatched to your verified phone (${reminder.recipientPhone}) and email (${reminder.recipientEmail})!`,
+            reminder
+        });
+    } catch (err) {
+        console.error("Send appointment reminder error:", err);
+        res.status(500).json({ success: false, message: "Failed to dispatch reminder: " + err.message });
+    }
+});
+
+// 7. Mark reminder as read
+app.put("/api/patient/reminders/:reminderId/read", auth("patient"), async (req, res) => {
+    try {
+        const patientId = req.user.patientId;
+        const reminderId = req.params.reminderId;
+        await db.markReminderAsRead(reminderId, patientId);
+        res.json({ success: true, message: "Reminder marked as read." });
+    } catch (err) {
+        res.status(500).json({ success: false, message: "Failed to update reminder: " + err.message });
+    }
+});
+
+// 8. Doctor list appointments
+app.get("/api/doctor/appointments", auth("doctor"), async (req, res) => {
+    try {
+        const doctorId = req.user.doctorId;
+        const appointments = await db.getAppointments(null, doctorId);
+        res.json({ success: true, appointments });
+    } catch (err) {
+        res.status(500).json({ success: false, message: "Failed to load doctor appointments: " + err.message });
+    }
+});
+
+// 9. Doctor triggers appointment reminder for patient
+app.post("/api/doctor/appointments/:appointmentId/send-reminder", auth("doctor"), async (req, res) => {
+    try {
+        const appointmentId = req.params.appointmentId;
+        const reminder = await db.sendSingleAppointmentReminder(appointmentId, true);
+        res.json({
+            success: true,
+            message: `Reminder sent to patient (${reminder.recipientName}) at ${reminder.recipientPhone} & ${reminder.recipientEmail}!`,
+            reminder
+        });
+    } catch (err) {
+        res.status(500).json({ success: false, message: "Failed to dispatch reminder: " + err.message });
     }
 });
 

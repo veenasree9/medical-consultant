@@ -257,3 +257,46 @@ CREATE INDEX IF NOT EXISTS idx_doc_pat_requests_patient ON doctor_patient_reques
 CREATE INDEX IF NOT EXISTS idx_doc_pat_requests_status ON doctor_patient_requests(status);
 CREATE INDEX IF NOT EXISTS idx_doc_pat_access_doctor ON doctor_patient_access(doctor_id);
 CREATE INDEX IF NOT EXISTS idx_doc_pat_access_patient ON doctor_patient_access(patient_id);
+
+-- Appointments Table
+CREATE TABLE IF NOT EXISTS appointments (
+    id SERIAL PRIMARY KEY,
+    appointment_id VARCHAR(100) UNIQUE NOT NULL,
+    patient_id VARCHAR(50) NOT NULL REFERENCES patients(patient_id) ON DELETE CASCADE,
+    doctor_id VARCHAR(50) REFERENCES doctors(doctor_id) ON DELETE SET NULL,
+    doctor_name VARCHAR(150) NOT NULL DEFAULT 'Dr. Sharma',
+    department VARCHAR(100) DEFAULT 'General Medicine',
+    appointment_date DATE NOT NULL,
+    appointment_time VARCHAR(20) NOT NULL,
+    reason TEXT NOT NULL DEFAULT 'Regular Consultation',
+    status VARCHAR(50) NOT NULL DEFAULT 'scheduled',
+    reminder_sent BOOLEAN NOT NULL DEFAULT FALSE,
+    reminder_sent_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Appointment Reminders Notification Table
+CREATE TABLE IF NOT EXISTS appointment_reminders (
+    id SERIAL PRIMARY KEY,
+    reminder_id VARCHAR(100) UNIQUE NOT NULL,
+    appointment_id VARCHAR(100) REFERENCES appointments(appointment_id) ON DELETE CASCADE,
+    patient_id VARCHAR(50) NOT NULL REFERENCES patients(patient_id) ON DELETE CASCADE,
+    recipient_name VARCHAR(150) NOT NULL,
+    recipient_phone VARCHAR(50) NOT NULL,
+    recipient_email VARCHAR(150),
+    title VARCHAR(200) NOT NULL,
+    message TEXT NOT NULL,
+    scheduled_appointment_time TIMESTAMPTZ,
+    delivery_channel VARCHAR(50) NOT NULL DEFAULT 'in_app',
+    status VARCHAR(50) NOT NULL DEFAULT 'sent',
+    is_read BOOLEAN NOT NULL DEFAULT FALSE,
+    sent_at TIMESTAMPTZ DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_appointments_patient_id ON appointments(patient_id);
+CREATE INDEX IF NOT EXISTS idx_appointments_doctor_id ON appointments(doctor_id);
+CREATE INDEX IF NOT EXISTS idx_appointments_date ON appointments(appointment_date);
+CREATE INDEX IF NOT EXISTS idx_reminders_patient_id ON appointment_reminders(patient_id);
+CREATE INDEX IF NOT EXISTS idx_reminders_sent_at ON appointment_reminders(sent_at DESC);
