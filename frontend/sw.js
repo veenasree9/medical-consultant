@@ -54,7 +54,32 @@ self.addEventListener("fetch", (event) => {
         return;
     }
 
-    // API calls: Network first; if offline, return structured offline response
+    // Emergency Directory: Network first with offline cache fallback
+    if (url.pathname === "/api/helper/emergency-directory") {
+        event.respondWith(
+            fetch(req).then((networkResp) => {
+                if (networkResp && networkResp.status === 200) {
+                    const clone = networkResp.clone();
+                    caches.open(CACHE_NAME).then((cache) => cache.put(req, clone));
+                }
+                return networkResp;
+            }).catch(async () => {
+                const cached = await caches.match(req);
+                if (cached) return cached;
+                return new Response(
+                    JSON.stringify({
+                        success: false,
+                        offline: true,
+                        message: "Offline: using device local storage emergency cache."
+                    }),
+                    { headers: { "Content-Type": "application/json" } }
+                );
+            })
+        );
+        return;
+    }
+
+    // Generic API calls: Network first; if offline, return structured offline response
     if (url.pathname.startsWith("/api/")) {
         event.respondWith(
             fetch(req).catch(() => {

@@ -2823,3 +2823,126 @@ hr {
     color: #475569;
 }
 
+/* ================= UPGRADED HELPER EMERGENCY RESCUE STYLES ================= */
+
+.network-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11.5px;
+    font-weight: 800;
+    padding: 4px 10px;
+    border-radius: 20px;
+    letter-spacing: 0.5px;
+    transition: all 0.2s ease;
+}
+
+.network-badge.online {
+    background: #dcfce7;
+    color: #15803d;
+    border: 1px solid #86efac;
+}
+
+.network-badge.offline {
+    background: #ffedd5;
+    color: #c2410c;
+    border: 1px solid #fdba74;
+}
+
+.status-indicator-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+.network-badge.online .status-indicator-dot {
+    background: #16a34a;
+    box-shadow: 0 0 6px rgba(22, 163, 74, 0.6);
+}
+
+.network-badge.offline .status-indicator-dot {
+    background: #ea580c;
+    box-shadow: 0 0 6px rgba(234, 88, 12, 0.6);
+}
+
+.btn-emergency-call-112:hover {
+    background: #b91c1c !important;
+    transform: translateY(-1px);
+}
+
+.btn-emergency-call-112:active {
+    transform: translateY(0);
+}
+
+.helper-rescue-container {
+    max-width: 860px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    width: 100%;
+}
+
+/* Low-Light Vision Filter Toolbar */
+.camera-filter-toolbar {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 12px 14px;
+    margin-top: 12px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.camera-filter-toolbar .filter-chip {
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    color: #334155;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 20px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.camera-filter-toolbar .filter-chip:hover {
+    background: #f1f5f9;
+    border-color: #94a3b8;
+}
+
+.camera-filter-toolbar .filter-chip.active {
+    background: #0284c7;
+    color: #ffffff;
+    border-color: #0284c7;
+    box-shadow: 0 2px 6px rgba(2, 132, 199, 0.3);
+}
+
+.btn-filter-reset {
+    background: transparent;
+    border: 1px solid #cbd5e1;
+    color: #64748b;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.btn-filter-reset:hover {
+    background: #e2e8f0;
+    color: #1e293b;
+}
+
+@media (max-width: 600px) {
+    .camera-filter-toolbar .filter-sliders-grid {
+        grid-template-columns: 1fr !important;
+        gap: 8px !important;
+    }
+}
+
+

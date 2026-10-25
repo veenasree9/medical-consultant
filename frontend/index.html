@@ -1175,19 +1175,37 @@
 
 
 
-<!-- ================= HELPER: EMERGENCY ACCIDENT IDENTIFICATION ================= -->
+<!-- ================= HELPER: EMERGENCY RESCUE & ACCIDENT IDENTIFICATION ================= -->
 
 <section
     id="helperDashboard"
     class="dashboard hidden">
 
-    <nav class="dashboard-nav">
-
-        <div class="brand" data-i18n="helper.dashboard">
-            🏥 MediCare Emergency Portal
-        </div>
+    <nav class="dashboard-nav" style="display: flex; justify-content: space-between; align-items: center; padding: 12px 5%; background: #ffffff; border-bottom: 1px solid #e2e8f0; flex-wrap: wrap; gap: 10px;">
 
         <div style="display: flex; align-items: center; gap: 12px;">
+            <div class="brand" data-i18n="helper.dashboard" style="font-size: 19px; font-weight: 700; color: #b91c1c; display: flex; align-items: center; gap: 8px;">
+                🚨 MediCare Emergency Rescue
+            </div>
+            <!-- Online / Offline Status Badge (Req 5) -->
+            <div id="networkStatusBadge" class="network-badge online" title="Network Connectivity Status">
+                <span class="status-indicator-dot"></span>
+                <span id="networkStatusText">ONLINE</span>
+            </div>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+            <!-- Cache & Offline Sync Actions -->
+            <div id="helperCacheInfoWrap" style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: #475569; background: #f8fafc; padding: 5px 10px; border-radius: 8px; border: 1px solid #e2e8f0;">
+                <span id="cacheSyncStatusText">📁 Emergency Cache: Ready</span>
+                <button type="button" id="refreshEmergencyCacheBtn" class="btn-small secondary" style="font-size: 11.5px; padding: 3px 8px;" onclick="refreshLocalEmergencyDirectory()" title="Fetch and save latest authorized emergency patient directory for offline matching">
+                    📥 Update Cache
+                </button>
+                <button type="button" id="manualSyncEventsBtn" class="btn-small secondary hidden" style="background: #dc2626; color: white; font-size: 11.5px; padding: 3px 8px; font-weight: bold;" onclick="syncPendingOfflineEvents()" title="Sync queued offline emergency events to audit log">
+                    🔄 Sync Offline Events (<span id="pendingOfflineCount">0</span>)
+                </button>
+            </div>
+
             <div class="lang-selector-wrap" title="Select Application Language">
                 <span class="lang-icon">🌐</span>
                 <select class="app-lang-picker" onchange="changeLanguage(this.value)" aria-label="Select Application Language">
@@ -1203,365 +1221,576 @@
             <button
                 class="logout"
                 onclick="exitHelperMode()"
-                data-i18n="login.back">
-
+                data-i18n="login.back"
+                style="padding: 7px 14px; font-size: 13px;">
                 ← Back to Home
-
             </button>
         </div>
 
     </nav>
 
 
-    <main class="dashboard-content">
+    <main class="dashboard-content" style="padding: 24px 5%; max-width: 1200px; margin: auto;">
 
-        <div class="emergency-header">
-
-            <div class="emergency-badge">
-                🚨 Emergency First-Responder Mode
+        <!-- PROMINENT EMERGENCY CALL BAR (Req 4) -->
+        <div class="emergency-quick-bar" style="background: #fef2f2; border: 2px solid #ef4444; border-radius: 12px; padding: 14px 18px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; box-shadow: 0 4px 12px rgba(220, 38, 38, 0.12);">
+            <div style="display: flex; align-items: center; gap: 12px;">
+                <span style="font-size: 28px;">🚨</span>
+                <div>
+                    <h3 style="margin: 0; color: #991b1b; font-size: 17px; font-weight: 800;">CRITICAL EMERGENCY PRIORITY</h3>
+                    <p style="margin: 3px 0 0 0; color: #7f1d1d; font-size: 13px; line-height: 1.4;">
+                        If the person is unresponsive, not breathing normally, or severely injured: <b>Call emergency services immediately.</b> Do not delay assistance while running face recognition.
+                    </p>
+                </div>
             </div>
-
-            <h1 id="helperTitle">
-                Emergency Patient Identification
-            </h1>
-
-            <p class="emergency-desc">
-                Use the camera to capture the accident person's face and identify a registered patient.
-            </p>
-
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                <button
+                    type="button"
+                    class="btn-emergency-call-112"
+                    onclick="openEmergencyCallConfirmation('112', 'National Emergency Services (Ambulance / 112)')"
+                    style="background: #dc2626; color: white; border: none; font-size: 15px; font-weight: 800; padding: 10px 20px; border-radius: 8px; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; box-shadow: 0 2px 8px rgba(220,38,38,0.35);">
+                    📞 Call 112 (Emergency Services)
+                </button>
+                <button
+                    type="button"
+                    class="btn-secondary"
+                    onclick="openManualEmergencyModal()"
+                    style="padding: 10px 16px; font-size: 13.5px; font-weight: 600;">
+                    📋 First Aid & Manual Rescue
+                </button>
+            </div>
         </div>
 
-
-        <!-- CAMERA & CAPTURE CARD -->
-        <div class="camera-card">
-
-            <!-- Camera Viewport / Preview Box -->
-            <div class="camera-wrapper">
-
-                <!-- Live Camera Stream -->
-                <video
-                    id="cameraPreview"
-                    class="camera-video hidden"
-                    autoplay
-                    playsinline
-                    muted>
-                </video>
-
-                <!-- Face Framing Guide Overlay (visible during live camera) -->
-                <div
-                    id="faceGuide"
-                    class="face-guide hidden">
-                </div>
-
-                <!-- Initial Placeholder before camera start -->
-                <div
-                    id="cameraPlaceholder"
-                    class="camera-placeholder">
-
-                    <div class="camera-placeholder-icon">
-                        📷
-                    </div>
-
-                    <b>Camera Inactive</b>
-
-                    <p>
-                        Click "Start Camera" below to request camera permission, or upload a photo of the individual to identify them.
+        <!-- CAMERA PERMISSION DENIED GUIDANCE BANNER (Req 1) -->
+        <div id="cameraPermissionDeniedNotice" class="hidden" style="margin-bottom: 20px; padding: 16px; background: #fff7ed; border: 1.5px solid #fdba74; border-radius: 12px; color: #9a3412;">
+            <div style="display: flex; align-items: flex-start; gap: 12px;">
+                <span style="font-size: 26px;">📷</span>
+                <div style="flex: 1;">
+                    <h4 style="margin: 0 0 6px 0; font-size: 16px; color: #9a3412; font-weight: bold;">Camera Access Blocked or Denied by Browser</h4>
+                    <p style="margin: 0 0 8px 0; font-size: 13px; line-height: 1.5;">
+                        To allow camera access:
+                        <br><b>Desktop (Chrome/Edge/Firefox):</b> Click the camera / lock icon 🔒 on the left side of your browser address bar and change Camera to <b>"Allow"</b>, then click Start Camera again.
+                        <br><b>Mobile (Safari/Chrome):</b> Go to Browser Settings → Site Settings → Camera → Allow access for this site.
                     </p>
-
-                    <div style="margin-top: 12px; display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;">
-                        <input type="file" id="helperPhotoFile" accept="image/*" style="display:none;" onchange="handleHelperPhotoUpload(event)">
+                    <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px;">
+                        <button type="button" class="btn-small primary" onclick="startEmergencyCamera()" style="background: #ea580c; color: white;">
+                            🔄 Retry Camera Permission
+                        </button>
                         <button type="button" class="btn-small secondary" onclick="$('helperPhotoFile').click()">
-                            📁 Upload Photo
+                            📁 Upload Photo Instead
                         </button>
                         <button type="button" class="btn-small secondary" onclick="loadDemoPatientForIdentification()">
-                            🌟 Demo Patient (PAT1001)
+                            🌟 Use Consented Patient (PAT1001)
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="helper-rescue-container" style="max-width: 860px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px;">
+
+            <!-- CAMERA & CONTROLS CARD -->
+            <div class="camera-card" style="margin-bottom: 0;">
+
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
+                    <div>
+                        <h2 style="margin: 0; font-size: 19px; color: #0f172a; display: flex; align-items: center; gap: 8px;">
+                            📷 Emergency Live Camera
+                        </h2>
+                        <span id="cameraHardwareStatus" style="font-size: 12px; color: #64748b;">
+                            Offline/Online camera supported on compatible devices
+                        </span>
+                    </div>
+
+                    <!-- Facing mode tag -->
+                    <span id="cameraFacingBadge" class="badge-tag" style="background: #f1f5f9; color: #334155; font-size: 11.5px; padding: 3px 8px; border-radius: 6px;">
+                        Camera: Rear (Environment)
+                    </span>
+                </div>
+
+                <!-- Camera Viewport / Preview Box (Req 1) -->
+                <div class="camera-wrapper" style="position: relative; width: 100%; max-width: 100%; min-height: 340px; background: #090d16; border-radius: 14px; overflow: hidden; display: flex; align-items: center; justify-content: center; box-shadow: inset 0 0 20px rgba(0,0,0,0.5);">
+
+                    <!-- Live Camera Stream -->
+                    <video
+                        id="cameraPreview"
+                        class="camera-video hidden"
+                        autoplay
+                        playsinline
+                        muted
+                        style="width: 100%; height: 100%; min-height: 340px; max-height: 440px; object-fit: cover;">
+                    </video>
+
+                    <!-- Face Framing Guide Overlay -->
+                    <div
+                        id="faceGuide"
+                        class="face-guide hidden">
+                    </div>
+
+                    <!-- Live Motion / Activity Screening Overlay (Req 3) -->
+                    <div id="liveScreeningPill" class="hidden" style="position: absolute; top: 12px; left: 12px; z-index: 5; background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(4px); color: white; padding: 5px 10px; border-radius: 20px; font-size: 11.5px; display: flex; align-items: center; gap: 6px; border: 1px solid rgba(255,255,255,0.2);">
+                        <span id="screeningMotionDot" style="width: 8px; height: 8px; border-radius: 50%; background: #10b981;"></span>
+                        <span id="screeningMotionText">Motion Screening: Monitoring</span>
+                    </div>
+
+                    <!-- Initial Placeholder before camera start -->
+                    <div
+                        id="cameraPlaceholder"
+                        class="camera-placeholder"
+                        style="padding: 40px 20px; text-align: center;">
+
+                        <div class="camera-placeholder-icon" style="font-size: 56px; margin-bottom: 10px;">
+                            📸
+                        </div>
+
+                        <b style="font-size: 16px; color: #f1f5f9; display: block; margin-bottom: 6px;">Camera Inactive</b>
+
+                        <p style="font-size: 13px; color: #94a3b8; max-width: 380px; margin: 0 auto 16px; line-height: 1.5;">
+                            Click <b>Start Camera</b> below. Camera works on device locally without internet. Align the face inside the guide to capture and identify registered patients.
+                        </p>
+
+                        <div style="display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;">
+                            <input type="file" id="helperPhotoFile" accept="image/*" style="display:none;" onchange="handleHelperPhotoUpload(event)">
+                            <button type="button" class="btn-small secondary" onclick="$('helperPhotoFile').click()" style="background: #1e293b; color: white;">
+                                📁 Upload Photo
+                            </button>
+                            <button type="button" class="btn-small secondary" onclick="loadDemoPatientForIdentification()" style="background: #1e293b; color: white;">
+                                🌟 Test Consented Patient (PAT1001)
+                            </button>
+                        </div>
+
+                    </div>
+
+                    <!-- Captured Still Photo Preview -->
+                    <img
+                        id="capturedImage"
+                        class="captured-image hidden"
+                        alt="Captured Person Face"
+                        style="width: 100%; height: 100%; min-height: 340px; max-height: 440px; object-fit: cover;">
+
+                    <!-- Hidden canvas for capturing video frame & activity analysis -->
+                    <canvas
+                        id="captureCanvas"
+                        style="display: none;">
+                    </canvas>
+                    <canvas
+                        id="motionScreeningCanvas"
+                        width="32"
+                        height="32"
+                        style="display: none;">
+                    </canvas>
+
+                </div>
+
+                <!-- Low-Light Camera Enhancement & Filter Controls (Req: Contrast & Brightness for Low-Light Emergency Scenarios) -->
+                <div id="cameraFilterToolbar" class="camera-filter-toolbar">
+                    <div class="filter-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <span style="font-size: 13px; font-weight: 700; color: #1e293b; display: flex; align-items: center; gap: 6px;">
+                            💡 Low-Light Vision Enhancer <span style="font-size: 11px; font-weight: normal; color: #64748b;">(Contrast &amp; Brightness for Emergency Recognition)</span>
+                        </span>
+                        <button type="button" class="btn-filter-reset" onclick="resetCameraFilters()" title="Reset contrast and brightness to default">
+                            ↺ Reset
+                        </button>
+                    </div>
+
+                    <!-- Filter Quick Presets -->
+                    <div class="filter-presets-row" style="display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px;">
+                        <button type="button" id="presetNormal" class="filter-chip" onclick="applyCameraFilterPreset('normal')">
+                            Standard (100%)
+                        </button>
+                        <button type="button" id="presetLowLight" class="filter-chip" onclick="applyCameraFilterPreset('lowlight')">
+                            💡 Low-Light Boost
+                        </button>
+                        <button type="button" id="presetHighContrast" class="filter-chip" onclick="applyCameraFilterPreset('highcontrast')">
+                            🌓 High Contrast
+                        </button>
+                        <button type="button" id="presetNight" class="filter-chip" onclick="applyCameraFilterPreset('night')">
+                            🌙 Night Rescue
+                        </button>
+                    </div>
+
+                    <!-- Granular Sliders -->
+                    <div class="filter-sliders-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                        <div class="filter-slider-item">
+                            <div style="display: flex; justify-content: space-between; font-size: 11.5px; font-weight: 600; color: #475569; margin-bottom: 4px;">
+                                <span>☀️ Brightness</span>
+                                <span id="cameraBrightnessVal" style="color: #0284c7; font-weight: 700;">100%</span>
+                            </div>
+                            <input
+                                type="range"
+                                id="cameraBrightnessSlider"
+                                min="50"
+                                max="200"
+                                value="100"
+                                step="5"
+                                oninput="setCameraBrightness(this.value)"
+                                aria-label="Camera Brightness Adjustment"
+                                style="width: 100%; accent-color: #0284c7; cursor: pointer;">
+                        </div>
+
+                        <div class="filter-slider-item">
+                            <div style="display: flex; justify-content: space-between; font-size: 11.5px; font-weight: 600; color: #475569; margin-bottom: 4px;">
+                                <span>🌓 Contrast</span>
+                                <span id="cameraContrastVal" style="color: #0284c7; font-weight: 700;">120%</span>
+                            </div>
+                            <input
+                                type="range"
+                                id="cameraContrastSlider"
+                                min="50"
+                                max="200"
+                                value="120"
+                                step="5"
+                                oninput="setCameraContrast(this.value)"
+                                aria-label="Camera Contrast Adjustment"
+                                style="width: 100%; accent-color: #0284c7; cursor: pointer;">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Camera Control Buttons (Req 1) -->
+                <div class="camera-controls" style="display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin-top: 14px;">
+
+                    <!-- Start Camera Button -->
+                    <button
+                        id="startCameraBtn"
+                        class="btn-emergency"
+                        onclick="startEmergencyCamera()"
+                        style="background: #0284c7; padding: 12px 22px;">
+                        📸 Start Camera
+                    </button>
+
+                    <!-- Capture Photo Button -->
+                    <button
+                        id="captureBtn"
+                        class="btn-emergency hidden"
+                        onclick="captureEmergencyPhoto()"
+                        style="background: #16a34a; padding: 12px 22px;">
+                        ⏺ Capture Face
+                    </button>
+
+                    <!-- Switch Camera (Front/Rear) -->
+                    <button
+                        id="switchCameraBtn"
+                        class="btn-secondary hidden"
+                        onclick="switchCameraFacing()">
+                        🔄 Switch Camera
+                    </button>
+
+                    <!-- Stop Camera Button -->
+                    <button
+                        id="stopCameraBtn"
+                        class="btn-secondary hidden"
+                        onclick="stopEmergencyCamera()">
+                        ⏹ Stop Camera
+                    </button>
+
+                    <!-- Retake Photo (after capture) -->
+                    <button
+                        id="retakeBtn"
+                        class="btn-secondary hidden"
+                        onclick="retakePhoto()">
+                        🔁 Retake Photo
+                    </button>
+
+                    <!-- Identify Patient Button -->
+                    <button
+                        id="identifyBtn"
+                        class="btn-emergency hidden"
+                        onclick="identifyEmergencyPatient()"
+                        style="background: #0f766e; padding: 12px 24px;">
+                        🔍 Identify Registered Patient
+                    </button>
+
+                    <!-- Direct Emergency Call button in camera row -->
+                    <button
+                        type="button"
+                        class="btn-emergency"
+                        onclick="openEmergencyCallConfirmation('112', 'Emergency Services (112)')"
+                        style="background: #dc2626; padding: 12px 20px;">
+                        🚨 Call 112
+                    </button>
+
+                    <!-- Upload Photo Option -->
+                    <button
+                        id="helperUploadBtn"
+                        type="button"
+                        class="btn-secondary"
+                        onclick="$('helperPhotoFile').click()">
+                        📁 Upload
+                    </button>
+
+                    <!-- Demo Patient Option -->
+                    <button
+                        id="helperDemoBtn"
+                        type="button"
+                        class="btn-secondary"
+                        onclick="loadDemoPatientForIdentification()">
+                        🌟 PAT1001
+                    </button>
+
+                </div>
+
+                <!-- Identification Processing Status Indicator -->
+                <div
+                    id="identifyingSpinner"
+                    class="hidden"
+                    style="text-align: center; margin-top: 16px; padding: 12px; background: #fef2f2; border-radius: 8px; color: #dc2626; font-weight: bold; font-size: 13.5px;">
+                    ⏳ Analyzing biometric template against registered patient data...
+                    <div id="identifyingEngineNotice" style="font-size: 11.5px; font-weight: normal; color: #7f1d1d; margin-top: 4px;">
+                        Evaluating Pearson biometric vector correlation with strict 82% threshold.
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- IDENTIFICATION RESULT: RELIABLE REGISTERED PATIENT MATCH FOUND (Req 2 & 6) -->
+                <!-- STRICT PRIVACY: Displays ONLY Patient Name, Patient ID, Blood Group, Guardian Name, Guardian Emergency Contact -->
+                <!-- NEVER displays password, email, address, medical history, notes, documents, or full profile -->
+                <div
+                    id="matchResult"
+                    class="result-card result-success hidden"
+                    style="background: #f0fdf4; border: 2px solid #86efac; border-radius: 14px; padding: 20px; box-shadow: 0 4px 18px rgba(0,0,0,0.06); margin-top: 0;">
+
+                    <div class="result-success-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid #bbf7d0; flex-wrap: wrap; gap: 8px;">
+                        <div>
+                            <h3 style="margin: 0; color: #15803d; font-size: 18px; display: flex; align-items: center; gap: 6px;">
+                                ✅ Registered Patient Identified
+                            </h3>
+                            <div id="matchSourceLabel" style="font-size: 11.5px; color: #166534; margin-top: 2px;">
+                                Match verified via Real Biometric Engine (Cloud Database)
+                            </div>
+                        </div>
+
+                        <span id="matchConfidenceBadge" class="match-badge" style="background: #dcfce7; color: #166534; font-weight: bold; font-size: 12px; padding: 4px 10px; border-radius: 12px;">
+                            94.2% Confidence
+                        </span>
+                    </div>
+
+                    <!-- MINIMUM AUTHORIZED EMERGENCY FIELDS (Req 2 & 6) -->
+                    <div class="emergency-fields-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px;">
+
+                        <div class="emergency-field-item" style="background: white; padding: 10px 12px; border-radius: 8px; border: 1px solid #dcfce7;">
+                            <div class="emergency-field-label" style="font-size: 11px; font-weight: bold; color: #64748b; text-transform: uppercase;">Patient Name</div>
+                            <div id="resPatientName" class="emergency-field-value" style="font-size: 16px; font-weight: 700; color: #0f172a;">-</div>
+                        </div>
+
+                        <div class="emergency-field-item" style="background: white; padding: 10px 12px; border-radius: 8px; border: 1px solid #dcfce7;">
+                            <div class="emergency-field-label" style="font-size: 11px; font-weight: bold; color: #64748b; text-transform: uppercase;">Patient ID</div>
+                            <div id="resPatientId" class="emergency-field-value" style="font-size: 16px; font-weight: 700; color: #0f172a;">-</div>
+                        </div>
+
+                        <div class="emergency-field-item" style="background: white; padding: 10px 12px; border-radius: 8px; border: 1px solid #dcfce7;">
+                            <div class="emergency-field-label" style="font-size: 11px; font-weight: bold; color: #64748b; text-transform: uppercase;">Blood Group</div>
+                            <div id="resBloodGroup" class="emergency-field-value">
+                                <span id="resBloodGroupBadge" class="blood-group-badge" style="background: #fee2e2; color: #b91c1c; font-size: 16px; font-weight: 800; padding: 2px 8px; border-radius: 6px;">-</span>
+                            </div>
+                        </div>
+
+                        <div class="emergency-field-item" style="background: white; padding: 10px 12px; border-radius: 8px; border: 1px solid #dcfce7;">
+                            <div class="emergency-field-label" style="font-size: 11px; font-weight: bold; color: #64748b; text-transform: uppercase;">Primary Guardian</div>
+                            <div id="resGuardianName" class="emergency-field-value" style="font-size: 16px; font-weight: 700; color: #0f172a;">-</div>
+                        </div>
+
+                    </div>
+
+                    <!-- Guardian Emergency Phone with Direct Confirmed Call Action (Req 4) -->
+                    <div class="guardian-contact-box" style="background: #ffffff; border: 1.5px solid #86efac; border-radius: 10px; padding: 14px; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
+                        <div>
+                            <div class="emergency-field-label" style="font-size: 11px; font-weight: bold; color: #64748b; text-transform: uppercase;">Guardian Emergency Phone</div>
+                            <div id="resGuardianPhone" class="emergency-field-value" style="font-size: 19px; font-weight: 800; color: #065f46;">
+                                -
+                            </div>
+                        </div>
+
+                        <button
+                            type="button"
+                            id="resCallGuardianBtn"
+                            class="call-guardian-btn"
+                            onclick="callMatchedPatientGuardian()"
+                            style="background: #059669; color: white; border: none; padding: 10px 18px; border-radius: 8px; font-weight: bold; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; font-size: 14px;">
+                            📞 Call Guardian Now
+                        </button>
+                    </div>
+
+                    <div class="privacy-notice" style="margin-top: 14px; font-size: 11.5px; color: #64748b; border-top: 1px dashed #bbf7d0; padding-top: 10px; line-height: 1.4;">
+                        🔒 <b>Privacy Protection Enforced:</b> Only minimum essential emergency contact data is disclosed. Full clinical notes, documents, passwords, and private home address are strictly protected. Raw face images are discarded after vector calculation.
+                    </div>
+
+                </div>
+
+
+                <!-- IDENTIFICATION RESULT: NO RELIABLE MATCH (Req 2 & 6) -->
+                <!-- Strictly shows "Patient not identified" - NEVER invents data or shows another patient! -->
+                <div
+                    id="noMatchResult"
+                    class="result-card result-nomatch hidden"
+                    style="background: #fef2f2; border: 2px solid #fecaca; border-radius: 14px; padding: 20px; box-shadow: 0 4px 18px rgba(0,0,0,0.06); margin-top: 0;">
+
+                    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+                        <span style="font-size: 26px;">⚠️</span>
+                        <div>
+                            <h3 style="margin: 0; color: #991b1b; font-size: 18px; font-weight: bold;">
+                                Patient not identified
+                            </h3>
+                            <span id="noMatchSubLabel" style="font-size: 12px; color: #b91c1c;">
+                                Biometric similarity did not reach the required 82% threshold.
+                            </span>
+                        </div>
+                    </div>
+
+                    <p id="noMatchMessage" style="font-size: 13px; color: #7f1d1d; line-height: 1.5; margin: 0 0 14px 0;">
+                        No reliable registered patient match found. MediCare strictly never guesses, fabricates data, or displays another patient's records when identity is uncertain.
+                    </p>
+
+                    <div style="background: white; border: 1px solid #fecaca; border-radius: 8px; padding: 12px; margin-bottom: 14px;">
+                        <b style="font-size: 12.5px; color: #991b1b; display: block; margin-bottom: 4px;">Recommended Next Actions:</b>
+                        <ul style="margin: 0; padding-left: 18px; font-size: 12.5px; color: #374151; line-height: 1.5;">
+                            <li>Initiate manual emergency assistance or call <b>112</b>.</li>
+                            <li>Check the individual's belongings for physical emergency ID or blood group card.</li>
+                            <li>Ensure good lighting and retake photo if face was occluded or angled away.</li>
+                        </ul>
+                    </div>
+
+                    <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                        <button
+                            type="button"
+                            class="btn-emergency"
+                            onclick="openEmergencyCallConfirmation('112', 'Emergency Services (112)')"
+                            style="background: #dc2626; padding: 10px 18px; font-size: 13.5px;">
+                            📞 Call 112
+                        </button>
+                        <button
+                            type="button"
+                            class="btn-secondary"
+                            onclick="openManualEmergencyModal()"
+                            style="padding: 10px 16px; font-size: 13px;">
+                            📋 Manual Emergency Assistance
+                        </button>
+                        <button
+                            type="button"
+                            class="btn-secondary"
+                            onclick="retakePhoto()"
+                            style="padding: 10px 14px; font-size: 13px;">
+                            🔁 Retake Photo
                         </button>
                     </div>
 
                 </div>
-
-                <!-- Captured Still Photo Preview -->
-                <img
-                    id="capturedImage"
-                    class="captured-image hidden"
-                    alt="Captured Person Face">
-
-                <!-- Hidden canvas for capturing video frame -->
-                <canvas
-                    id="captureCanvas"
-                    style="display: none;">
-                </canvas>
-
-            </div>
-
-
-            <!-- Camera Control Buttons -->
-            <div class="camera-controls">
-
-                <!-- Step 1: Start Camera -->
-                <button
-                    id="startCameraBtn"
-                    class="btn-emergency"
-                    onclick="startEmergencyCamera()">
-
-                    📸 Start Camera
-
-                </button>
-
-                <!-- Direct Photo Upload option -->
-                <button
-                    id="helperUploadBtn"
-                    type="button"
-                    class="btn-secondary"
-                    onclick="$('helperPhotoFile').click()">
-
-                    📁 Upload Photo
-
-                </button>
-
-                <!-- Demo Patient option for instant testing -->
-                <button
-                    id="helperDemoBtn"
-                    type="button"
-                    class="btn-secondary"
-                    onclick="loadDemoPatientForIdentification()">
-
-                    🌟 Demo (PAT1001)
-
-                </button>
-
-                <!-- Step 2: Capture Photo (while live) -->
-                <button
-                    id="captureBtn"
-                    class="btn-emergency hidden"
-                    onclick="captureEmergencyPhoto()">
-
-                    ⏺ Capture Photo
-
-                </button>
-
-                <!-- Switch Camera (front/back on phones) -->
-                <button
-                    id="switchCameraBtn"
-                    class="btn-secondary hidden"
-                    onclick="switchCameraFacing()">
-
-                    🔄 Switch Camera
-
-                </button>
-
-                <!-- Retake Photo (after capture) -->
-                <button
-                    id="retakeBtn"
-                    class="btn-secondary hidden"
-                    onclick="retakePhoto()">
-
-                    🔁 Retake Photo
-
-                </button>
-
-                <!-- Step 3: Identify Patient (after capture) -->
-                <button
-                    id="identifyBtn"
-                    class="btn-emergency hidden"
-                    onclick="identifyEmergencyPatient()">
-
-                    🔍 Identify Patient
-
-                </button>
-
-                <!-- Stop Camera -->
-                <button
-                    id="stopCameraBtn"
-                    class="btn-secondary hidden"
-                    onclick="stopEmergencyCamera()">
-
-                    ⏹ Turn Off Camera
-
-                </button>
-
-            </div>
-
-
-            <!-- Identification Processing Status Indicator -->
-            <div
-                id="identifyingSpinner"
-                class="hidden"
-                style="text-align: center; margin-top: 20px; color: #dc2626; font-weight: bold;">
-
-                ⏳ Analyzing face with biometric verification service... Please wait.
-
-            </div>
-
-
-            <!-- IDENTIFICATION RESULT: UNCONFIGURED SERVICE -->
-            <div
-                id="unconfiguredResult"
-                class="result-card result-unconfigured hidden">
-
-                <h3>
-                    ⚠️ Face identification service is not configured yet.
-                </h3>
-
-                <p id="unconfiguredMessage">
-                    Face identification service is not configured yet. A real biometric face-matching service (such as AWS Rekognition or Azure AI Face API) is required for reliable facial matching. MediCare strictly never displays fake or randomly guessed patient matches.
-                </p>
-
-                <div class="config-reqs">
-                    <b>Required Backend Credentials:</b><br>
-                    • <b>AWS Rekognition:</b> <code>AWS_ACCESS_KEY_ID</code>, <code>AWS_SECRET_ACCESS_KEY</code>, <code>AWS_REGION</code><br>
-                    • <b>Azure Face API:</b> <code>AZURE_FACE_API_KEY</code>, <code>AZURE_FACE_ENDPOINT</code>
-                </div>
-
-            </div>
-
-
-            <!-- IDENTIFICATION RESULT: NO RELIABLE MATCH -->
-            <div
-                id="noMatchResult"
-                class="result-card result-nomatch hidden">
-
-                <h3>
-                    ⚠️ No reliable registered patient match found.
-                </h3>
-
-                <p id="noMatchMessage">
-                    No reliable registered patient match found.
-                </p>
-
-            </div>
-
-
-            <!-- IDENTIFICATION RESULT: RELIABLE REGISTERED PATIENT MATCH FOUND -->
-            <!-- STRICT PRIVACY: Displays ONLY Patient Name, Patient ID, Blood Group, Guardian Name, Guardian Phone Number -->
-            <!-- NEVER displays password, email, address, medical history, notes, documents, or full profile -->
-            <div
-                id="matchResult"
-                class="result-card result-success hidden">
-
-                <div class="result-success-header">
-
-                    <h3>
-                        ✅ Registered Patient Identified
-                    </h3>
-
-                    <span class="match-badge">
-                        Verified Match
-                    </span>
-
-                </div>
-
-                <div class="emergency-fields-grid">
-
-                    <div class="emergency-field-item">
-                        <div class="emergency-field-label">Patient Name</div>
-                        <div id="resPatientName" class="emergency-field-value">-</div>
-                    </div>
-
-                    <div class="emergency-field-item">
-                        <div class="emergency-field-label">Patient ID</div>
-                        <div id="resPatientId" class="emergency-field-value">-</div>
-                    </div>
-
-                    <div class="emergency-field-item">
-                        <div class="emergency-field-label">Blood Group</div>
-                        <div id="resBloodGroup" class="emergency-field-value">
-                            <span id="resBloodGroupBadge" class="blood-group-badge">-</span>
-                        </div>
-                    </div>
-
-                    <div class="emergency-field-item">
-                        <div class="emergency-field-label">Guardian Name</div>
-                        <div id="resGuardianName" class="emergency-field-value">-</div>
-                    </div>
-
-                </div>
-
-                <!-- Guardian Emergency Phone with Direct Call Action -->
-                <div class="guardian-contact-box">
-
-                    <div>
-                        <div class="emergency-field-label">Guardian Phone Number</div>
-                        <div id="resGuardianPhone" class="emergency-field-value" style="font-size: 20px; color: #065f46;">
-                            -
-                        </div>
-                    </div>
-
-                    <a
-                        id="resCallGuardianBtn"
-                        class="call-guardian-btn"
-                        href="tel:">
-
-                        📞 Call Guardian Now
-
-                    </a>
-
-                </div>
-
-                <div class="privacy-notice">
-                    🔒 <b>Patient Privacy Protection:</b> Sensitive medical history, diagnosis, prescriptions, address, and personal emails are restricted and protected from emergency helper view.
-                </div>
-
-            </div>
-
-        </div>
-
-
-        <!-- AUDIT LOG SECTION (HIDDEN) -->
-        <div id="auditLogSection" class="audit-section hidden" style="display: none;">
-
-            <div class="audit-header">
-
-                <h3>
-                    📋 Emergency Identification Audit Log
-                </h3>
-
-                <button
-                    class="btn-secondary"
-                    style="padding: 6px 14px; font-size: 13px;"
-                    onclick="loadEmergencyAuditLogs()">
-
-                    🔄 Refresh Log
-
-                </button>
-
-            </div>
-
-            <p style="font-size: 13px; color: #64748b; margin-bottom: 12px;">
-                Every identification attempt is timestamped and recorded for safety and audit compliance. Biometric images and raw templates are never permanently retained.
-            </p>
-
-            <div class="audit-table-wrap">
-
-                <table class="audit-table">
-
-                    <thead>
-                        <tr>
-                            <th>Timestamp</th>
-                            <th>Helper Session</th>
-                            <th>Outcome</th>
-                            <th>Matched Patient ID</th>
-                            <th>Details</th>
-                        </tr>
-                    </thead>
-
-                    <tbody id="auditLogTableBody">
-                        <tr>
-                            <td colspan="5" style="text-align: center; color: #94a3b8; padding: 20px;">
-                                No identification events recorded yet in this session.
-                            </td>
-                        </tr>
-                    </tbody>
-
-                </table>
-
-            </div>
 
         </div>
 
     </main>
 
 </section>
+
+<!-- ================= EMERGENCY CALL CONFIRMATION MODAL (Req 4) ================= -->
+<div id="emergencyCallModal" class="modal-backdrop hidden">
+    <div class="modal-box" style="max-width: 500px; border-top: 6px solid #dc2626;">
+        <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-size: 24px;">🚨</span>
+                <h3 style="margin: 0; font-size: 18px; color: #991b1b;">Confirm Emergency Call</h3>
+            </div>
+            <button type="button" class="close-modal" onclick="closeEmergencyCallModal()" style="background: none; border: none; font-size: 20px; cursor: pointer; color: #64748b;">✕</button>
+        </div>
+        <div class="modal-body">
+            <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 12px; margin-bottom: 14px;">
+                <div style="font-size: 13.5px; font-weight: 700; color: #991b1b; margin-bottom: 4px;">
+                    Initiating Call to: <span id="callRecipientTarget" style="font-size: 16px; color: #7f1d1d; display: block; margin-top: 2px;">112</span>
+                </div>
+                <p style="margin: 0; font-size: 12.5px; color: #7f1d1d; line-height: 1.45;">
+                    ⚠️ <b>Important Dispatch Notice:</b> Clicking "Place Call" connects you to the dispatcher via your device's cellular dialer. An ambulance is <b>NOT</b> automatically dispatched until you confirm details with the operator.
+                </p>
+            </div>
+
+            <!-- Offline Cellular Guidance (Req 4) -->
+            <div id="callOfflineCellularNotice" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; margin-bottom: 14px; font-size: 12.5px; color: #334155; line-height: 1.45;">
+                📶 <b>Offline & Cellular Network Notice:</b>
+                <br>Emergency voice calls (112) and SMS operate on your phone's cellular carrier networks and <b>do not require internet connectivity</b> if your device has SIM network reception.
+            </div>
+
+            <!-- Alternative Offline Instructions if no network coverage (Req 4) -->
+            <div id="noCoverageAlternativeNotice" class="hidden" style="background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 12px; margin-bottom: 14px; font-size: 12px; color: #92400e; line-height: 1.45;">
+                🚫 <b>No Usable Cellular Service? Offline Alternative Procedures:</b>
+                <ul style="margin: 4px 0 0 0; padding-left: 18px;">
+                    <li>Flag down passing vehicles or bystanders to seek mobile coverage or direct transport.</li>
+                    <li>Send a runner to the nearest hospital or police outpost.</li>
+                    <li>If person is breathing, place gently into the Recovery Position (on their side).</li>
+                    <li>If person is not breathing normally, begin continuous chest compressions (CPR).</li>
+                </ul>
+            </div>
+
+            <div style="display: flex; gap: 8px; justify-content: space-between; align-items: center; flex-wrap: wrap;">
+                <button type="button" class="btn-small secondary" style="font-size: 12px;" onclick="toggleNoCoverageInstructions()">
+                    ❓ No Cellular Signal?
+                </button>
+                <div style="display: flex; gap: 8px;">
+                    <button type="button" class="btn-small secondary" onclick="closeEmergencyCallModal()">
+                        Cancel
+                    </button>
+                    <a
+                        id="confirmCallDirectLink"
+                        href="tel:112"
+                        class="btn-emergency"
+                        onclick="onEmergencyCallInitiated()"
+                        style="background: #dc2626; color: white; text-decoration: none; padding: 10px 20px; font-size: 14px; font-weight: bold; border-radius: 8px;">
+                        📞 Confirm & Place Call
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ================= MANUAL EMERGENCY ASSISTANCE MODAL (Req 2 & 3) ================= -->
+<div id="manualEmergencyModal" class="modal-backdrop hidden">
+    <div class="modal-box" style="max-width: 560px;">
+        <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-size: 22px;">📋</span>
+                <h3 style="margin: 0; font-size: 18px; color: #0f172a;">Manual Emergency First Aid & Rescue</h3>
+            </div>
+            <button type="button" class="close-modal" onclick="closeManualEmergencyModal()" style="background: none; border: none; font-size: 20px; cursor: pointer; color: #64748b;">✕</button>
+        </div>
+        <div class="modal-body">
+            <p style="color: #64748b; font-size: 13px; margin-bottom: 14px;">
+                Follow these standard healthcare first-responder instructions when a person cannot be identified or during an urgent crisis.
+            </p>
+
+            <div style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px;">
+                <div style="background: #fef2f2; border-left: 4px solid #dc2626; padding: 12px; border-radius: 6px;">
+                    <b style="color: #991b1b; font-size: 13.5px; display: block; margin-bottom: 3px;">1. Immediate Priority: Call 112</b>
+                    <span style="font-size: 12.5px; color: #7f1d1d;">Contact emergency dispatch immediately. Give your location and state of the person.</span>
+                </div>
+
+                <div style="background: #f8fafc; border-left: 4px solid #0284c7; padding: 12px; border-radius: 6px;">
+                    <b style="color: #0369a1; font-size: 13.5px; display: block; margin-bottom: 3px;">2. Airway & Breathing Check</b>
+                    <span style="font-size: 12.5px; color: #334155;">Gently tilt head back to open the airway. Look, listen, and feel for normal breathing. Do not give liquids to an unresponsive person.</span>
+                </div>
+
+                <div style="background: #f8fafc; border-left: 4px solid #16a34a; padding: 12px; border-radius: 6px;">
+                    <b style="color: #15803d; font-size: 13.5px; display: block; margin-bottom: 3px;">3. Recovery Position (If Breathing)</b>
+                    <span style="font-size: 12.5px; color: #334155;">If breathing normally and no spinal injury is suspected, turn the person onto their side into the recovery position to prevent choking.</span>
+                </div>
+
+                <div style="background: #f8fafc; border-left: 4px solid #eab308; padding: 12px; border-radius: 6px;">
+                    <b style="color: #a16207; font-size: 13.5px; display: block; margin-bottom: 3px;">4. Severe Bleeding Control</b>
+                    <span style="font-size: 12.5px; color: #334155;">Apply firm direct pressure to open wounds using a clean cloth or bandage. Keep the person warm.</span>
+                </div>
+            </div>
+
+            <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #e2e8f0; padding-top: 12px;">
+                <button type="button" class="btn-emergency" onclick="closeManualEmergencyModal(); openEmergencyCallConfirmation('112', 'Emergency Services (112)');" style="background: #dc2626; padding: 9px 18px; font-size: 13.5px;">
+                    📞 Call 112 Now
+                </button>
+                <button type="button" class="btn-small secondary" onclick="closeManualEmergencyModal()">
+                    Close
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 
 
 
