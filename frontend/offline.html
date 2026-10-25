@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Offline Emergency Mode - MediCare</title>
+    <style>
+        :root {
+            --primary: #0284c7;
+            --danger: #dc2626;
+            --bg: #f8fafc;
+            --text: #0f172a;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.5;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: #ffffff;
+            border-radius: 16px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.08);
+            padding: 24px;
+            border: 1px solid #e2e8f0;
+        }
+        .header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 20px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        .badge {
+            background: #fef2f2;
+            color: #b91c1c;
+            border: 1px solid #fecaca;
+            padding: 4px 10px;
+            border-radius: 9999px;
+            font-size: 13px;
+            font-weight: 700;
+        }
+        h1 {
+            font-size: 22px;
+            margin: 0 0 6px;
+            color: #0f172a;
+        }
+        p {
+            margin: 0 0 16px;
+            color: #475569;
+            font-size: 14.5px;
+        }
+        .call-banner {
+            background: #fef2f2;
+            border: 2px solid #ef4444;
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        .call-banner h2 {
+            margin: 0 0 8px;
+            color: #b91c1c;
+            font-size: 18px;
+        }
+        .btn-call {
+            display: block;
+            width: 100%;
+            background: #dc2626;
+            color: #ffffff;
+            font-size: 18px;
+            font-weight: 700;
+            padding: 14px 16px;
+            border-radius: 10px;
+            text-decoration: none;
+            box-sizing: border-box;
+            margin-bottom: 10px;
+            transition: background 0.2s;
+        }
+        .btn-call:hover {
+            background: #b91c1c;
+        }
+        .btn-secondary {
+            display: block;
+            width: 100%;
+            background: #0284c7;
+            color: #ffffff;
+            font-size: 15px;
+            font-weight: 600;
+            padding: 12px 16px;
+            border-radius: 8px;
+            text-decoration: none;
+            box-sizing: border-box;
+            text-align: center;
+        }
+        .cpr-card {
+            background: #f0fdf4;
+            border: 1px solid #bbf7d0;
+            border-radius: 12px;
+            padding: 16px;
+            margin-top: 20px;
+        }
+        .cpr-card h3 {
+            margin: 0 0 8px;
+            color: #166534;
+            font-size: 16px;
+        }
+        .cpr-card ol {
+            margin: 0;
+            padding-left: 20px;
+            color: #14532d;
+            font-size: 13.5px;
+        }
+        .cpr-card li {
+            margin-bottom: 6px;
+        }
+        .cellular-note {
+            background: #f8fafc;
+            border: 1px dashed #94a3b8;
+            border-radius: 8px;
+            padding: 12px;
+            font-size: 12.5px;
+            color: #334155;
+            margin-top: 16px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <span class="badge">📡 OFFLINE EMERGENCY MODE</span>
+        </div>
+
+        <h1>Internet Connection Unavailable</h1>
+        <p>You are currently offline. Cloud AI features and remote database lookups are unavailable. However, telephone calling and emergency first-aid protocols remain operational on your device.</p>
+
+        <div class="call-banner">
+            <h2>🚨 Urgent Life Threatening Emergency?</h2>
+            <p style="color: #7f1d1d; font-size: 13.5px;">If the person is unresponsive, bleeding severely, or struggling to breathe, call emergency services immediately.</p>
+            <a href="tel:112" class="btn-call">📞 Call 112 (Emergency India)</a>
+            <a href="tel:108" class="btn-call" style="background: #ea580c;">🚑 Call 108 (Ambulance)</a>
+        </div>
+
+        <a href="/" class="btn-secondary">🔄 Return to Cached App (Offline Mode)</a>
+
+        <div class="cellular-note">
+            💡 <b>Cellular Network Note:</b> Emergency voice calls (`tel:112` and `tel:108`) rely on cellular tower reception, NOT internet or Wi-Fi. If your phone has cellular signal from any telecom carrier, emergency calls will connect.
+        </div>
+
+        <div class="cpr-card">
+            <h3>⚡ Emergency Action Protocol (Check - Call - Care)</h3>
+            <ol>
+                <li><b>Check Responsiveness:</b> Tap the person firmly on both shoulders and shout loudly: "Are you OK?"</li>
+                <li><b>Check Breathing:</b> Look at the chest for 5-10 seconds for normal rising and falling. Gasping is NOT normal breathing.</li>
+                <li><b>Call 112:</b> If unresponsive and not breathing normally, call 112 immediately. Put phone on speaker.</li>
+                <li><b>Hands-Only CPR:</b> Place the heel of one hand in the center of the chest, interlock fingers, and push hard and fast (100–120 compressions/minute, 5 cm deep). Allow chest to fully recoil.</li>
+                <li><b>Recovery Position:</b> If breathing normally but unresponsive, turn the person onto their side to keep their airway open until help arrives.</li>
+            </ol>
+        </div>
+    </div>
+</body>
+</html>

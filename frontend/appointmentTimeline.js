@@ -775,4 +775,10 @@
     };
 
     window.showInspectorAppointment = showInspectorAppointment;
+
+    window.addEventListener("languageChanged", function () {
+        if (currentAppointments && currentAppointments.length > 0) {
+            window.renderAppointmentScheduleVisualization(currentAppointments, currentReminders);
+        }
+    });
 })();

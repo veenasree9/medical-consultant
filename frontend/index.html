@@ -10,6 +10,14 @@
     <meta property="og:description" content="Secure digital healthcare portal for patients, doctors, and healthcare helpers.">
 
     <link rel="stylesheet" href="style.css">
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#0284c7">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="MediCare">
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+    <link rel="icon" type="image/svg+xml" href="/icon.svg">
 </head>
 
 <body>
@@ -22,14 +30,26 @@
 
     <nav class="navbar">
 
-        <div class="brand">
+        <div class="brand" data-i18n="brand.name">
             🏥 MediCare Consultant
         </div>
 
-        <div class="navlinks">
-            <a href="#homePage">Home</a>
-            <a href="#about">About</a>
-            <a href="#contact">Contact</a>
+        <div class="navlinks" style="display: flex; align-items: center; gap: 20px;">
+            <a href="#homePage" data-i18n="nav.home">Home</a>
+            <a href="#about" data-i18n="nav.about">About</a>
+            <a href="#contact" data-i18n="nav.contact">Contact</a>
+
+            <div class="lang-selector-wrap" title="Select Application Language">
+                <span class="lang-icon">🌐</span>
+                <select class="app-lang-picker" onchange="changeLanguage(this.value)" aria-label="Select Application Language">
+                    <option value="en">English</option>
+                    <option value="hi">हिन्दी (Hindi)</option>
+                    <option value="te">తెలుగు (Telugu)</option>
+                    <option value="ta">தமிழ் (Tamil)</option>
+                    <option value="kn">ಕನ್ನಡ (Kannada)</option>
+                    <option value="es">Español</option>
+                </select>
+            </div>
         </div>
 
     </nav>
@@ -39,16 +59,16 @@
 
         <div class="hero-copy">
 
-            <p class="eyebrow">
+            <p class="eyebrow" data-i18n="hero.eyebrow">
                 DIGITAL HEALTHCARE PORTAL
             </p>
 
             <h1>
-                Medical care,
-                <span>made simple.</span>
+                <span data-i18n="hero.title">Medical care, </span>
+                <span data-i18n="hero.titleHighlight">made simple.</span>
             </h1>
 
-            <p>
+            <p data-i18n="hero.subtitle">
                 Secure access for patients, doctors
                 and healthcare helpers.
             </p>
@@ -58,15 +78,16 @@
 
         <div class="portal-card">
 
-            <h2>Login Portal</h2>
+            <h2 data-i18n="portal.title">Login Portal</h2>
 
-            <p>
+            <p data-i18n="portal.subtitle">
                 Choose how you want to sign in.
             </p>
 
             <button
                 class="role doctor"
-                onclick="openLogin('doctor')">
+                onclick="openLogin('doctor')"
+                data-i18n="portal.roleDoctor">
 
                 👨⚕️ Login as Doctor
 
@@ -74,7 +95,8 @@
 
             <button
                 class="role helper"
-                onclick="openLogin('helper')">
+                onclick="openLogin('helper')"
+                data-i18n="portal.roleHelper">
 
                 🧑⚕️ Login as Helper
 
@@ -82,7 +104,8 @@
 
             <button
                 class="role patient"
-                onclick="openLogin('patient')">
+                onclick="openLogin('patient')"
+                data-i18n="portal.rolePatient">
 
                 👨🦰 Login as Patient
 
@@ -95,9 +118,9 @@
 
     <section id="about" class="info-section">
 
-        <h2>About MediCare</h2>
+        <h2 data-i18n="about.title">About MediCare</h2>
 
-        <p>
+        <p data-i18n="about.text">
             MediCare is a medical consultant project
             for managing patients, doctors and
             healthcare helpers.
@@ -108,9 +131,9 @@
 
     <section id="contact" class="info-section">
 
-        <h2>Contact</h2>
+        <h2 data-i18n="contact.title">Contact</h2>
 
-        <p>
+        <p data-i18n="contact.text">
             Contact your healthcare organization
             for assistance.
         </p>
@@ -125,13 +148,27 @@
 
 <section id="loginPage" class="page hidden">
 
-    <button
-        class="back-btn"
-        onclick="goHome()">
+    <div style="display: flex; justify-content: space-between; align-items: center; padding: 18px 7%;">
+        <button
+            class="back-btn"
+            onclick="goHome()"
+            data-i18n="login.back"
+            style="margin: 0;">
+            ← Back
+        </button>
 
-        ← Back
-
-    </button>
+        <div class="lang-selector-wrap" title="Select Application Language">
+            <span class="lang-icon">🌐</span>
+            <select class="app-lang-picker" onchange="changeLanguage(this.value)" aria-label="Select Application Language">
+                <option value="en">English</option>
+                <option value="hi">हिन्दी (Hindi)</option>
+                <option value="te">తెలుగు (Telugu)</option>
+                <option value="ta">தமிழ் (Tamil)</option>
+                <option value="kn">ಕನ್ನಡ (Kannada)</option>
+                <option value="es">Español</option>
+            </select>
+        </div>
+    </div>
 
 
     <div class="login-wrap">
@@ -142,30 +179,30 @@
                 🏥
             </div>
 
-            <h1 id="loginTitle">
+            <h1 id="loginTitle" data-i18n="login.patientTitle">
                 Patient Login
             </h1>
 
             <!-- Quick Demo Credentials Box -->
             <div id="demoCredentialsHelper" style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 10px 12px; margin-bottom: 16px; font-size: 12.5px; color: #166534; text-align: left;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                    <span style="font-weight: 600;">⚡ Quick Demo Access</span>
-                    <span style="font-size: 11px; color: #15803d; background: #dcfce7; padding: 2px 6px; border-radius: 4px;">1-Click Fill</span>
+                    <span style="font-weight: 600;" data-i18n="login.demoTitle">⚡ Quick Demo Access</span>
+                    <span style="font-size: 11px; color: #15803d; background: #dcfce7; padding: 2px 6px; border-radius: 4px;" data-i18n="login.oneClickFill">1-Click Fill</span>
                 </div>
                 <div id="demoQuickFillButtons" style="display: flex; gap: 6px; flex-wrap: wrap;">
-                    <button type="button" class="btn-small" style="background: #0284c7; color: white; font-size: 11.5px; padding: 5px 10px; border-radius: 6px; border: none; cursor: pointer;" onclick="fillDemoCredentials('patient')">
+                    <button type="button" class="btn-small" style="background: #0284c7; color: white; font-size: 11.5px; padding: 5px 10px; border-radius: 6px; border: none; cursor: pointer;" onclick="fillDemoCredentials('patient')" data-i18n="login.demoPatientBtn">
                         👨🦰 Demo Patient (PAT1001 / 1234)
                     </button>
-                    <button type="button" class="btn-small" style="background: #0f766e; color: white; font-size: 11.5px; padding: 5px 10px; border-radius: 6px; border: none; cursor: pointer;" onclick="fillDemoCredentials('doctor')">
+                    <button type="button" class="btn-small" style="background: #0f766e; color: white; font-size: 11.5px; padding: 5px 10px; border-radius: 6px; border: none; cursor: pointer;" onclick="fillDemoCredentials('doctor')" data-i18n="login.demoDoctorBtn">
                         👨⚕️ Demo Doctor (doctor / 1234)
                     </button>
                 </div>
-                <div id="demoCredentialsTip" style="font-size: 11px; color: #4b5563; margin-top: 6px;">
+                <div id="demoCredentialsTip" style="font-size: 11px; color: #4b5563; margin-top: 6px;" data-i18n="login.demoTip">
                     Also supports phone (+919876543210) or registered email with password <b>1234</b>.
                 </div>
             </div>
 
-            <label id="credentialLabel">
+            <label id="credentialLabel" data-i18n="login.patientLabel">
                 Patient ID / Phone / Email
             </label>
 
@@ -173,9 +210,10 @@
                 id="username"
                 type="text"
                 placeholder="Enter Patient ID (e.g. PAT1001), Phone, or Email"
+                data-i18n-placeholder="login.patientPlaceholder"
                 autocomplete="username">
 
-            <label>
+            <label data-i18n="login.passwordLabel">
                 Password
             </label>
 
@@ -184,6 +222,7 @@
                     id="password"
                     type="password"
                     placeholder="Enter your password"
+                    data-i18n-placeholder="login.passwordPlaceholder"
                     autocomplete="current-password">
 
                 <button
@@ -192,6 +231,7 @@
                     class="toggle-password-btn"
                     onclick="togglePasswordVisibility()"
                     aria-label="Show or hide password"
+                    data-i18n-title="login.togglePassword"
                     title="Show or hide password">
                     👁️
                 </button>
@@ -200,7 +240,8 @@
             <button
                 id="loginBtn"
                 class="primary full"
-                onclick="passwordLogin()">
+                onclick="passwordLogin()"
+                data-i18n="login.signInBtn">
 
                 Log In
 
@@ -232,17 +273,30 @@
 
     <nav class="dashboard-nav">
 
-        <div class="brand">
+        <div class="brand" data-i18n="brand.name">
             🏥 MediCare
         </div>
 
         <div style="display: flex; align-items: center; gap: 12px;">
+
+            <div class="lang-selector-wrap" title="Select Application Language">
+                <span class="lang-icon">🌐</span>
+                <select class="app-lang-picker" onchange="changeLanguage(this.value)" aria-label="Select Application Language">
+                    <option value="en">English</option>
+                    <option value="hi">हिन्दी (Hindi)</option>
+                    <option value="te">తెలుగు (Telugu)</option>
+                    <option value="ta">தமிழ் (Tamil)</option>
+                    <option value="kn">ಕನ್ನಡ (Kannada)</option>
+                    <option value="es">Español</option>
+                </select>
+            </div>
 
             <button
                 type="button"
                 id="reminderNavBtn"
                 class="notification-bell-btn"
                 onclick="openRemindersModal()"
+                data-i18n-title="patient.remindersCenter"
                 title="Appointment Reminders">
                 🔔 <span id="reminderNavBadge" class="notification-badge hidden">0</span>
             </button>
@@ -251,7 +305,8 @@
 
             <button
                 class="logout"
-                onclick="logout()">
+                onclick="logout()"
+                data-i18n="patient.logout">
 
                 Logout
 
@@ -284,6 +339,7 @@
         <!-- ================= PATIENT DASHBOARD QUICKNAV ================= -->
         <div class="dashboard-quicknav">
             <button type="button" onclick="scrollToCard('profileCard')">📋 Profile</button>
+            <button type="button" onclick="scrollToCard('biometricHistoryCard')">🛡️ Biometric History</button>
             <button type="button" onclick="scrollToCard('appointmentsCard')">📅 Appointments & Reminders</button>
             <button type="button" id="showAllFilesQuickBtn" class="btn-quicknav-files" onclick="showAllFilesView()">📂 Show All Files</button>
             <button type="button" onclick="scrollToCard('medicalFilesCard')">📁 Medical Files</button>
@@ -756,6 +812,74 @@
         </div>
 
 
+        <!-- ================= BIOMETRIC VERIFICATION HISTORY CARD ================= -->
+        <div id="biometricHistoryCard" class="profile-card" style="margin-top: 25px;">
+            <div class="summary-card-header" style="justify-content: space-between; align-items: center; display: flex; flex-wrap: wrap; gap: 10px;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <span style="font-size: 24px;">🛡️</span>
+                    <div>
+                        <h3 style="margin: 0; font-size: 18px; color: #0f172a;" data-i18n="biometric.historyTitle">Biometric Verification History</h3>
+                        <p style="color: #64748b; font-size: 13px; margin: 4px 0 0 0;" data-i18n="biometric.historySubtitle">
+                            Chronological audit log of all successful and failed biometric verification attempts, methods used, and timestamps.
+                        </p>
+                    </div>
+                </div>
+                <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+                    <button type="button" class="btn-small secondary" onclick="loadBiometricHistory(true)" title="Rescan biometric audit log" style="display: inline-flex; align-items: center; gap: 5px;">
+                        🔄 <span data-i18n="biometric.refresh">Refresh Log</span>
+                    </button>
+                    <button type="button" class="btn-small primary" onclick="openTestBiometricModal()" style="background: #0f766e; color: white; display: inline-flex; align-items: center; gap: 5px;" title="Test biometric verification">
+                        🧪 <span data-i18n="biometric.testVerification">Test Verification</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- METRICS STATS BAR -->
+            <div class="biometric-stats-bar" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin: 18px 0;">
+                <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px 16px;">
+                    <div style="font-size: 11.5px; font-weight: 600; text-transform: uppercase; color: #64748b;" data-i18n="biometric.totalAttempts">Total Attempts</div>
+                    <div id="bioStatTotal" style="font-size: 24px; font-weight: bold; color: #0f172a; margin-top: 4px;">—</div>
+                    <div style="font-size: 11.5px; color: #94a3b8; margin-top: 2px;">Recorded events</div>
+                </div>
+                <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 10px; padding: 12px 16px;">
+                    <div style="font-size: 11.5px; font-weight: 600; text-transform: uppercase; color: #166534;" data-i18n="biometric.successfulVerifications">Successful</div>
+                    <div id="bioStatSuccess" style="font-size: 24px; font-weight: bold; color: #15803d; margin-top: 4px;">—</div>
+                    <div id="bioStatSuccessRate" style="font-size: 11.5px; color: #166534; margin-top: 2px;">100% success rate</div>
+                </div>
+                <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 10px; padding: 12px 16px;">
+                    <div style="font-size: 11.5px; font-weight: 600; text-transform: uppercase; color: #991b1b;" data-i18n="biometric.failedAttempts">Failed / Rejected</div>
+                    <div id="bioStatFailed" style="font-size: 24px; font-weight: bold; color: #b91c1c; margin-top: 4px;">—</div>
+                    <div style="font-size: 11.5px; color: #991b1b; margin-top: 2px;">Quality & lighting checks</div>
+                </div>
+                <div style="background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 10px; padding: 12px 16px;">
+                    <div style="font-size: 11.5px; font-weight: 600; text-transform: uppercase; color: #075985;" data-i18n="biometric.activeEngines">Active Engines</div>
+                    <div style="font-size: 15px; font-weight: bold; color: #0369a1; margin-top: 6px;">MediCare Vision + FIDO2</div>
+                    <div id="bioStatLastAttempt" style="font-size: 11px; color: #0284c7; margin-top: 2px;">Last attempt: —</div>
+                </div>
+            </div>
+
+            <!-- FILTER & STATUS BAR -->
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; padding-bottom: 12px; border-bottom: 1px solid #e2e8f0;">
+                <div style="display: flex; gap: 6px; flex-wrap: wrap;" id="bioFilterBtnGroup">
+                    <button type="button" class="btn-small active" onclick="filterBiometricHistory('all')" id="bioFilterAll" style="padding: 5px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer;">All (<span id="bioFilterCountAll">0</span>)</button>
+                    <button type="button" class="btn-small secondary" onclick="filterBiometricHistory('success')" id="bioFilterSuccess" style="padding: 5px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer;">✅ Success (<span id="bioFilterCountSuccess">0</span>)</button>
+                    <button type="button" class="btn-small secondary" onclick="filterBiometricHistory('failed')" id="bioFilterFailed" style="padding: 5px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer;">❌ Failed (<span id="bioFilterCountFailed">0</span>)</button>
+                </div>
+                <div style="font-size: 12px; color: #64748b; display: flex; align-items: center; gap: 6px;">
+                    <span>🔐</span>
+                    <span>Cryptographic audit-logged verification events</span>
+                </div>
+            </div>
+
+            <!-- CHRONOLOGICAL LIST CONTAINER -->
+            <div id="biometricHistoryListContainer">
+                <div style="text-align: center; padding: 30px; color: #64748b;">
+                    Loading biometric verification history...
+                </div>
+            </div>
+        </div>
+
+
         <!-- ================= 2. APPOINTMENTS & REMINDER NOTIFICATIONS CARD ================= -->
         <div id="appointmentsCard" class="profile-card" style="margin-top: 25px;">
             <div class="summary-card-header" style="justify-content: space-between; align-items: center; display: flex; flex-wrap: wrap; gap: 10px;">
@@ -905,17 +1029,32 @@
 
     <nav class="dashboard-nav">
 
-        <div class="brand">
+        <div class="brand" data-i18n="doctor.dashboard">
             👨‍⚕️ MediCare Doctor
         </div>
 
-        <button
-            class="logout"
-            onclick="logout()">
+        <div style="display: flex; align-items: center; gap: 12px;">
+            <div class="lang-selector-wrap" title="Select Application Language">
+                <span class="lang-icon">🌐</span>
+                <select class="app-lang-picker" onchange="changeLanguage(this.value)" aria-label="Select Application Language">
+                    <option value="en">English</option>
+                    <option value="hi">हिन्दी (Hindi)</option>
+                    <option value="te">తెలుగు (Telugu)</option>
+                    <option value="ta">தமிழ் (Tamil)</option>
+                    <option value="kn">ಕನ್ನಡ (Kannada)</option>
+                    <option value="es">Español</option>
+                </select>
+            </div>
 
-            Logout
+            <button
+                class="logout"
+                onclick="logout()"
+                data-i18n="patient.logout">
 
-        </button>
+                Logout
+
+            </button>
+        </div>
 
     </nav>
 
@@ -1044,17 +1183,32 @@
 
     <nav class="dashboard-nav">
 
-        <div class="brand">
+        <div class="brand" data-i18n="helper.dashboard">
             🏥 MediCare Emergency Portal
         </div>
 
-        <button
-            class="logout"
-            onclick="exitHelperMode()">
+        <div style="display: flex; align-items: center; gap: 12px;">
+            <div class="lang-selector-wrap" title="Select Application Language">
+                <span class="lang-icon">🌐</span>
+                <select class="app-lang-picker" onchange="changeLanguage(this.value)" aria-label="Select Application Language">
+                    <option value="en">English</option>
+                    <option value="hi">हिन्दी (Hindi)</option>
+                    <option value="te">తెలుగు (Telugu)</option>
+                    <option value="ta">தமிழ் (Tamil)</option>
+                    <option value="kn">ಕನ್ನಡ (Kannada)</option>
+                    <option value="es">Español</option>
+                </select>
+            </div>
 
-            ← Back to Home
+            <button
+                class="logout"
+                onclick="exitHelperMode()"
+                data-i18n="login.back">
 
-        </button>
+                ← Back to Home
+
+            </button>
+        </div>
 
     </nav>
 
@@ -2159,11 +2313,63 @@
     </div>
 </div>
 
-<!-- React 18, ReactDOM, PropTypes and Recharts Library Scripts -->
+<!-- ================= TEST BIOMETRIC VERIFICATION MODAL ================= -->
+<div id="testBiometricModal" class="modal-backdrop hidden">
+    <div class="modal-box" style="max-width: 500px;">
+        <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-size: 20px;">🧪</span>
+                <h3 style="margin: 0; font-size: 18px; color: #0f172a;">Test Biometric Verification</h3>
+            </div>
+            <button type="button" class="close-modal" onclick="closeTestBiometricModal()" style="background: none; border: none; font-size: 20px; cursor: pointer; color: #64748b;">✕</button>
+        </div>
+        <div class="modal-body">
+            <p style="color: #64748b; font-size: 13px; margin-bottom: 14px;">
+                Perform or simulate a verification attempt using any registered biometric method to test matching reliability and observe the real-time chronological log update.
+            </p>
+            <div style="margin-bottom: 12px;">
+                <label style="display: block; font-size: 12.5px; font-weight: bold; color: #334155; margin-bottom: 4px;">Biometric Verification Method *</label>
+                <select id="testBioMethod" style="width: 100%; padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13.5px;">
+                    <option value="Face Biometric Scan (MediCare Vision Engine)">Face Biometric Scan (MediCare Vision Engine)</option>
+                    <option value="Liveness Anti-Spoofing Detection">Liveness Anti-Spoofing Detection</option>
+                    <option value="FIDO2 WebAuthn Passkey (Fingerprint / TouchID)">FIDO2 WebAuthn Passkey (Fingerprint / TouchID)</option>
+                    <option value="Live Camera Presence Verification">Live Camera Presence Verification</option>
+                    <option value="Emergency First-Responder Face Match">Emergency First-Responder Face Match</option>
+                </select>
+            </div>
+            <div style="margin-bottom: 12px;">
+                <label style="display: block; font-size: 12.5px; font-weight: bold; color: #334155; margin-bottom: 4px;">Test Verification Outcome *</label>
+                <select id="testBioOutcome" style="width: 100%; padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13.5px;">
+                    <option value="success" selected>✅ Successful Verification (Passes confidence threshold)</option>
+                    <option value="failed">❌ Failed / Rejected (Low lighting, occlusion, or spoof attempt)</option>
+                </select>
+            </div>
+            <div style="margin-bottom: 14px;">
+                <label style="display: block; font-size: 12.5px; font-weight: bold; color: #334155; margin-bottom: 4px;">Custom Notes / Context (Optional)</label>
+                <input id="testBioDetails" type="text" placeholder="e.g. Test from mobile camera, regular indoor lighting" style="width: 100%; padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px;">
+            </div>
+            <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                <button type="button" class="btn-small secondary" onclick="closeTestBiometricModal()">
+                    Cancel
+                </button>
+                <button type="button" id="submitTestBioBtn" class="btn-small primary" style="background: #0f766e; color: white; padding: 9px 18px;" onclick="executeTestBiometricVerification()">
+                    🚀 Run Verification & Log
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- React 18, ReactDOM, React-Is Shim, PropTypes and Recharts Library Scripts -->
 <script src="/vendor/react/umd/react.production.min.js"></script>
 <script src="/vendor/react-dom/umd/react-dom.production.min.js"></script>
+<script src="react-is-shim.js"></script>
 <script src="/vendor/prop-types/prop-types.min.js"></script>
 <script src="/vendor/recharts/umd/Recharts.js"></script>
+
+<!-- Internationalization Library (i18next) & Language Packs -->
+<script src="/vendor/i18next/dist/umd/i18next.min.js"></script>
+<script src="i18n.js"></script>
 
 <script src="config.js"></script>
 <script src="appointmentTimeline.js"></script>

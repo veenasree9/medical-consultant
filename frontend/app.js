@@ -80,16 +80,16 @@ function openLogin(type) {
     if (type === "doctor") {
 
         $("loginTitle").textContent =
-            "Doctor Login";
+            window.t ? window.t("login.doctorTitle", "Doctor Login") : "Doctor Login";
 
         $("credentialLabel").textContent =
-            "Doctor Username";
+            window.t ? window.t("login.doctorLabel", "Doctor Username / Phone") : "Doctor Username / Phone";
 
         $("username").placeholder =
-            "Enter Doctor Username (e.g. doctor)";
+            window.t ? window.t("login.doctorPlaceholder", "Enter Doctor ID (e.g. doctor) or Phone") : "Enter Doctor ID (e.g. doctor) or Phone";
 
         $("password").placeholder =
-            "Enter your password (e.g. 1234)";
+            window.t ? window.t("login.passwordPlaceholder", "Enter your password") : "Enter your password";
 
         if ($("registerPrompt")) {
             $("registerPrompt").classList.remove("hidden");
@@ -105,16 +105,16 @@ function openLogin(type) {
     else {
 
         $("loginTitle").textContent =
-            "Patient Login";
+            window.t ? window.t("login.patientTitle", "Patient Login") : "Patient Login";
 
         $("credentialLabel").textContent =
-            "Patient ID / Phone / Email";
+            window.t ? window.t("login.patientLabel", "Patient ID / Phone / Email") : "Patient ID / Phone / Email";
 
         $("username").placeholder =
-            "Enter Patient ID (e.g. PAT1001), Phone, or Email";
+            window.t ? window.t("login.patientPlaceholder", "Enter Patient ID (e.g. PAT1001), Phone, or Email") : "Enter Patient ID (e.g. PAT1001), Phone, or Email";
 
         $("password").placeholder =
-            "Enter your password (e.g. 1234)";
+            window.t ? window.t("login.passwordPlaceholder", "Enter your password") : "Enter your password";
 
         if ($("registerPrompt")) {
             $("registerPrompt").classList.remove("hidden");
@@ -131,8 +131,8 @@ function openLogin(type) {
 function fillDemoCredentials(role) {
     if (role === "doctor") {
         selectedLogin = "doctor";
-        if ($("loginTitle")) $("loginTitle").textContent = "Doctor Login";
-        if ($("credentialLabel")) $("credentialLabel").textContent = "Doctor Username";
+        if ($("loginTitle")) $("loginTitle").textContent = window.t ? window.t("login.doctorTitle", "Doctor Login") : "Doctor Login";
+        if ($("credentialLabel")) $("credentialLabel").textContent = window.t ? window.t("login.doctorLabel", "Doctor Username / Phone") : "Doctor Username / Phone";
         if ($("username")) $("username").value = "doctor";
         if ($("password")) {
             $("password").value = "1234";
@@ -140,8 +140,8 @@ function fillDemoCredentials(role) {
         }
     } else {
         selectedLogin = "patient";
-        if ($("loginTitle")) $("loginTitle").textContent = "Patient Login";
-        if ($("credentialLabel")) $("credentialLabel").textContent = "Patient ID / Phone / Email";
+        if ($("loginTitle")) $("loginTitle").textContent = window.t ? window.t("login.patientTitle", "Patient Login") : "Patient Login";
+        if ($("credentialLabel")) $("credentialLabel").textContent = window.t ? window.t("login.patientLabel", "Patient ID / Phone / Email") : "Patient ID / Phone / Email";
         if ($("username")) $("username").value = "PAT1001";
         if ($("password")) {
             $("password").value = "1234";
@@ -797,6 +797,9 @@ async function loadPatientDashboard() {
 
     // Load Appointments & Reminders
     loadPatientAppointments();
+
+    // Load Biometric Verification History
+    loadBiometricHistory();
 
     // Check first-time login vitals recording
     checkAndPromptFirstTimeHealthVitals(p);
@@ -4746,4 +4749,269 @@ window.sendDoctorAppointmentReminder = sendDoctorAppointmentReminder;
 
 // Auto-refresh relative timestamps every 30 seconds
 setInterval(refreshRelativeTimestamps, 30000);
+
+/* ================= PATIENT BIOMETRIC HISTORY & VERIFICATION LOGS ================= */
+let allBiometricLogs = [];
+let currentBioFilter = "all";
+
+async function loadBiometricHistory(forceRefresh = false) {
+    const container = $("biometricHistoryListContainer");
+    if (!patientToken) return;
+
+    if (forceRefresh && container) {
+        container.innerHTML = `
+            <div style="text-align: center; padding: 25px; color: #64748b;">
+                <div style="font-size: 20px; margin-bottom: 6px;">⏳</div>
+                Fetching latest biometric verification logs...
+            </div>
+        `;
+    }
+
+    try {
+        const res = await fetch(`${API_URL}/api/patient/biometric-history`, {
+            headers: {
+                Authorization: `Bearer ${patientToken}`
+            }
+        });
+
+        if (!res.ok) {
+            throw new Error(`Server returned HTTP ${res.status}`);
+        }
+
+        const data = await res.json();
+        if (data.success) {
+            allBiometricLogs = data.history || [];
+            updateBiometricSummaryStats(data.summary, allBiometricLogs);
+            renderBiometricHistoryList(allBiometricLogs, currentBioFilter);
+            if (forceRefresh) {
+                showToast("Biometric verification history refreshed!");
+            }
+        } else {
+            if (container) {
+                container.innerHTML = `<div style="text-align: center; padding: 20px; color: #dc2626;">${escapeHTML(data.message || "Failed to load biometric history.")}</div>`;
+            }
+        }
+    } catch (err) {
+        console.error("Biometric history error:", err);
+        if (container) {
+            container.innerHTML = `
+                <div style="text-align: center; padding: 20px; color: #64748b;">
+                    Unable to load biometric history. <button type="button" class="link-btn" onclick="loadBiometricHistory(true)">Try again</button>
+                </div>
+            `;
+        }
+    }
+}
+
+function updateBiometricSummaryStats(summary, logs) {
+    const total = summary ? summary.total : logs.length;
+    const success = summary ? summary.successCount : logs.filter(l => l.status === "success").length;
+    const failed = summary ? summary.failedCount : logs.filter(l => l.status === "failed").length;
+    const rate = total > 0 ? Math.round((success / total) * 100) : 0;
+
+    if ($("bioStatTotal")) $("bioStatTotal").textContent = total;
+    if ($("bioStatSuccess")) $("bioStatSuccess").textContent = success;
+    if ($("bioStatFailed")) $("bioStatFailed").textContent = failed;
+    if ($("bioStatSuccessRate")) $("bioStatSuccessRate").textContent = `${rate}% verification rate`;
+
+    if ($("bioFilterCountAll")) $("bioFilterCountAll").textContent = total;
+    if ($("bioFilterCountSuccess")) $("bioFilterCountSuccess").textContent = success;
+    if ($("bioFilterCountFailed")) $("bioFilterCountFailed").textContent = failed;
+
+    if ($("bioStatLastAttempt")) {
+        if (logs.length > 0 && logs[0].timestamp) {
+            const d = new Date(logs[0].timestamp);
+            $("bioStatLastAttempt").textContent = "Last: " + d.toLocaleDateString([], { month: "short", day: "numeric" }) + " " + d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+        } else {
+            $("bioStatLastAttempt").textContent = "Last: None recorded";
+        }
+    }
+}
+
+function filterBiometricHistory(filter) {
+    currentBioFilter = filter;
+    ["bioFilterAll", "bioFilterSuccess", "bioFilterFailed"].forEach(id => {
+        const btn = $(id);
+        if (btn) {
+            btn.classList.remove("active");
+            btn.classList.add("secondary");
+        }
+    });
+
+    const activeId = filter === "success" ? "bioFilterSuccess" : (filter === "failed" ? "bioFilterFailed" : "bioFilterAll");
+    if ($(activeId)) {
+        $(activeId).classList.add("active");
+        $(activeId).classList.remove("secondary");
+    }
+
+    renderBiometricHistoryList(allBiometricLogs, filter);
+}
+
+function renderBiometricHistoryList(logs, filter = "all") {
+    const container = $("biometricHistoryListContainer");
+    if (!container) return;
+
+    let filtered = logs || [];
+    if (filter === "success") {
+        filtered = filtered.filter(l => l.status === "success");
+    } else if (filter === "failed") {
+        filtered = filtered.filter(l => l.status === "failed");
+    }
+
+    if (filtered.length === 0) {
+        container.innerHTML = `
+            <div style="text-align: center; padding: 36px 20px; color: #64748b; background: #f8fafc; border-radius: 10px; border: 1px dashed #cbd5e1;">
+                <div style="font-size: 32px; margin-bottom: 8px;">🛡️</div>
+                <div style="font-weight: 600; font-size: 15px; color: #334155;">No biometric verification attempts found</div>
+                <div style="font-size: 13px; color: #94a3b8; margin-top: 4px;">
+                    ${filter !== "all" ? `No ${filter} verification attempts match the selected filter.` : "Verification attempts using face recognition, live presence, passkeys, or liveness detection will appear here chronologically."}
+                </div>
+                <div style="margin-top: 14px;">
+                    <button type="button" class="btn-small primary" onclick="openTestBiometricModal()" style="background: #0f766e; color: white;">
+                        🧪 Test Biometric Verification
+                    </button>
+                </div>
+            </div>
+        `;
+        return;
+    }
+
+    const html = filtered.map(log => {
+        const isSuccess = log.status === "success";
+        const dateObj = new Date(log.timestamp);
+        const formattedDate = dateObj.toLocaleDateString([], {
+            weekday: "short",
+            year: "numeric",
+            month: "short",
+            day: "numeric"
+        });
+        const formattedTime = dateObj.toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit"
+        });
+
+        // Determine icon based on method or action
+        let methodIcon = "👤";
+        const methodLower = (log.method || "").toLowerCase();
+        if (methodLower.includes("passkey") || methodLower.includes("fingerprint")) methodIcon = "🔑";
+        else if (methodLower.includes("liveness")) methodIcon = "👁️";
+        else if (methodLower.includes("camera")) methodIcon = "📷";
+        else if (methodLower.includes("emergency")) methodIcon = "🚨";
+
+        return `
+            <div class="biometric-log-item status-${isSuccess ? 'success' : 'failed'}">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 8px;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span style="font-size: 20px;">${methodIcon}</span>
+                        <div>
+                            <span style="font-weight: 700; font-size: 14.5px; color: #0f172a;">
+                                ${escapeHTML(log.method || "Biometric Verification")}
+                            </span>
+                            <div style="font-size: 12px; color: #64748b; margin-top: 2px;">
+                                Event: <code>${escapeHTML(log.id || "BIO-LOG")}</code> • Action: <code>${escapeHTML(log.action || "verification")}</code>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                        <span class="bio-confidence-tag">
+                            Match: <b>${escapeHTML(String(log.confidence || "N/A"))}</b>
+                        </span>
+                        <span class="bio-status-badge ${isSuccess ? 'success' : 'failed'}">
+                            ${isSuccess ? '✅ VERIFIED / SUCCESS' : '❌ FAILED / REJECTED'}
+                        </span>
+                    </div>
+                </div>
+
+                <div style="font-size: 13px; color: #334155; line-height: 1.45; background: #f8fafc; padding: 8px 12px; border-radius: 6px; margin: 4px 0;">
+                    ${escapeHTML(log.details || (isSuccess ? "Biometric authentication verified." : "Verification rejected."))}
+                </div>
+
+                <div style="display: flex; justify-content: space-between; align-items: center; font-size: 11.5px; color: #64748b; flex-wrap: wrap; gap: 6px;">
+                    <span style="display: inline-flex; align-items: center; gap: 4px;">
+                        🕒 <b>${formattedDate}</b> at <b>${formattedTime}</b>
+                    </span>
+                    <span style="color: #94a3b8;">
+                        Session Actor: ${escapeHTML(log.sessionId || log.matchedPatientId || "Secure Session")}
+                    </span>
+                </div>
+            </div>
+        `;
+    }).join("");
+
+    container.innerHTML = html;
+}
+
+function openTestBiometricModal() {
+    const modal = $("testBiometricModal");
+    if (modal) modal.classList.remove("hidden");
+}
+
+function closeTestBiometricModal() {
+    const modal = $("testBiometricModal");
+    if (modal) modal.classList.add("hidden");
+}
+
+async function executeTestBiometricVerification() {
+    const methodSelect = $("testBioMethod");
+    const outcomeSelect = $("testBioOutcome");
+    const detailsInput = $("testBioDetails");
+    const submitBtn = $("submitTestBioBtn");
+
+    const method = methodSelect ? methodSelect.value : "Face Biometric Scan (MediCare Vision Engine)";
+    const outcome = outcomeSelect ? outcomeSelect.value : "success";
+    const details = detailsInput ? detailsInput.value.trim() : "";
+
+    if (!patientToken) {
+        showToast("Please log in as patient first.");
+        return;
+    }
+
+    try {
+        if (submitBtn) {
+            submitBtn.disabled = true;
+            submitBtn.textContent = "⏳ Running Verification...";
+        }
+
+        const res = await fetch(`${API_URL}/api/patient/biometric-verify`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${patientToken}`
+            },
+            body: JSON.stringify({
+                method,
+                outcome,
+                details: details || undefined
+            })
+        });
+
+        const data = await res.json();
+        if (data.success) {
+            closeTestBiometricModal();
+            if (detailsInput) detailsInput.value = "";
+            showToast(outcome === "success" ? "✅ Biometric verification passed & recorded!" : "❌ Biometric verification failed & logged!");
+            await loadBiometricHistory(false);
+            scrollToCard("biometricHistoryCard");
+        } else {
+            showToast("Failed: " + (data.message || "Unknown error"));
+        }
+    } catch (err) {
+        showToast("Error: " + err.message);
+    } finally {
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = "🚀 Run Verification & Log";
+        }
+    }
+}
+
+// Window bindings for Biometric History
+window.loadBiometricHistory = loadBiometricHistory;
+window.filterBiometricHistory = filterBiometricHistory;
+window.openTestBiometricModal = openTestBiometricModal;
+window.closeTestBiometricModal = closeTestBiometricModal;
+window.executeTestBiometricVerification = executeTestBiometricVerification;
+
 
