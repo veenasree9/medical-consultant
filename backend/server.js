@@ -7,6 +7,7 @@ const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 const db = require("./db");
+const QRCode = require("qrcode");
 const { exportPatientPdf, generateVitalsPdfBuffer } = require("./pdfExport");
 const { generateAiHealthResponse, isAiConfigured, getEffectiveApiKey } = require("./aiService");
 
@@ -1072,6 +1073,76 @@ app.get("/api/patient/biometric-history", auth("patient"), async (req, res) => {
     }
 });
 
+// Download Biometric Verification Security Audit Log as CSV for Record-Keeping
+app.get("/api/patient/biometric-history/export-csv", auth("patient"), async (req, res) => {
+    try {
+        const patientId = req.user.patientId;
+        const result = await db.getPatientBiometricHistory(patientId);
+        const logs = (result && Array.isArray(result.logs)) ? result.logs : [];
+
+        function escapeCsvField(val) {
+            if (val === null || val === undefined) return '""';
+            const str = String(val).replace(/"/g, '""');
+            return `"${str}"`;
+        }
+
+        const headers = [
+            "Event ID",
+            "Timestamp (ISO)",
+            "Local Date & Time",
+            "Patient ID",
+            "Verification Method",
+            "Outcome Status",
+            "Confidence Score",
+            "Action Code",
+            "Audit Details / Notes"
+        ];
+
+        const rows = [headers.join(",")];
+
+        for (const log of logs) {
+            const dateObj = new Date(log.timestamp);
+            const localFormatted = !isNaN(dateObj.getTime())
+                ? `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, "0")}-${String(dateObj.getDate()).padStart(2, "0")} ${dateObj.toLocaleTimeString([], { hour12: true })}`
+                : "";
+
+            const statusUpper = (log.status || "UNKNOWN").toUpperCase();
+
+            const row = [
+                escapeCsvField(log.id || ""),
+                escapeCsvField(log.timestamp || ""),
+                escapeCsvField(localFormatted),
+                escapeCsvField(patientId),
+                escapeCsvField(log.method || "Biometric Verification"),
+                escapeCsvField(statusUpper),
+                escapeCsvField(log.confidence || "N/A"),
+                escapeCsvField(log.action || ""),
+                escapeCsvField(log.details || "")
+            ];
+            rows.push(row.join(","));
+        }
+
+        const csvContent = "\uFEFF" + rows.join("\r\n"); // UTF-8 BOM for Excel compatibility
+        const dateStr = new Date().toISOString().split("T")[0];
+        const filename = `MediCare_Biometric_Audit_Log_${patientId}_${dateStr}.csv`;
+
+        await db.insertAuditLog(patientId, "export_biometric_audit_csv", patientId, {
+            format: "csv",
+            exportedEvents: logs.length
+        });
+
+        res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+        res.setHeader("Content-Type", "text/csv; charset=utf-8");
+        return res.send(csvContent);
+    } catch (err) {
+        console.error("Biometric audit log CSV export error:", err.message);
+        res.status(500).json({
+            success: false,
+            message: "Failed to export biometric audit log CSV: " + err.message
+        });
+    }
+});
+
 // Run a live biometric verification test attempt or record an interactive verification attempt
 app.post("/api/patient/biometric-verify", auth("patient"), async (req, res) => {
     try {
@@ -1175,6 +1246,194 @@ app.get("/api/doctor/patients/:id/export-pdf", auth("doctor"), async (req, res) 
         res.status(500).json({
             success: false,
             message: "Failed to generate patient PDF: " + err.message
+        });
+    }
+});
+
+/* ================= EXPORT PATIENT HEALTH DATA (JSON PORTABILITY) ================= */
+
+async function buildStructuredHealthDataJson(patientId) {
+    const patient = await db.getPatientDetails(patientId);
+    if (!patient) return null;
+
+    let appointments = [];
+    try {
+        if (typeof db.getAppointments === "function") {
+            appointments = await db.getAppointments(patientId);
+        }
+    } catch (_) {}
+
+    let biometricData = null;
+    let biometricLogs = [];
+    try {
+        if (typeof db.getPatientBiometricHistory === "function") {
+            biometricData = await db.getPatientBiometricHistory(patientId);
+            if (biometricData && Array.isArray(biometricData.logs)) {
+                biometricLogs = biometricData.logs;
+            } else if (Array.isArray(biometricData)) {
+                biometricLogs = biometricData;
+            }
+        }
+    } catch (_) {}
+
+    const now = new Date();
+    return {
+        $schema: "https://medicare.consultant/schemas/patient-health-record-v1.json",
+        exportMetadata: {
+            title: "MediCare Structured Patient Health Record",
+            exportFormat: "JSON (Machine-Readable Portability Standard)",
+            version: "1.0.0",
+            exportedAt: now.toISOString(),
+            exportedTimestamp: now.getTime(),
+            generatedBy: "MediCare Consultant Healthcare Portal",
+            dataPortabilityStandard: "Open Health Data Portability Profile (OHDPP/JSON)",
+            dataClassification: "Personal Health Information (PHI) - Protected"
+        },
+        patientProfile: {
+            patientId: patient.patientId || patient.id,
+            fullName: patient.name || "",
+            dateOfBirthOrAge: patient.age || "",
+            gender: patient.gender || "",
+            bloodGroup: patient.bloodGroup || patient.blood || "",
+            phone: patient.phone || "",
+            email: patient.email || "",
+            address: patient.address || "",
+            medicalHistory: patient.medicalHistory || "",
+            physicianNotes: patient.notes || "",
+            profileCompleted: Boolean(patient.profileCompleted)
+        },
+        emergencyContacts: [
+            {
+                priority: "Primary",
+                order: 1,
+                name: patient.guardianName || "",
+                phone: patient.guardianPhone || "",
+                relationship: patient.guardianRelationship || "Emergency Contact 1"
+            },
+            {
+                priority: "Secondary",
+                order: 2,
+                name: patient.guardian2Name || "",
+                phone: patient.guardian2Phone || "",
+                relationship: patient.guardian2Relationship || "Emergency Contact 2"
+            }
+        ].filter(g => g.name || g.phone),
+        clinicalHealthQuestionnaire: {
+            allergies: Boolean(patient.healthInformation?.allergies),
+            diabetes: Boolean(patient.healthInformation?.diabetes),
+            hypertension: Boolean(patient.healthInformation?.hypertension),
+            asthma: Boolean(patient.healthInformation?.asthma),
+            heartCondition: Boolean(patient.healthInformation?.heart_condition),
+            majorSurgery: Boolean(patient.healthInformation?.major_surgery),
+            regularMedication: Boolean(patient.healthInformation?.regular_medication),
+            chronicCondition: Boolean(patient.healthInformation?.chronic_condition),
+            drugReaction: Boolean(patient.healthInformation?.drug_reaction),
+            emergencyCondition: Boolean(patient.healthInformation?.emergency_condition),
+            isCompleted: Boolean(patient.healthInformation?.isCompleted)
+        },
+        identityVerificationStatus: patient.verifications || {
+            face: "not_configured",
+            passkey: "not_configured",
+            camera_live: "not_configured",
+            liveness: "not_configured"
+        },
+        medicalDocuments: (patient.documents || []).map(doc => ({
+            documentId: doc.document_id || doc.id,
+            filename: doc.original_filename || doc.filename,
+            fileType: doc.file_type,
+            fileSizeBytes: doc.file_size,
+            category: doc.document_category || "Medical Record",
+            uploadedAt: doc.created_at,
+            notes: doc.notes || ""
+        })),
+        scheduledAppointments: (appointments || []).map(apt => ({
+            appointmentId: apt.appointmentId,
+            doctorName: apt.doctorName,
+            doctorId: apt.doctorId,
+            department: apt.department,
+            appointmentDate: apt.appointmentDate,
+            appointmentTime: apt.appointmentTime,
+            reason: apt.reason,
+            status: apt.status
+        })),
+        biometricVerificationSummary: {
+            totalLoggedEvents: biometricLogs.length,
+            recentEvents: biometricLogs.slice(0, 5).map(bio => ({
+                eventId: bio.id,
+                method: bio.method,
+                status: bio.status,
+                confidence: bio.confidence,
+                timestamp: bio.timestamp
+            }))
+        }
+    };
+}
+
+// Patient downloading their structured machine-readable health records as JSON
+app.get("/api/patient/export-json", auth("patient"), async (req, res) => {
+    try {
+        const exportData = await buildStructuredHealthDataJson(req.user.patientId);
+        if (!exportData) {
+            return res.status(404).json({
+                success: false,
+                message: "Patient record not found in PostgreSQL."
+            });
+        }
+
+        await db.insertAuditLog(req.user.patientId, "export_health_data_json", req.user.patientId, {
+            format: "json",
+            type: "data_portability",
+            documentCount: exportData.medicalDocuments.length,
+            appointmentCount: exportData.scheduledAppointments.length
+        });
+
+        const filename = `MediCare_Health_Data_${req.user.patientId}_${new Date().toISOString().split("T")[0]}.json`;
+        res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+        res.setHeader("Content-Type", "application/json; charset=utf-8");
+        return res.send(JSON.stringify(exportData, null, 2));
+    } catch (err) {
+        console.error("JSON export error:", err.message);
+        res.status(500).json({
+            success: false,
+            message: "Failed to export structured health data JSON: " + err.message
+        });
+    }
+});
+
+// Doctor downloading authorized patient's structured JSON health records
+app.get("/api/doctor/patients/:id/export-json", auth("doctor"), async (req, res) => {
+    try {
+        const id = String(req.params.id).toUpperCase();
+        const isAccepted = await db.isDoctorAccessAccepted(req.user.doctorId, id);
+        if (!isAccepted) {
+            return res.status(403).json({
+                success: false,
+                message: "Access denied: Waiting for patient approval."
+            });
+        }
+
+        const exportData = await buildStructuredHealthDataJson(id);
+        if (!exportData) {
+            return res.status(404).json({
+                success: false,
+                message: "Patient not found in PostgreSQL database."
+            });
+        }
+
+        await db.insertAuditLog(req.user.doctorId, "doctor_export_patient_json", id, {
+            format: "json",
+            type: "data_portability"
+        });
+
+        const filename = `MediCare_Health_Data_${id}_${new Date().toISOString().split("T")[0]}.json`;
+        res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+        res.setHeader("Content-Type", "application/json; charset=utf-8");
+        return res.send(JSON.stringify(exportData, null, 2));
+    } catch (err) {
+        console.error("Doctor JSON export error:", err.message);
+        res.status(500).json({
+            success: false,
+            message: "Failed to export patient JSON: " + err.message
         });
     }
 });
@@ -1986,6 +2245,225 @@ app.post("/api/helper/sync-offline-events", async (req, res) => {
         res.status(500).json({
             success: false,
             message: "Failed to sync offline emergency events: " + err.message
+        });
+    }
+});
+
+/* ================= EMERGENCY MEDICAL ID QR CODE ENDPOINTS ================= */
+
+// Generate or fetch Emergency Medical ID QR code for a given patient
+app.get("/api/emergency/patient/:patientId/qr", async (req, res) => {
+    try {
+        const rawId = req.params.patientId;
+        const patient = await db.getPatientDetails(rawId);
+        if (!patient) {
+            return res.status(404).json({
+                success: false,
+                message: `Patient ${rawId} not found.`
+            });
+        }
+
+        const payload = JSON.stringify({
+            type: "medicare_emergency_medical_id",
+            version: "1.0",
+            patientId: patient.patientId,
+            name: patient.name,
+            bloodGroup: patient.bloodGroup || "O+",
+            guardianName: patient.guardianName || "Guardian",
+            guardianPhone: patient.guardianPhone || "",
+            portal: "MediCare Emergency Rescue"
+        });
+
+        const qrDataUrl = await QRCode.toDataURL(payload, {
+            errorCorrectionLevel: "M",
+            margin: 2,
+            width: 320,
+            color: {
+                dark: "#0f172a",
+                light: "#ffffff"
+            }
+        });
+
+        res.json({
+            success: true,
+            patientId: patient.patientId,
+            name: patient.name,
+            bloodGroup: patient.bloodGroup,
+            qrDataUrl: qrDataUrl,
+            encodedPayload: payload
+        });
+    } catch (err) {
+        console.error("Emergency QR generation error:", err.message);
+        res.status(500).json({
+            success: false,
+            message: "Failed to generate emergency QR code: " + err.message
+        });
+    }
+});
+
+// Patient retrieving their own Medical ID QR code for emergency cards
+app.get("/api/patient/emergency-qr", auth("patient"), async (req, res) => {
+    try {
+        const patient = await db.getPatientDetails(req.user.patientId);
+        if (!patient) {
+            return res.status(404).json({
+                success: false,
+                message: "Patient record not found."
+            });
+        }
+
+        const payload = JSON.stringify({
+            type: "medicare_emergency_medical_id",
+            version: "1.0",
+            patientId: patient.patientId,
+            name: patient.name,
+            bloodGroup: patient.bloodGroup || "O+",
+            guardianName: patient.guardianName || "Guardian",
+            guardianPhone: patient.guardianPhone || "",
+            portal: "MediCare Emergency Rescue"
+        });
+
+        const qrDataUrl = await QRCode.toDataURL(payload, {
+            errorCorrectionLevel: "M",
+            margin: 2,
+            width: 320,
+            color: {
+                dark: "#0f172a",
+                light: "#ffffff"
+            }
+        });
+
+        res.json({
+            success: true,
+            patientId: patient.patientId,
+            name: patient.name,
+            bloodGroup: patient.bloodGroup,
+            guardianName: patient.guardianName,
+            guardianPhone: patient.guardianPhone,
+            qrDataUrl: qrDataUrl
+        });
+    } catch (err) {
+        console.error("Patient QR retrieval error:", err.message);
+        res.status(500).json({
+            success: false,
+            message: "Failed to generate patient QR code: " + err.message
+        });
+    }
+});
+
+// Helper / Emergency First-Responder scanning a Medical ID QR Code
+app.post("/api/helper/identify-qr", async (req, res) => {
+    try {
+        const { qrData, sessionId } = req.body || {};
+        const helperSession = sessionId || req.headers["x-helper-session"] || "helper-qr-scan";
+
+        if (!qrData || typeof qrData !== "string") {
+            return res.status(400).json({
+                success: false,
+                matched: false,
+                message: "QR code data string is required."
+            });
+        }
+
+        let patientId = null;
+        let embeddedData = null;
+
+        // Pattern 1: JSON payload
+        try {
+            const parsed = JSON.parse(qrData.trim());
+            if (parsed && (parsed.patientId || parsed.id)) {
+                patientId = String(parsed.patientId || parsed.id).trim().toUpperCase();
+                embeddedData = parsed;
+            }
+        } catch (_) {}
+
+        // Pattern 2: URL containing patientId parameter or path
+        if (!patientId) {
+            try {
+                if (qrData.includes("patientId=")) {
+                    const match = qrData.match(/[?&]patientId=([^&#\s]+)/i);
+                    if (match && match[1]) patientId = decodeURIComponent(match[1]).trim().toUpperCase();
+                } else if (qrData.includes("/patient/")) {
+                    const match = qrData.match(/\/patient\/([A-Za-z0-9_-]+)/i);
+                    if (match && match[1]) patientId = match[1].trim().toUpperCase();
+                }
+            } catch (_) {}
+        }
+
+        // Pattern 3: Prefix format medicare:patient:PAT1001 or PATIENT:PAT1001
+        if (!patientId) {
+            const prefixMatch = qrData.match(/(?:medicare|patient|id)[\s:=]+([A-Za-z0-9_-]+)/i);
+            if (prefixMatch && prefixMatch[1]) {
+                patientId = prefixMatch[1].trim().toUpperCase();
+            }
+        }
+
+        // Pattern 4: Direct Patient ID token (e.g. PAT1001 or PAT-1001)
+        if (!patientId) {
+            const cleanToken = qrData.trim().toUpperCase();
+            if (/^PAT[0-9A-Z_-]+$/.test(cleanToken) || cleanToken.length <= 20) {
+                patientId = cleanToken;
+            }
+        }
+
+        let patient = null;
+        if (patientId) {
+            patient = await db.getPatientDetails(patientId);
+        }
+
+        // If not found in primary store but embedded JSON has minimum emergency fields
+        if (!patient && embeddedData && embeddedData.name && (embeddedData.guardianPhone || embeddedData.phone)) {
+            patient = {
+                patientId: patientId || embeddedData.patientId || "EMERGENCY-ID",
+                name: embeddedData.name,
+                bloodGroup: embeddedData.bloodGroup || "O+",
+                guardianName: embeddedData.guardianName || "Emergency Contact",
+                guardianPhone: embeddedData.guardianPhone || embeddedData.phone || "Not Provided"
+            };
+        }
+
+        if (!patient) {
+            await db.insertAuditLog(helperSession, "emergency_qr_code_identification_failed", patientId || "UNKNOWN", {
+                reason: "Patient not found in emergency registry",
+                rawQrPrefix: qrData.substring(0, 40)
+            });
+
+            return res.json({
+                success: true,
+                matched: false,
+                confidence: "0.0%",
+                message: `No registered patient found matching Medical ID "${patientId || qrData.substring(0, 20)}".`
+            });
+        }
+
+        // Log successful emergency QR scan event
+        await db.insertAuditLog(helperSession, "emergency_qr_code_identification_success", patient.patientId, {
+            method: "Medical ID QR Code Scanner",
+            confidence: "100.0%",
+            matchedPatientId: patient.patientId,
+            matchedPatientName: patient.name
+        });
+
+        // Strictly authorized minimum emergency disclosure
+        return res.json({
+            success: true,
+            matched: true,
+            confidence: "100.0%",
+            source: "Medical ID QR Code Scanner",
+            patient: {
+                id: patient.patientId,
+                name: patient.name,
+                bloodGroup: patient.bloodGroup || "O+",
+                guardianName: patient.guardianName || "Not Provided",
+                guardianPhone: patient.guardianPhone || "Not Provided"
+            },
+            message: `Patient ${patient.name} (${patient.patientId}) verified via Medical ID QR code.`
+        });
+    } catch (err) {
+        console.error("QR Code Identification error:", err.message);
+        res.status(500).json({
+            success: false,
+            message: "Error processing QR code identification: " + err.message
         });
     }
 });

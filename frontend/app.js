@@ -185,6 +185,9 @@ function togglePasswordVisibility() {
 function goHome() {
 
     stopEmergencyCamera();
+    if (typeof stopBiometricPolling === "function") {
+        stopBiometricPolling();
+    }
 
     hideAll();
 
@@ -1933,6 +1936,109 @@ async function downloadPatientPdf() {
     }
 }
 
+/* ================= EXPORT PATIENT HEALTH DATA (JSON PORTABILITY) ================= */
+
+async function downloadPatientJson() {
+    const btn = $("downloadJsonBtn");
+    const quickBtn = $("exportJsonQuickBtn");
+    const origText = btn ? btn.innerHTML : "";
+    const origQuickText = quickBtn ? quickBtn.innerHTML : "";
+
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = "⏳ Exporting JSON...";
+    }
+    if (quickBtn) {
+        quickBtn.disabled = true;
+        quickBtn.innerHTML = "⏳ Exporting JSON...";
+    }
+
+    try {
+        const pToken = patientToken || localStorage.getItem("patientToken");
+        if (!pToken) {
+            throw new Error("Patient session expired. Please sign in again.");
+        }
+
+        showToast("Generating structured machine-readable health records (JSON)...");
+        const response = await fetch(`${API_URL}/api/patient/export-json`, {
+            headers: {
+                Authorization: `Bearer ${pToken}`
+            }
+        });
+
+        if (!response.ok) {
+            const errData = await response.json().catch(() => ({}));
+            throw new Error(errData.message || "Failed to export structured health data JSON.");
+        }
+
+        const jsonText = await response.text();
+        const blob = new Blob([jsonText], { type: "application/json;charset=utf-8" });
+        const blobUrl = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        const patientId = ($("pPatientId") && $("pPatientId").value) ? $("pPatientId").value : (localStorage.getItem("patientId") || "PAT1001");
+        const dateStr = new Date().toISOString().split("T")[0];
+        a.href = blobUrl;
+        a.download = `MediCare_Health_Data_${patientId}_${dateStr}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(blobUrl);
+
+        showToast("Structured health data JSON exported successfully for portability!");
+    } catch (err) {
+        console.error("JSON export error:", err);
+        showToast(err.message || "Could not export health data JSON.");
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = origText;
+        }
+        if (quickBtn) {
+            quickBtn.disabled = false;
+            quickBtn.innerHTML = origQuickText;
+        }
+    }
+}
+
+async function downloadDoctorPatientJson(patientId) {
+    const token = localStorage.getItem("doctorToken");
+    if (!token) {
+        showToast("Doctor authentication required.");
+        return;
+    }
+
+    try {
+        showToast(`Exporting structured health data JSON for ${patientId}...`);
+        const response = await fetch(`${API_URL}/api/doctor/patients/${encodeURIComponent(patientId)}/export-json`, {
+            headers: {
+                Authorization: `Bearer ${token}`
+            }
+        });
+
+        if (!response.ok) {
+            const errData = await response.json().catch(() => ({}));
+            throw new Error(errData.message || "Failed to export patient JSON.");
+        }
+
+        const jsonText = await response.text();
+        const blob = new Blob([jsonText], { type: "application/json;charset=utf-8" });
+        const blobUrl = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        const dateStr = new Date().toISOString().split("T")[0];
+        a.href = blobUrl;
+        a.download = `MediCare_Health_Data_${patientId}_${dateStr}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(blobUrl);
+
+        showToast(`Structured health records for ${patientId} exported as JSON!`);
+    } catch (err) {
+        console.error("Doctor JSON export error:", err);
+        showToast(err.message || "Could not export patient JSON.");
+    }
+}
+
 async function downloadDoctorPatientPdf(patientId) {
     const token = localStorage.getItem("doctorToken");
     if (!token) {
@@ -2142,6 +2248,10 @@ function logout() {
     clearInterval(
         resendTimer
     );
+
+    if (typeof stopBiometricPolling === "function") {
+        stopBiometricPolling();
+    }
 
     hideChatBoard();
     goHome();
@@ -5375,10 +5485,65 @@ setInterval(refreshRelativeTimestamps, 30000);
 /* ================= PATIENT BIOMETRIC HISTORY & VERIFICATION LOGS ================= */
 let allBiometricLogs = [];
 let currentBioFilter = "all";
+let biometricPollingTimer = null;
+const BIOMETRIC_POLL_INTERVAL_MS = 60000; // Poll every 60 seconds
+
+function isUserOnPatientDashboard() {
+    const dash = $("patientDashboard");
+    const pToken = patientToken || localStorage.getItem("patientToken");
+    return Boolean(
+        dash &&
+        !dash.classList.contains("hidden") &&
+        pToken &&
+        document.visibilityState !== "hidden"
+    );
+}
+
+function stopBiometricPolling() {
+    if (biometricPollingTimer) {
+        clearInterval(biometricPollingTimer);
+        biometricPollingTimer = null;
+    }
+}
+
+function startBiometricPolling() {
+    if (biometricPollingTimer) {
+        clearInterval(biometricPollingTimer);
+        biometricPollingTimer = null;
+    }
+
+    biometricPollingTimer = setInterval(() => {
+        if (isUserOnPatientDashboard()) {
+            loadBiometricHistory(false);
+        } else {
+            stopBiometricPolling();
+        }
+    }, BIOMETRIC_POLL_INTERVAL_MS);
+}
+
+// Resume polling when tab becomes visible if on patient dashboard
+document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible" && isUserOnPatientDashboard()) {
+        loadBiometricHistory(false);
+    }
+});
 
 async function loadBiometricHistory(forceRefresh = false) {
     const container = $("biometricHistoryListContainer");
-    if (!patientToken) return;
+    const pToken = patientToken || localStorage.getItem("patientToken");
+    if (!pToken) {
+        stopBiometricPolling();
+        return;
+    }
+
+    // Automatically ensure 60-second polling is running when user is on dashboard
+    if (isUserOnPatientDashboard()) {
+        if (!biometricPollingTimer) {
+            startBiometricPolling();
+        }
+    } else {
+        stopBiometricPolling();
+    }
 
     if (forceRefresh && container) {
         container.innerHTML = `
@@ -5392,7 +5557,7 @@ async function loadBiometricHistory(forceRefresh = false) {
     try {
         const res = await fetch(`${API_URL}/api/patient/biometric-history`, {
             headers: {
-                Authorization: `Bearer ${patientToken}`
+                Authorization: `Bearer ${pToken}`
             }
         });
 
@@ -5409,13 +5574,13 @@ async function loadBiometricHistory(forceRefresh = false) {
                 showToast("Biometric verification history refreshed!");
             }
         } else {
-            if (container) {
+            if (container && (forceRefresh || !allBiometricLogs || allBiometricLogs.length === 0)) {
                 container.innerHTML = `<div style="text-align: center; padding: 20px; color: #dc2626;">${escapeHTML(data.message || "Failed to load biometric history.")}</div>`;
             }
         }
     } catch (err) {
         console.error("Biometric history error:", err);
-        if (container) {
+        if (container && (forceRefresh || !allBiometricLogs || allBiometricLogs.length === 0)) {
             container.innerHTML = `
                 <div style="text-align: center; padding: 20px; color: #64748b;">
                     Unable to load biometric history. <button type="button" class="link-btn" onclick="loadBiometricHistory(true)">Try again</button>
@@ -5629,8 +5794,111 @@ async function executeTestBiometricVerification() {
     }
 }
 
+/* ================= DOWNLOAD BIOMETRIC AUDIT LOG (CSV) ================= */
+
+async function downloadBiometricAuditLogCsv() {
+    const btn = $("downloadAuditLogCsvBtn");
+    const origHtml = btn ? btn.innerHTML : "";
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = "⏳ Generating CSV...";
+    }
+
+    try {
+        const pToken = patientToken || localStorage.getItem("patientToken");
+        const patientId = ($("pPatientId") && $("pPatientId").value) ? $("pPatientId").value : (localStorage.getItem("patientId") || "PAT1001");
+        const dateStr = new Date().toISOString().split("T")[0];
+        let csvContent = "";
+
+        // Attempt 1: Fetch structured CSV from backend endpoint
+        if (pToken) {
+            try {
+                const response = await fetch(`${API_URL}/api/patient/biometric-history/export-csv`, {
+                    headers: {
+                        Authorization: `Bearer ${pToken}`
+                    }
+                });
+                if (response.ok) {
+                    csvContent = await response.text();
+                }
+            } catch (netErr) {
+                console.warn("Backend CSV export request notice, falling back to local dataset:", netErr);
+            }
+        }
+
+        // Fallback 2: Generate CSV directly from allBiometricLogs in memory
+        if (!csvContent) {
+            function escapeCsv(val) {
+                if (val === null || val === undefined) return '""';
+                return `"${String(val).replace(/"/g, '""')}"`;
+            }
+
+            const headers = [
+                "Event ID",
+                "Timestamp (ISO)",
+                "Local Date & Time",
+                "Patient ID",
+                "Verification Method",
+                "Outcome Status",
+                "Confidence Score",
+                "Action Code",
+                "Audit Details / Notes"
+            ];
+
+            const rows = [headers.join(",")];
+            const logsToExport = (allBiometricLogs && allBiometricLogs.length > 0)
+                ? allBiometricLogs
+                : [];
+
+            for (const log of logsToExport) {
+                const dateObj = new Date(log.timestamp);
+                const localFormatted = !isNaN(dateObj.getTime())
+                    ? `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, "0")}-${String(dateObj.getDate()).padStart(2, "0")} ${dateObj.toLocaleTimeString([], { hour12: true })}`
+                    : "";
+
+                const row = [
+                    escapeCsv(log.id || ""),
+                    escapeCsv(log.timestamp || ""),
+                    escapeCsv(localFormatted),
+                    escapeCsv(patientId),
+                    escapeCsv(log.method || "Biometric Verification"),
+                    escapeCsv((log.status || "").toUpperCase()),
+                    escapeCsv(log.confidence || "N/A"),
+                    escapeCsv(log.action || ""),
+                    escapeCsv(log.details || "")
+                ];
+                rows.push(row.join(","));
+            }
+            csvContent = "\uFEFF" + rows.join("\r\n");
+        }
+
+        const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+        const blobUrl = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = blobUrl;
+        a.download = `MediCare_Biometric_Audit_Log_${patientId}_${dateStr}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(blobUrl);
+
+        showToast("Biometric verification audit log exported as CSV!");
+    } catch (err) {
+        console.error("CSV download error:", err);
+        showToast(err.message || "Could not export biometric audit log.");
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = origHtml;
+        }
+    }
+}
+
 // Window bindings for Biometric History
 window.loadBiometricHistory = loadBiometricHistory;
+window.startBiometricPolling = startBiometricPolling;
+window.stopBiometricPolling = stopBiometricPolling;
+window.downloadBiometricAuditLogCsv = downloadBiometricAuditLogCsv;
 window.filterBiometricHistory = filterBiometricHistory;
 window.openTestBiometricModal = openTestBiometricModal;
 window.closeTestBiometricModal = closeTestBiometricModal;

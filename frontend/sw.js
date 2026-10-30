@@ -8,6 +8,7 @@ const PRECACHE_ASSETS = [
     "/app.js",
     "/config.js",
     "/i18n.js",
+    "/jsQR.js",
     "/appointmentTimeline.js",
     "/react-is-shim.js",
     "/manifest.json",

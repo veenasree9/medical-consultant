@@ -2106,6 +2106,39 @@ hr {
     transform: none;
 }
 
+/* JSON Export Buttons */
+.btn-json-export {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 18px;
+    font-size: 13.5px;
+    font-weight: 700;
+    border-radius: 8px;
+    background: #4338ca;
+    color: #ffffff;
+    border: 1px solid #4f46e5;
+    cursor: pointer;
+    box-shadow: 0 2px 6px rgba(67, 56, 202, 0.2);
+    transition: all 0.2s ease;
+}
+
+.btn-json-export:hover {
+    background: #3730a3;
+    box-shadow: 0 4px 10px rgba(67, 56, 202, 0.3);
+    transform: translateY(-1px);
+}
+
+.btn-json-export:active {
+    transform: translateY(0);
+}
+
+.btn-json-export:disabled {
+    opacity: 0.65;
+    cursor: not-allowed;
+    transform: none;
+}
+
 .btn-export-pdf {
     display: inline-flex;
     align-items: center;
@@ -2942,6 +2975,156 @@ hr {
     .camera-filter-toolbar .filter-sliders-grid {
         grid-template-columns: 1fr !important;
         gap: 8px !important;
+    }
+}
+
+/* ================= EMERGENCY QR CODE SCANNER STYLES ================= */
+.rescue-mode-tabs {
+    display: flex;
+    gap: 8px;
+    background: #f1f5f9;
+    padding: 6px;
+    border-radius: 12px;
+    border: 1px solid #e2e8f0;
+    margin-bottom: 16px;
+}
+
+.rescue-mode-tab {
+    flex: 1;
+    padding: 10px 16px;
+    border-radius: 8px;
+    border: none;
+    font-size: 13.5px;
+    font-weight: 700;
+    cursor: pointer;
+    background: transparent;
+    color: #475569;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    transition: all 0.2s ease;
+}
+
+.rescue-mode-tab:hover {
+    color: #0f172a;
+    background: rgba(255, 255, 255, 0.6);
+}
+
+.rescue-mode-tab.active {
+    background: #ffffff;
+    color: #0f172a;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.rescue-mode-tab.active.qr-active {
+    color: #4338ca;
+}
+
+/* High-tech QR Scanner Reticle Overlay */
+.qr-scan-guide {
+    position: absolute;
+    width: 240px;
+    height: 240px;
+    max-width: 75%;
+    max-height: 75%;
+    pointer-events: none;
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.qr-corner {
+    position: absolute;
+    width: 28px;
+    height: 28px;
+    border-color: #6366f1;
+    border-style: solid;
+}
+
+.qr-corner.top-left {
+    top: 0;
+    left: 0;
+    border-width: 4px 0 0 4px;
+    border-top-left-radius: 8px;
+}
+
+.qr-corner.top-right {
+    top: 0;
+    right: 0;
+    border-width: 4px 4px 0 0;
+    border-top-right-radius: 8px;
+}
+
+.qr-corner.bottom-left {
+    bottom: 0;
+    left: 0;
+    border-width: 0 0 4px 4px;
+    border-bottom-left-radius: 8px;
+}
+
+.qr-corner.bottom-right {
+    bottom: 0;
+    right: 0;
+    border-width: 0 4px 4px 0;
+    border-bottom-right-radius: 8px;
+}
+
+.qr-laser-line {
+    position: absolute;
+    left: 4px;
+    right: 4px;
+    height: 2px;
+    background: linear-gradient(90deg, rgba(99, 102, 241, 0) 0%, #6366f1 50%, rgba(99, 102, 241, 0) 100%);
+    box-shadow: 0 0 8px #818cf8, 0 0 16px #4f46e5;
+    animation: qrLaserAnim 2s infinite ease-in-out;
+}
+
+@keyframes qrLaserAnim {
+    0% {
+        top: 8px;
+        opacity: 0.8;
+    }
+    50% {
+        top: calc(100% - 10px);
+        opacity: 1;
+    }
+    100% {
+        top: 8px;
+        opacity: 0.8;
+    }
+}
+
+.qr-guide-hint {
+    position: absolute;
+    bottom: -38px;
+    background: rgba(15, 23, 42, 0.88);
+    backdrop-filter: blur(4px);
+    color: #f8fafc;
+    font-size: 11.5px;
+    font-weight: 600;
+    padding: 5px 12px;
+    border-radius: 20px;
+    white-space: nowrap;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+.qr-success-pulse {
+    animation: qrPulseGreen 0.6s ease-in-out;
+}
+
+@keyframes qrPulseGreen {
+    0% {
+        box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7);
+    }
+    70% {
+        box-shadow: 0 0 0 20px rgba(34, 197, 94, 0);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(34, 197, 94, 0);
     }
 }
 

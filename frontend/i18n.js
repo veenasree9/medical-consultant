@@ -80,6 +80,8 @@ const I18N_RESOURCES = {
             "patient.logout": "Sign Out",
             "patient.bookAppt": "📅 Schedule Appointment",
             "patient.exportPdf": "📄 Download Medical Record PDF",
+            "patient.exportJson": "📦 Export Health Data as JSON",
+            "patient.viewQr": "📱 Medical ID QR Card",
             "patient.remindersCenter": "🔔 Reminders Center",
 
             // Biometric History
@@ -87,6 +89,7 @@ const I18N_RESOURCES = {
             "biometric.historySubtitle": "Chronological log of all successful and failed biometric verification attempts, methods used, and timestamps.",
             "biometric.refresh": "Refresh Log",
             "biometric.testVerification": "Test Verification",
+            "biometric.downloadCsv": "Download Audit Log as CSV",
             "biometric.totalAttempts": "Total Attempts",
             "biometric.successfulVerifications": "Successful",
             "biometric.failedAttempts": "Failed / Rejected",
@@ -120,6 +123,9 @@ const I18N_RESOURCES = {
             "helper.notice": "For first responders and emergency healthcare workers.",
             "helper.capturePhoto": "Capture Camera Photo",
             "helper.identifyBtn": "🔍 Identify Patient with Biometrics",
+            "helper.modeFace": "📸 Facial Biometrics",
+            "helper.modeQr": "📱 Medical ID QR Scanner",
+            "helper.scanQr": "📱 Scan Medical ID QR",
             "helper.privacyNotice": "Privacy Guaranteed: Helper access only displays emergency contact and blood group.",
             "helper.matchedPatient": "Identified Patient",
             "helper.guardianPhone": "Emergency Guardian Phone",
@@ -204,6 +210,7 @@ const I18N_RESOURCES = {
             "patient.logout": "साइन आउट",
             "patient.bookAppt": "📅 अपॉइंटमेंट बुक करें",
             "patient.exportPdf": "📄 मेडिकल रिकॉर्ड पीडीएफ डाउनलोड करें",
+            "patient.exportJson": "📦 स्वास्थ्य डेटा JSON में निर्यात करें",
             "patient.remindersCenter": "🔔 रिमाइंडर केंद्र",
 
             // Biometric History
@@ -211,6 +218,7 @@ const I18N_RESOURCES = {
             "biometric.historySubtitle": "सभी सफल और असफल बायोमेट्रिक सत्यापन प्रयासों, उपयोग की गई विधियों और समय-मुहरों का कालानुक्रमिक लॉग।",
             "biometric.refresh": "लॉग रीफ़्रेश करें",
             "biometric.testVerification": "सत्यापन का परीक्षण करें",
+            "biometric.downloadCsv": "ऑडिट लॉग CSV में डाउनलोड करें",
             "biometric.totalAttempts": "कुल प्रयास",
             "biometric.successfulVerifications": "सफल",
             "biometric.failedAttempts": "असफल / अस्वीकृत",
@@ -323,6 +331,7 @@ const I18N_RESOURCES = {
             "patient.logout": "సైన్ అవుట్",
             "patient.bookAppt": "📅 అపాయింట్‌మెంట్ బుక్ చేయండి",
             "patient.exportPdf": "📄 మెడికల్ రికార్డ్ పీడీఎఫ్ డౌన్‌లోడ్",
+            "patient.exportJson": "📦 హెల్త్ డేటాను JSON గా ఎగుమతి చేయండి",
             "patient.remindersCenter": "🔔 రిమైండర్ల కేంద్రం",
 
             // Biometric History
@@ -330,6 +339,7 @@ const I18N_RESOURCES = {
             "biometric.historySubtitle": "అన్ని విజయవంతమైన మరియు విఫలమైన బయోమెట్రిక్ ధృవీకరణ ప్రయత్నాలు, పద్ధతులు మరియు సమయాల వివరాల రికార్డు.",
             "biometric.refresh": "లాగ్‌ని రీఫ్రెష్ చేయండి",
             "biometric.testVerification": "ధృవీకరణ పరీక్షించండి",
+            "biometric.downloadCsv": "ఆడిట్ లాగ్‌ను CSV గా డౌన్‌లోడ్ చేయండి",
             "biometric.totalAttempts": "మొత్తం ప్రయత్నాలు",
             "biometric.successfulVerifications": "విజయవంతమైనవి",
             "biometric.failedAttempts": "విఫలమైనవి / తిరస్కరించబడినవి",
@@ -442,6 +452,7 @@ const I18N_RESOURCES = {
             "patient.logout": "வெளியேறு",
             "patient.bookAppt": "📅 முன்பதிவு செய்க",
             "patient.exportPdf": "📄 மருத்துவ பதிவேடு PDF பதிவிறக்குக",
+            "patient.exportJson": "📦 சுகாதார தரவை JSON ஆக ஏற்றுமதி செய்க",
             "patient.remindersCenter": "🔔 நினைவூட்டல் மையம்",
 
             // Biometric History
@@ -449,6 +460,7 @@ const I18N_RESOURCES = {
             "biometric.historySubtitle": "வெற்றி மற்றும் தோல்வியுற்ற பயோமெட்ரிக் சரிபார்ப்பு முயற்சிகள், முறைகள் மற்றும் நேரங்களின் பதிவு.",
             "biometric.refresh": "புதுப்பிக்கவும்",
             "biometric.testVerification": "சரிபார்ப்பை சோதிக்கவும்",
+            "biometric.downloadCsv": "தணிக்கை பதிவை CSV ஆக பதிவிறக்குக",
             "biometric.totalAttempts": "மொத்த முயற்சிகள்",
             "biometric.successfulVerifications": "வெற்றி",
             "biometric.failedAttempts": "தோல்வி / நிராகரிக்கப்பட்டது",
@@ -561,6 +573,7 @@ const I18N_RESOURCES = {
             "patient.logout": "ಸೈನ್ ಔಟ್",
             "patient.bookAppt": "📅 ಅಪಾಯಿಂಟ್‌ಮೆಂಟ್ ಬುಕ್ ಮಾಡಿ",
             "patient.exportPdf": "📄 ವೈದ್ಯಕೀಯ ದಾಖಲೆ PDF ಡೌನ್‌ಲೋಡ್ ಮಾಡಿ",
+            "patient.exportJson": "📦 ಆರೋಗ್ಯ ಡೇಟಾವನ್ನು JSON ಆಗಿ ರಫ್ತು ಮಾಡಿ",
             "patient.remindersCenter": "🔔 ಜ್ಞಾಪನೆ ಕೇಂದ್ರ",
 
             // Biometric History
@@ -568,6 +581,7 @@ const I18N_RESOURCES = {
             "biometric.historySubtitle": "ಎಲ್ಲಾ ಯಶಸ್ವಿ ಮತ್ತು ವಿಫಲ ಬಯೋಮೆಟ್ರಿಕ್ ಪರಿಶೀಲನಾ ಪ್ರಯತ್ನಗಳು, ವಿಧಾನಗಳು ಮತ್ತು ಸಮಯದ ದಾಖಲೆ.",
             "biometric.refresh": "ಲಾಗ್ ನವೀಕರಿಸಿ",
             "biometric.testVerification": "ಪರಿಶೀಲನೆ ಪರೀಕ್ಷಿಸಿ",
+            "biometric.downloadCsv": "ಆಡಿಟ್ ಲಾಗ್ ಅನ್ನು CSV ಆಗಿ ಡೌನ್‌ಲೋಡ್ ಮಾಡಿ",
             "biometric.totalAttempts": "ಒಟ್ಟು ಪ್ರಯತ್ನಗಳು",
             "biometric.successfulVerifications": "ಯಶಸ್ವಿ",
             "biometric.failedAttempts": "ವಿಫಲ / ತಿರಸ್ಕೃತ",
@@ -680,6 +694,7 @@ const I18N_RESOURCES = {
             "patient.logout": "Cerrar Sesión",
             "patient.bookAppt": "📅 Agendar Cita Médica",
             "patient.exportPdf": "📄 Descargar Historia Clínica en PDF",
+            "patient.exportJson": "📦 Exportar Datos de Salud en JSON",
             "patient.remindersCenter": "🔔 Centro de Recordatorios",
 
             // Biometric History
@@ -687,6 +702,7 @@ const I18N_RESOURCES = {
             "biometric.historySubtitle": "Registro cronológico de todos los intentos de verificación biométrica exitosos y fallidos, métodos utilizados y marcas de tiempo.",
             "biometric.refresh": "Actualizar Registro",
             "biometric.testVerification": "Probar Verificación",
+            "biometric.downloadCsv": "Descargar Registro de Auditoría en CSV",
             "biometric.totalAttempts": "Intentos Totales",
             "biometric.successfulVerifications": "Exitosos",
             "biometric.failedAttempts": "Fallidos / Rechazados",
