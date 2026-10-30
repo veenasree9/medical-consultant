@@ -244,6 +244,10 @@ async function seedMockStore() {
             liveness: "verified"
         },
         faceDescriptor: extractBiometricVector("Rahul Kumar PAT1001"),
+        aadhaarOrApaarId: "5482-9102-3841",
+        idType: "Aadhaar",
+        isAadhaarVerified: true,
+        aadhaarVerifiedAt: new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString(),
         documents: []
     });
 
@@ -276,6 +280,10 @@ async function seedMockStore() {
         guardian2Name: "Meena Sharma",
         guardian2Phone: "+919876543222",
         guardian2Relationship: "Mother",
+        aadhaarOrApaarId: "9823-1145-7729",
+        idType: "APAAR",
+        isAadhaarVerified: true,
+        aadhaarVerifiedAt: new Date(Date.now() - 15 * 24 * 3600 * 1000).toISOString(),
         healthInformation: {
             allergies: false,
             diabetes: false,
@@ -520,6 +528,10 @@ async function runInitialization() {
                 try {
                     await client.query("ALTER TABLE doctors ALTER COLUMN specialization TYPE TEXT");
                     await client.query("ALTER TABLE doctors ALTER COLUMN department TYPE TEXT");
+                    await client.query("ALTER TABLE patients ADD COLUMN IF NOT EXISTS aadhaar_or_apaar_id VARCHAR(50)");
+                    await client.query("ALTER TABLE patients ADD COLUMN IF NOT EXISTS id_type VARCHAR(20) DEFAULT 'Aadhaar'");
+                    await client.query("ALTER TABLE patients ADD COLUMN IF NOT EXISTS is_aadhaar_verified BOOLEAN DEFAULT FALSE");
+                    await client.query("ALTER TABLE patients ADD COLUMN IF NOT EXISTS aadhaar_verified_at TIMESTAMPTZ");
                 } catch (_) {}
             }
 
@@ -613,6 +625,7 @@ async function getPatientDetails(patientId) {
                 `SELECT p.id, p.user_id, p.patient_id, p.full_name, p.date_of_birth,
                         p.gender, p.blood_group, p.phone, p.email, p.address,
                         p.profile_completed, p.created_at, p.updated_at,
+                        p.aadhaar_or_apaar_id, p.id_type, p.is_aadhaar_verified, p.aadhaar_verified_at,
                         m.medical_history, m.notes
                  FROM patients p
                  LEFT JOIN medical_records m ON m.patient_id = p.patient_id
@@ -668,6 +681,10 @@ async function getPatientDetails(patientId) {
                     phone: row.phone || "",
                     email: row.email || "",
                     address: row.address || "",
+                    aadhaarOrApaarId: row.aadhaar_or_apaar_id || "",
+                    idType: row.id_type || "Aadhaar",
+                    isAadhaarVerified: Boolean(row.is_aadhaar_verified),
+                    aadhaarVerifiedAt: row.aadhaar_verified_at || null,
                     notes: row.notes || "",
                     medicalHistory: row.medical_history || "",
                     profileCompleted: row.profile_completed !== false,
@@ -713,6 +730,10 @@ async function getPatientDetails(patientId) {
     docs.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
     return {
+        aadhaarOrApaarId: patient.aadhaarOrApaarId || "",
+        idType: patient.idType || "Aadhaar",
+        isAadhaarVerified: Boolean(patient.isAadhaarVerified),
+        aadhaarVerifiedAt: patient.aadhaarVerifiedAt || null,
         ...patient,
         documents: docs
     };
@@ -734,9 +755,13 @@ async function updatePatientDetails(patientId, fields) {
                      email = COALESCE($5, email),
                      address = COALESCE($6, address),
                      phone = COALESCE($7, phone),
+                     aadhaar_or_apaar_id = COALESCE($8, aadhaar_or_apaar_id),
+                     id_type = COALESCE($9, id_type),
+                     is_aadhaar_verified = COALESCE($10, is_aadhaar_verified),
+                     aadhaar_verified_at = COALESCE($11, aadhaar_verified_at),
                      profile_completed = TRUE,
                      updated_at = NOW()
-                 WHERE UPPER(patient_id) = UPPER($8)`,
+                 WHERE UPPER(patient_id) = UPPER($12)`,
                 [
                     fields.name !== undefined ? fields.name : null,
                     fields.age !== undefined ? String(fields.age) : null,
@@ -745,6 +770,10 @@ async function updatePatientDetails(patientId, fields) {
                     fields.email !== undefined ? fields.email : null,
                     fields.address !== undefined ? fields.address : null,
                     fields.phone !== undefined ? fields.phone : null,
+                    fields.aadhaarOrApaarId !== undefined ? fields.aadhaarOrApaarId : null,
+                    fields.idType !== undefined ? fields.idType : null,
+                    fields.isAadhaarVerified !== undefined ? fields.isAadhaarVerified : null,
+                    fields.aadhaarVerifiedAt !== undefined ? fields.aadhaarVerifiedAt : null,
                     cleanId
                 ]
             );
@@ -796,6 +825,10 @@ async function updatePatientDetails(patientId, fields) {
     if (fields.email !== undefined) patient.email = fields.email;
     if (fields.address !== undefined) patient.address = fields.address;
     if (fields.phone !== undefined) patient.phone = fields.phone;
+    if (fields.aadhaarOrApaarId !== undefined) patient.aadhaarOrApaarId = fields.aadhaarOrApaarId;
+    if (fields.idType !== undefined) patient.idType = fields.idType;
+    if (fields.isAadhaarVerified !== undefined) patient.isAadhaarVerified = Boolean(fields.isAadhaarVerified);
+    if (fields.aadhaarVerifiedAt !== undefined) patient.aadhaarVerifiedAt = fields.aadhaarVerifiedAt;
     if (fields.notes !== undefined) patient.notes = fields.notes;
     if (fields.medicalHistory !== undefined) patient.medicalHistory = fields.medicalHistory;
 
@@ -1294,6 +1327,300 @@ async function findOrCreatePatientByPhone(phone) {
     return getPatientDetails(newId);
 }
 
+// Find or create patient by email
+async function findOrCreatePatientByEmail(email) {
+    await initializeDatabase();
+    const cleanEmail = String(email || "").trim().toLowerCase();
+    if (!cleanEmail) return null;
+
+    if (!isMockActive) {
+        try {
+            const existing = await query("SELECT patient_id FROM patients WHERE LOWER(email) = LOWER($1)", [cleanEmail]);
+            if (existing.rows.length > 0) {
+                return getPatientDetails(existing.rows[0].patient_id);
+            }
+        } catch (e) {
+            console.warn("Postgres find email failed, using mock:", e.message);
+        }
+    }
+
+    // Check mock
+    for (const p of mockStore.patients.values()) {
+        if ((p.email || "").toLowerCase() === cleanEmail) {
+            return getPatientDetails(p.patientId);
+        }
+    }
+
+    // Extract suggested display name from email (e.g. rahul.kumar -> Rahul Kumar)
+    const namePart = cleanEmail.split("@")[0].replace(/[._-]/g, " ").replace(/\b\w/g, l => l.toUpperCase()).trim() || "Patient";
+    const newId = "PAT" + (1000 + mockStore.patients.size + 1);
+    const userId = "USR_" + newId;
+
+    if (!isMockActive) {
+        try {
+            await query(
+                `INSERT INTO users (user_id, full_name, role) VALUES ($1, $2, 'patient') ON CONFLICT DO NOTHING`,
+                [userId, namePart]
+            );
+            await query(
+                `INSERT INTO patients (user_id, patient_id, full_name, email, blood_group) VALUES ($1, $2, $3, $4, 'O+') ON CONFLICT DO NOTHING`,
+                [userId, newId, namePart, cleanEmail]
+            );
+            await query(`INSERT INTO health_information (patient_id) VALUES ($1) ON CONFLICT DO NOTHING`, [newId]);
+            return getPatientDetails(newId);
+        } catch (e) {
+            console.warn("Postgres create email patient failed, using mock:", e.message);
+        }
+    }
+
+    const newPatient = {
+        id: newId,
+        patientId: newId,
+        userId: userId,
+        name: namePart,
+        phone: "",
+        age: "25",
+        gender: "Other",
+        blood: "O+",
+        bloodGroup: "O+",
+        email: cleanEmail,
+        address: "",
+        notes: "Account registered via Email OTP",
+        medicalHistory: "",
+        profileCompleted: false,
+        guardianName: "",
+        guardianPhone: "",
+        guardianRelationship: "",
+        guardian2Name: "",
+        guardian2Phone: "",
+        guardian2Relationship: "",
+        healthInformation: {
+            allergies: false,
+            diabetes: false,
+            hypertension: false,
+            asthma: false,
+            heart_condition: false,
+            major_surgery: false,
+            regular_medication: false,
+            chronic_condition: false,
+            drug_reaction: false,
+            emergency_condition: false,
+            isCompleted: false
+        },
+        verifications: {
+            face: "not_configured",
+            passkey: "not_configured",
+            camera_live: "not_configured",
+            liveness: "not_configured"
+        },
+        documents: []
+    };
+
+    mockStore.patients.set(newId, newPatient);
+    mockStore.users.set(userId, {
+        userId,
+        fullName: namePart,
+        role: "patient"
+    });
+
+    return getPatientDetails(newId);
+}
+
+// Find doctor by identifier (doctorId, phone, email, or name)
+async function findDoctorByIdentifier(identifier) {
+    await initializeDatabase();
+    const cleanId = String(identifier || "").trim().toLowerCase();
+    const digits = cleanId.replace(/[^0-9]/g, "");
+
+    if (!isMockActive) {
+        try {
+            const res = await query(
+                `SELECT doctor_id AS "doctorId", full_name AS "name", phone, specialization, department
+                 FROM doctors
+                 WHERE LOWER(doctor_id) = LOWER($1)
+                    OR phone = $1
+                    OR ($2 != '' AND REPLACE(REPLACE(REPLACE(phone, '+', ''), ' ', ''), '-', '') LIKE '%' || $2)`,
+                [cleanId, digits]
+            );
+            if (res.rows.length > 0) return res.rows[0];
+        } catch (e) {
+            console.warn("Postgres find doctor failed, checking mock:", e.message);
+        }
+    }
+
+    for (const doc of mockStore.doctors.values()) {
+        const docPhoneDigits = (doc.phone || "").replace(/[^0-9]/g, "");
+        if (
+            (doc.doctorId || "").toLowerCase() === cleanId ||
+            (doc.name || "").toLowerCase() === cleanId ||
+            doc.phone === cleanId ||
+            (digits.length >= 7 && docPhoneDigits.endsWith(digits.slice(-10)))
+        ) {
+            return {
+                doctorId: doc.doctorId,
+                name: doc.name,
+                phone: doc.phone,
+                specialization: doc.specialization || "General Medicine",
+                department: doc.department || "General Medicine",
+                role: "doctor"
+            };
+        }
+    }
+    return null;
+}
+
+// Check duplicate field across PostgreSQL and mockStore
+async function checkDuplicateField({ field, value, excludePatientId = null }) {
+    await initializeDatabase();
+    if (!value || typeof value !== "string" || !value.trim()) {
+        return { isDuplicate: false, message: "" };
+    }
+
+    const cleanVal = value.trim();
+
+    if (field === "phone") {
+        const digits = cleanVal.replace(/[^0-9]/g, "");
+        if (digits.length < 7) return { isDuplicate: false };
+
+        if (!isMockActive) {
+            try {
+                const res = await query(
+                    `SELECT patient_id, full_name, phone FROM patients 
+                     WHERE (phone = $1 OR RIGHT(REGEXP_REPLACE(COALESCE(phone, ''), '[^0-9]', '', 'g'), 10) = $2)
+                     ${excludePatientId ? "AND UPPER(patient_id) != UPPER($3)" : ""}`,
+                    excludePatientId ? [cleanVal, digits.slice(-10), excludePatientId] : [cleanVal, digits.slice(-10)]
+                );
+                if (res.rows && res.rows.length > 0) {
+                    return {
+                        isDuplicate: true,
+                        matchedId: res.rows[0].patient_id,
+                        message: `Duplicate Phone: Number "${cleanVal}" is already registered to patient ${res.rows[0].full_name || res.rows[0].patient_id}.`
+                    };
+                }
+            } catch (e) {
+                console.warn("Postgres check duplicate phone error:", e.message);
+            }
+        }
+
+        for (const [pid, p] of mockStore.patients.entries()) {
+            if (excludePatientId && pid.toUpperCase() === excludePatientId.toUpperCase()) continue;
+            const pDigits = (p.phone || "").replace(/[^0-9]/g, "");
+            if (p.phone === cleanVal || (digits.length >= 7 && pDigits.endsWith(digits.slice(-10)))) {
+                return {
+                    isDuplicate: true,
+                    matchedId: pid,
+                    message: `Duplicate Phone: Number "${cleanVal}" is already registered to patient ${p.name || pid}.`
+                };
+            }
+        }
+        return { isDuplicate: false };
+    }
+
+    if (field === "email") {
+        const cleanEmail = cleanVal.toLowerCase();
+        if (!cleanEmail.includes("@") || cleanEmail.length < 5) return { isDuplicate: false };
+
+        if (!isMockActive) {
+            try {
+                const res = await query(
+                    `SELECT patient_id, full_name, email FROM patients 
+                     WHERE LOWER(email) = $1
+                     ${excludePatientId ? "AND UPPER(patient_id) != UPPER($2)" : ""}`,
+                    excludePatientId ? [cleanEmail, excludePatientId] : [cleanEmail]
+                );
+                if (res.rows && res.rows.length > 0) {
+                    return {
+                        isDuplicate: true,
+                        matchedId: res.rows[0].patient_id,
+                        message: `Duplicate Email: "${cleanEmail}" is already registered to patient ${res.rows[0].full_name || res.rows[0].patient_id}.`
+                    };
+                }
+            } catch (e) {
+                console.warn("Postgres check duplicate email error:", e.message);
+            }
+        }
+
+        for (const [pid, p] of mockStore.patients.entries()) {
+            if (excludePatientId && pid.toUpperCase() === excludePatientId.toUpperCase()) continue;
+            if ((p.email || "").toLowerCase() === cleanEmail) {
+                return {
+                    isDuplicate: true,
+                    matchedId: pid,
+                    message: `Duplicate Email: "${cleanEmail}" is already registered to patient ${p.name || pid}.`
+                };
+            }
+        }
+        return { isDuplicate: false };
+    }
+
+    if (field === "aadhaar" || field === "apaar" || field === "aadhaarOrApaarId") {
+        const cleanDigits = cleanVal.replace(/[^0-9]/g, "");
+        if (cleanDigits.length !== 12) return { isDuplicate: false };
+
+        if (!isMockActive) {
+            try {
+                const res = await query(
+                    `SELECT patient_id, full_name, aadhaar_or_apaar_id FROM patients 
+                     WHERE REGEXP_REPLACE(COALESCE(aadhaar_or_apaar_id, ''), '[^0-9]', '', 'g') = $1
+                     ${excludePatientId ? "AND UPPER(patient_id) != UPPER($2)" : ""}`,
+                    excludePatientId ? [cleanDigits, excludePatientId] : [cleanDigits]
+                );
+                if (res.rows && res.rows.length > 0) {
+                    return {
+                        isDuplicate: true,
+                        matchedId: res.rows[0].patient_id,
+                        message: `Duplicate Government Identity: This Aadhaar/APAAR ID is already registered to patient ${res.rows[0].full_name || res.rows[0].patient_id}.`
+                    };
+                }
+            } catch (e) {
+                console.warn("Postgres check duplicate aadhaar error:", e.message);
+            }
+        }
+
+        for (const [pid, p] of mockStore.patients.entries()) {
+            if (excludePatientId && pid.toUpperCase() === excludePatientId.toUpperCase()) continue;
+            const pDigits = (p.aadhaarOrApaarId || "").replace(/[^0-9]/g, "");
+            if (pDigits === cleanDigits) {
+                return {
+                    isDuplicate: true,
+                    matchedId: pid,
+                    message: `Duplicate Government Identity: This Aadhaar/APAAR ID is already registered to patient ${p.name || pid}.`
+                };
+            }
+        }
+        return { isDuplicate: false };
+    }
+
+    if (field === "doctorUsername" || field === "doctorId") {
+        const cleanDoc = cleanVal.toLowerCase();
+        if (!isMockActive) {
+            try {
+                const res = await query(
+                    `SELECT doctor_id FROM doctors WHERE LOWER(doctor_id) = $1`,
+                    [cleanDoc]
+                );
+                if (res.rows && res.rows.length > 0) {
+                    return {
+                        isDuplicate: true,
+                        message: `Doctor ID "${cleanVal}" already exists. Please choose a different ID.`
+                    };
+                }
+            } catch (e) {}
+        }
+        for (const [id, doc] of mockStore.doctors.entries()) {
+            if ((doc.doctorId || "").toLowerCase() === cleanDoc) {
+                return {
+                    isDuplicate: true,
+                    message: `Doctor ID "${cleanVal}" already exists. Please choose a different ID.`
+                };
+            }
+        }
+        return { isDuplicate: false };
+    }
+
+    return { isDuplicate: false };
+}
+
 // Register a new patient
 async function registerPatient(fields) {
     await initializeDatabase();
@@ -1306,6 +1633,10 @@ async function registerPatient(fields) {
         bloodGroup,
         email,
         address,
+        aadhaarOrApaarId,
+        idType,
+        isAadhaarVerified,
+        aadhaarVerifiedAt,
         guardianName,
         guardianPhone,
         guardianRelationship,
@@ -1313,6 +1644,34 @@ async function registerPatient(fields) {
         guardian2Phone,
         guardian2Relationship
     } = fields;
+
+    // Strict duplicate verification at registration phase
+    if (phone && phone.trim()) {
+        const phoneCheck = await checkDuplicateField({ field: "phone", value: phone });
+        if (phoneCheck.isDuplicate) {
+            const err = new Error(phoneCheck.message);
+            err.status = 409;
+            throw err;
+        }
+    }
+
+    if (email && email.trim()) {
+        const emailCheck = await checkDuplicateField({ field: "email", value: email });
+        if (emailCheck.isDuplicate) {
+            const err = new Error(emailCheck.message);
+            err.status = 409;
+            throw err;
+        }
+    }
+
+    if (aadhaarOrApaarId && aadhaarOrApaarId.trim()) {
+        const aadhaarCheck = await checkDuplicateField({ field: "aadhaar", value: aadhaarOrApaarId });
+        if (aadhaarCheck.isDuplicate) {
+            const err = new Error(aadhaarCheck.message);
+            err.status = 409;
+            throw err;
+        }
+    }
 
     const passwordHash = await bcrypt.hash(password || "1234", 10);
     const validBloodGroup = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"].includes(bloodGroup)
@@ -1323,6 +1682,11 @@ async function registerPatient(fields) {
     const newPatientId = "PAT" + nextNum;
     const newUserId = "USR_" + newPatientId;
 
+    const formattedAadhaar = aadhaarOrApaarId ? aadhaarOrApaarId.trim() : "";
+    const cleanIdType = (idType || "Aadhaar").trim();
+    const verifiedFlag = Boolean(isAadhaarVerified);
+    const verifiedDate = aadhaarVerifiedAt || (verifiedFlag ? new Date().toISOString() : null);
+
     if (!isMockActive) {
         try {
             await query(
@@ -1331,9 +1695,16 @@ async function registerPatient(fields) {
                 [newUserId, fullName || "Patient", phone || null, passwordHash]
             );
             await query(
-                `INSERT INTO patients (user_id, patient_id, full_name, date_of_birth, gender, blood_group, phone, email, address)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-                [newUserId, newPatientId, fullName || "Patient", age ? String(age) : "", gender || "Other", validBloodGroup, phone || "", email || "", address || ""]
+                `INSERT INTO patients (
+                    user_id, patient_id, full_name, date_of_birth, gender, blood_group, 
+                    phone, email, address, aadhaar_or_apaar_id, id_type, is_aadhaar_verified, aadhaar_verified_at
+                 )
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+                [
+                    newUserId, newPatientId, fullName || "Patient", age ? String(age) : "", 
+                    gender || "Other", validBloodGroup, phone || "", email || "", address || "",
+                    formattedAadhaar, cleanIdType, verifiedFlag, verifiedDate
+                ]
             );
             await query(
                 `INSERT INTO guardians (patient_id, guardian_order, guardian_name, guardian_phone, relationship)
@@ -1366,6 +1737,10 @@ async function registerPatient(fields) {
         phone: phone || "",
         email: email || "",
         address: address || "",
+        aadhaarOrApaarId: formattedAadhaar,
+        idType: cleanIdType,
+        isAadhaarVerified: verifiedFlag,
+        aadhaarVerifiedAt: verifiedDate,
         notes: "",
         medicalHistory: "",
         profileCompleted: true,
@@ -1400,7 +1775,9 @@ async function registerPatient(fields) {
     return {
         patientId: newPatientId,
         fullName,
-        phone
+        phone,
+        aadhaarOrApaarId: formattedAadhaar,
+        isAadhaarVerified: verifiedFlag
     };
 }
 
@@ -3211,6 +3588,9 @@ module.exports = {
     savePatientFaceBiometric,
     getAllEnrolledFacePatients,
     findOrCreatePatientByPhone,
+    findOrCreatePatientByEmail,
+    findDoctorByIdentifier,
+    checkDuplicateField,
     registerPatient,
     registerDoctor,
     verifyDoctorUser,

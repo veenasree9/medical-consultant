@@ -24,6 +24,10 @@ CREATE TABLE IF NOT EXISTS patients (
     address TEXT,
     profile_photo TEXT,
     profile_completed BOOLEAN NOT NULL DEFAULT TRUE,
+    aadhaar_or_apaar_id VARCHAR(50),
+    id_type VARCHAR(20) DEFAULT 'Aadhaar',
+    is_aadhaar_verified BOOLEAN NOT NULL DEFAULT FALSE,
+    aadhaar_verified_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );

@@ -88,27 +88,24 @@
                 class="role doctor"
                 onclick="openLogin('doctor')"
                 data-i18n="portal.roleDoctor">
-
-                👨⚕️ Login as Doctor
-
+                <span class="role-btn-title">👨⚕️ Login as Doctor</span>
+                <span class="role-btn-badge">🩺 Clinical Appointments &amp; Patients</span>
             </button>
 
             <button
                 class="role helper"
                 onclick="openLogin('helper')"
                 data-i18n="portal.roleHelper">
-
-                🧑⚕️ Login as Helper
-
+                <span class="role-btn-title">🧑⚕️ Login as Helper</span>
+                <span class="role-btn-badge">🚨 Emergency Rescue &amp; Patient ID</span>
             </button>
 
             <button
                 class="role patient"
                 onclick="openLogin('patient')"
                 data-i18n="portal.rolePatient">
-
-                👨🦰 Login as Patient
-
+                <span class="role-btn-title">👨🦰 Login as Patient</span>
+                <span class="role-btn-badge">📋 Health Records &amp; Consultations</span>
             </button>
 
         </div>
@@ -183,73 +180,136 @@
                 Patient Login
             </h1>
 
-            <!-- Quick Demo Credentials Box -->
-            <div id="demoCredentialsHelper" style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 10px 12px; margin-bottom: 16px; font-size: 12.5px; color: #166534; text-align: left;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                    <span style="font-weight: 600;" data-i18n="login.demoTitle">⚡ Quick Demo Access</span>
-                    <span style="font-size: 11px; color: #15803d; background: #dcfce7; padding: 2px 6px; border-radius: 4px;" data-i18n="login.oneClickFill">1-Click Fill</span>
-                </div>
-                <div id="demoQuickFillButtons" style="display: flex; gap: 6px; flex-wrap: wrap;">
-                    <button type="button" class="btn-small" style="background: #0284c7; color: white; font-size: 11.5px; padding: 5px 10px; border-radius: 6px; border: none; cursor: pointer;" onclick="fillDemoCredentials('patient')" data-i18n="login.demoPatientBtn">
-                        👨🦰 Demo Patient (PAT1001 / 1234)
-                    </button>
-                    <button type="button" class="btn-small" style="background: #0f766e; color: white; font-size: 11.5px; padding: 5px 10px; border-radius: 6px; border: none; cursor: pointer;" onclick="fillDemoCredentials('doctor')" data-i18n="login.demoDoctorBtn">
-                        👨⚕️ Demo Doctor (doctor / 1234)
-                    </button>
-                </div>
-                <div id="demoCredentialsTip" style="font-size: 11px; color: #4b5563; margin-top: 6px;" data-i18n="login.demoTip">
-                    Also supports phone (+919876543210) or registered email with password <b>1234</b>.
-                </div>
-            </div>
-
-            <label id="credentialLabel" data-i18n="login.patientLabel">
-                Patient ID / Phone / Email
-            </label>
-
-            <input
-                id="username"
-                type="text"
-                placeholder="Enter Patient ID (e.g. PAT1001), Phone, or Email"
-                data-i18n-placeholder="login.patientPlaceholder"
-                autocomplete="username">
-
-            <label data-i18n="login.passwordLabel">
-                Password
-            </label>
-
-            <div class="password-wrapper">
-                <input
-                    id="password"
-                    type="password"
-                    placeholder="Enter your password"
-                    data-i18n-placeholder="login.passwordPlaceholder"
-                    autocomplete="current-password">
-
-                <button
-                    type="button"
-                    id="togglePasswordBtn"
-                    class="toggle-password-btn"
-                    onclick="togglePasswordVisibility()"
-                    aria-label="Show or hide password"
-                    data-i18n-title="login.togglePassword"
-                    title="Show or hide password">
-                    👁️
+            <!-- Login Mode Tabs: OTP (Emails & Numbers) vs Password -->
+            <div class="login-tabs-bar" style="display: flex; gap: 6px; margin-bottom: 16px; background: #f1f5f9; padding: 4px; border-radius: 10px;">
+                <button type="button" id="tabOtpLogin" class="tab-btn active" style="flex: 1; padding: 9px 8px; font-size: 13px; font-weight: 600; border: none; border-radius: 8px; cursor: pointer; transition: all 0.2s; background: white; color: #0284c7; box-shadow: 0 1px 3px rgba(0,0,0,0.1);" onclick="switchLoginMode('otp')">
+                    📱 / ✉️ OTP Login
+                </button>
+                <button type="button" id="tabPasswordLogin" class="tab-btn" style="flex: 1; padding: 9px 8px; font-size: 13px; font-weight: 600; border: none; border-radius: 8px; cursor: pointer; transition: all 0.2s; background: transparent; color: #64748b;" onclick="switchLoginMode('password')">
+                    🔑 Password Login
                 </button>
             </div>
 
-            <button
-                id="loginBtn"
-                class="primary full"
-                onclick="passwordLogin()"
-                data-i18n="login.signInBtn">
+            <!-- ================= MODE 1: OTP LOGIN (PHONE & EMAIL) ================= -->
+            <div id="otpLoginForm">
+                <label id="otpIdentifierLabel" style="font-weight: 600; font-size: 13.5px; color: #1e293b; display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                    <span>Mobile Number or Email</span>
+                    <span id="detectedChannelBadge" style="font-size: 11px; color: #0284c7; background: #e0f2fe; padding: 2px 8px; border-radius: 6px; font-weight: 500;">📱 SMS or ✉️ Email</span>
+                </label>
 
-                Log In
+                <div class="identifier-input-wrapper" style="position: relative; margin-bottom: 12px;">
+                    <input
+                        id="otpIdentifier"
+                        type="text"
+                        placeholder="Enter mobile (e.g. 9876543210) or email (e.g. rahul@example.com)"
+                        autocomplete="username"
+                        oninput="handleOtpIdentifierInput(this.value)"
+                        onkeydown="if(event.key==='Enter') sendOTP()">
+                    <!-- Hidden alias for legacy references -->
+                    <input id="phone" type="hidden">
+                </div>
 
-            </button>
+                <button
+                    type="button"
+                    id="sendOtpBtn"
+                    class="primary full"
+                    onclick="sendOTP()"
+                    style="padding: 12px; font-weight: 600; font-size: 14.5px; background: #0284c7;">
+                    📲 Send Verification Code
+                </button>
+
+                <!-- OTP VERIFICATION SUB-SECTION (REVEALS ON SEND) -->
+                <div id="otpSection" class="otp-section hidden" style="margin-top: 16px; padding-top: 14px; border-top: 1px dashed #cbd5e1;">
+                    <label style="font-weight: 600; font-size: 13px; color: #1e293b; display: block; margin-bottom: 6px;">
+                        Enter 6-Digit OTP Code
+                    </label>
+
+                    <input
+                        id="otp"
+                        type="text"
+                        inputmode="numeric"
+                        maxlength="6"
+                        placeholder="Enter 6-digit code"
+                        style="text-align: center; font-size: 18px; letter-spacing: 4px; font-weight: bold; margin-bottom: 12px;"
+                        onkeydown="if(event.key==='Enter') verifyOTP()">
+
+                    <button
+                        type="button"
+                        id="verifyOtpBtn"
+                        class="primary full"
+                        onclick="verifyOTP()"
+                        style="padding: 12px; font-weight: 600; font-size: 15px; background: #0f766e;">
+                        ✓ Verify Code & Sign In
+                    </button>
+
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 12px; font-size: 13px;">
+                        <span id="timer" style="color: #64748b; font-size: 12px;"></span>
+                        <button type="button" id="resendBtn" class="link-btn" style="margin: 0; background: none; border: none; color: #0284c7; cursor: pointer;" onclick="sendOTP(true)" disabled>
+                            Resend Code
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ================= MODE 2: PASSWORD LOGIN ================= -->
+            <div id="passwordLoginForm" class="hidden">
+                <label id="credentialLabel" data-i18n="login.patientLabel">
+                    Patient ID / Phone / Email
+                </label>
+
+                <input
+                    id="username"
+                    type="text"
+                    placeholder="Enter Patient ID (e.g. PAT1001), Phone, or Email"
+                    data-i18n-placeholder="login.patientPlaceholder"
+                    autocomplete="username">
+
+                <label data-i18n="login.passwordLabel">
+                    Password
+                </label>
+
+                <div class="password-wrapper">
+                    <input
+                        id="password"
+                        type="password"
+                        placeholder="Enter your password"
+                        data-i18n-placeholder="login.passwordPlaceholder"
+                        autocomplete="current-password"
+                        onkeydown="if(event.key==='Enter') passwordLogin()">
+
+                    <button
+                        type="button"
+                        id="togglePasswordBtn"
+                        class="toggle-password-btn"
+                        onclick="togglePasswordVisibility()"
+                        aria-label="Show or hide password"
+                        data-i18n-title="login.togglePassword"
+                        title="Show or hide password">
+                        👁️
+                    </button>
+                </div>
+
+                <button
+                    id="loginBtn"
+                    class="primary full"
+                    onclick="passwordLogin()"
+                    data-i18n="login.signInBtn">
+
+                    Log In
+
+                </button>
+            </div>
 
             <div id="registerPrompt" class="register-prompt">
                 <span id="registerPromptText">New patient? </span>
                 <button type="button" id="registerPromptBtn" class="link-btn" onclick="openRegisterModal()">Register here</button>
+            </div>
+
+            <div id="helperPortalLink" class="helper-portal-link" style="margin-top: 14px; padding-top: 12px; border-top: 1px dashed #cbd5e1; font-size: 13px; text-align: center;">
+                <span style="color: #64748b;">Emergency responder or healthcare helper?</span>
+                <button type="button" class="link-btn" onclick="openLogin('helper')" style="margin-left: 4px; color: #7b1fa2; font-weight: 700; background: none; border: none; cursor: pointer; text-decoration: underline;">
+                    🚨 Open Emergency Helper Portal
+                </button>
             </div>
 
             <p
@@ -471,6 +531,13 @@
                         <span class="s-label">Second Guardian (Emergency Contact 2)</span>
                         <b id="sumGuardian2">-</b>
                     </div>
+                    <div class="summary-item full">
+                        <span class="s-label">Verified National Identity (Aadhaar / APAAR)</span>
+                        <b id="sumAadhaarCard" style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                            <span id="sumAadhaarBadge" class="status-badge status-unconfigured">Not configured</span>
+                            <span id="sumAadhaarText" style="font-weight: 600; color: #0f172a;">-</span>
+                        </b>
+                    </div>
                 </div>
 
                 <!-- SECONDARY DETAILS & HEALTH INFORMATION SUMMARY STATUS (HIDDEN BY DEFAULT) -->
@@ -479,6 +546,7 @@
                         <div class="summary-status-box" style="padding: 14px; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0;">
                             <div style="font-size: 13px; font-weight: 600; color: #475569; margin-bottom: 8px;">🛡️ Identity & Secondary Details</div>
                             <div style="font-size: 14px; color: #0f172a; line-height: 1.8;">
+                                <div><span id="sumAadhaarIcon">🪪</span> Govt ID (Aadhaar/APAAR): <b id="sumAadhaarStatus">Not verified</b></div>
                                 <div><span id="sumFaceIcon">✓</span> Face Verification: <b id="sumFaceStatus">Not configured</b></div>
                                 <div><span id="sumPasskeyIcon">✓</span> Passkey / Fingerprint: <b id="sumPasskeyStatus">Not configured</b></div>
                             </div>
@@ -605,6 +673,33 @@
                             <input id="pGuardian2Relationship" placeholder="e.g. Mother, Sibling, Relative">
                         </div>
 
+                        <!-- SECONDARY DETAILS: GOVERNMENT IDENTITY (AADHAAR / APAAR) -->
+                        <div class="full guardian-subhead">
+                            <h4>Secondary Details & National Identity (Aadhaar / APAAR)</h4>
+                        </div>
+
+                        <div>
+                            <label>Identity Type</label>
+                            <select id="pIdType" onchange="onProfileIdTypeChange(this.value)">
+                                <option value="Aadhaar" selected>Aadhaar (12-digit UIDAI UID)</option>
+                                <option value="APAAR">APAAR ID (12-digit National ID)</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label style="display: flex; justify-content: space-between; align-items: center;">
+                                <span id="pAadhaarLabelTitle">Aadhaar / APAAR Number</span>
+                                <span id="pAadhaarStatusBadge" class="status-badge" style="font-size: 11px; padding: 2px 6px;">Unverified</span>
+                            </label>
+                            <div style="display: flex; gap: 8px;">
+                                <input id="pAadhaarOrApaar" placeholder="XXXX-XXXX-XXXX" maxlength="14" oninput="formatAadhaarInput(this)" onblur="checkDuplicateFieldLive('aadhaar', this.value, currentPatientId)">
+                                <button type="button" class="btn-small" style="background: #0d9488; color: white; border: none; border-radius: 6px; padding: 6px 12px; font-weight: 600; font-size: 12px; cursor: pointer; white-space: nowrap;" onclick="triggerProfileAadhaarVerification()">
+                                    Verify ID
+                                </button>
+                            </div>
+                            <span id="pAadhaarNotice" style="font-size: 11px; display: block; margin-top: 4px;"></span>
+                        </div>
+
                         <div class="full">
                             <label>Medical History</label>
                             <textarea id="pMedicalHistory" placeholder="Past medical illnesses, chronic diagnosis, family history"></textarea>
@@ -691,6 +786,23 @@
                                 <span id="verifLivenessBadge" class="status-badge status-unconfigured">Not configured</span>
                                 <button type="button" class="btn-small secondary" onclick="startLivenessVerification()">
                                     Verify Liveness Presence
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Aadhaar / APAAR Identity Verification -->
+                        <div class="verif-item">
+                            <div class="verif-header">
+                                <span class="verif-icon">🪪</span>
+                                <div>
+                                    <b>Aadhaar / APAAR National Identity</b>
+                                    <div class="verif-desc">12-digit UIDAI Aadhaar or APAAR Government Registry verified credential.</div>
+                                </div>
+                            </div>
+                            <div class="verif-actions">
+                                <span id="verifAadhaarBadge" class="status-badge status-unconfigured">Not configured</span>
+                                <button type="button" class="btn-small primary" onclick="showProfileEdit()">
+                                    Verify Govt ID
                                 </button>
                             </div>
                         </div>
@@ -1205,11 +1317,11 @@
     id="helperDashboard"
     class="dashboard hidden">
 
-    <nav class="dashboard-nav" style="display: flex; justify-content: space-between; align-items: center; padding: 12px 5%; background: #ffffff; border-bottom: 1px solid #e2e8f0; flex-wrap: wrap; gap: 10px;">
+    <nav class="dashboard-nav helper-nav-bar" style="display: flex; justify-content: space-between; align-items: center; padding: 12px 5%; background: #ffffff; border-bottom: 1px solid #e2e8f0; flex-wrap: wrap; gap: 10px;">
 
-        <div style="display: flex; align-items: center; gap: 12px;">
-            <div class="brand" data-i18n="helper.dashboard" style="font-size: 19px; font-weight: 700; color: #b91c1c; display: flex; align-items: center; gap: 8px;">
-                🚨 MediCare Emergency Rescue
+        <div class="helper-nav-left" style="display: flex; align-items: center; gap: 12px;">
+            <div class="brand helper-brand" data-i18n="helper.dashboard" style="font-size: 19px; font-weight: 700; color: #b91c1c; display: flex; align-items: center; gap: 8px;">
+                🚨 <span class="helper-brand-text">MediCare Emergency Rescue</span>
             </div>
             <!-- Online / Offline Status Badge (Req 5) -->
             <div id="networkStatusBadge" class="network-badge online" title="Network Connectivity Status">
@@ -1218,9 +1330,9 @@
             </div>
         </div>
 
-        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+        <div class="helper-nav-right" style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
             <!-- Cache & Offline Sync Actions -->
-            <div id="helperCacheInfoWrap" style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: #475569; background: #f8fafc; padding: 5px 10px; border-radius: 8px; border: 1px solid #e2e8f0;">
+            <div id="helperCacheInfoWrap" class="helper-cache-wrap" style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: #475569; background: #f8fafc; padding: 5px 10px; border-radius: 8px; border: 1px solid #e2e8f0;">
                 <span id="cacheSyncStatusText">📁 Emergency Cache: Ready</span>
                 <button type="button" id="refreshEmergencyCacheBtn" class="btn-small secondary" style="font-size: 11.5px; padding: 3px 8px;" onclick="refreshLocalEmergencyDirectory()" title="Fetch and save latest authorized emergency patient directory for offline matching">
                     📥 Update Cache
@@ -1243,7 +1355,7 @@
             </div>
 
             <button
-                class="logout"
+                class="logout helper-logout-btn"
                 onclick="exitHelperMode()"
                 data-i18n="login.back"
                 style="padding: 7px 14px; font-size: 13px;">
@@ -1254,11 +1366,11 @@
     </nav>
 
 
-    <main class="dashboard-content" style="padding: 24px 5%; max-width: 1200px; margin: auto;">
+    <main class="dashboard-content helper-dashboard-content" style="padding: 24px 5%; max-width: 1200px; margin: auto;">
 
         <!-- PROMINENT EMERGENCY CALL BAR (Req 4) -->
         <div class="emergency-quick-bar" style="background: #fef2f2; border: 2px solid #ef4444; border-radius: 12px; padding: 14px 18px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; box-shadow: 0 4px 12px rgba(220, 38, 38, 0.12);">
-            <div style="display: flex; align-items: center; gap: 12px;">
+            <div class="emergency-quick-bar-text" style="display: flex; align-items: center; gap: 12px;">
                 <span style="font-size: 28px;">🚨</span>
                 <div>
                     <h3 style="margin: 0; color: #991b1b; font-size: 17px; font-weight: 800;">CRITICAL EMERGENCY PRIORITY</h3>
@@ -1267,7 +1379,7 @@
                     </p>
                 </div>
             </div>
-            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <div class="emergency-quick-bar-actions" style="display: flex; gap: 8px; flex-wrap: wrap;">
                 <button
                     type="button"
                     class="btn-emergency-call-112"
@@ -1277,10 +1389,10 @@
                 </button>
                 <button
                     type="button"
-                    class="btn-secondary"
+                    class="btn-secondary btn-first-aid"
                     onclick="openManualEmergencyModal()"
                     style="padding: 10px 16px; font-size: 13.5px; font-weight: 600;">
-                    📋 First Aid & Manual Rescue
+                    📋 First Aid &amp; Manual Rescue
                 </button>
             </div>
         </div>
@@ -1302,9 +1414,6 @@
                         </button>
                         <button type="button" class="btn-small secondary" onclick="$('helperPhotoFile').click()">
                             📁 Upload Photo Instead
-                        </button>
-                        <button type="button" class="btn-small secondary" onclick="loadDemoPatientForIdentification()">
-                            🌟 Use Consented Patient (PAT1001)
                         </button>
                     </div>
                 </div>
@@ -1377,9 +1486,6 @@
                             <input type="file" id="helperPhotoFile" accept="image/*" style="display:none;" onchange="handleHelperPhotoUpload(event)">
                             <button type="button" class="btn-small secondary" onclick="$('helperPhotoFile').click()" style="background: #1e293b; color: white;">
                                 📁 Upload Photo
-                            </button>
-                            <button type="button" class="btn-small secondary" onclick="loadDemoPatientForIdentification()" style="background: #1e293b; color: white;">
-                                🌟 Test Consented Patient (PAT1001)
                             </button>
                         </div>
 
@@ -1541,15 +1647,6 @@
                         class="btn-secondary"
                         onclick="$('helperPhotoFile').click()">
                         📁 Upload
-                    </button>
-
-                    <!-- Demo Patient Option -->
-                    <button
-                        id="helperDemoBtn"
-                        type="button"
-                        class="btn-secondary"
-                        onclick="loadDemoPatientForIdentification()">
-                        🌟 PAT1001
                     </button>
 
                 </div>

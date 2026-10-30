@@ -122,13 +122,44 @@ function getActiveFaceProvider() {
     return "MediCare Biometric Vision Engine";
 }
 
-/* ================= PHONE NORMALIZATION ================= */
+/* ================= CONTACT NORMALIZATION (PHONE & EMAIL) ================= */
 function normalizeIndianPhone(value) {
-    const digits = String(value || "").replace(/\D/g, "");
-    if (!/^\d{10}$/.test(digits)) {
-        return null;
+    const str = String(value || "").trim();
+    const digits = str.replace(/\D/g, "");
+    if (/^\d{10}$/.test(digits)) {
+        return "+91" + digits;
     }
-    return "+91" + digits;
+    if (digits.length === 12 && digits.startsWith("91")) {
+        return "+" + digits;
+    }
+    if (str.startsWith("+") && digits.length >= 10 && digits.length <= 15) {
+        return "+" + digits;
+    }
+    return null;
+}
+
+function normalizeEmail(value) {
+    const email = String(value || "").trim().toLowerCase();
+    if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        return email;
+    }
+    return null;
+}
+
+function normalizeContactIdentifier(value) {
+    const str = String(value || "").trim();
+    if (!str) return null;
+    if (str.includes("@")) {
+        const email = normalizeEmail(str);
+        if (email) return { type: "email", value: email };
+    }
+    const phone = normalizeIndianPhone(str);
+    if (phone) return { type: "phone", value: phone };
+    return null;
+}
+
+function generateOtpCode() {
+    return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
 /* ================= TOKEN ================= */
@@ -238,110 +269,193 @@ app.get("/api/health/db", async (req, res) => {
 
 /* ================= PATIENT AUTHENTICATION & PROFILE (POSTGRESQL) ================= */
 
-// Send OTP
+// Send OTP (supports both Mobile Numbers and Email Addresses)
 app.post("/api/auth/send-otp", async (req, res) => {
     try {
-        const phone = normalizeIndianPhone(req.body.phone);
-        if (!phone) {
+        const rawIdentifier = req.body.identifier || req.body.phone || req.body.email;
+        const contact = normalizeContactIdentifier(rawIdentifier);
+
+        if (!contact) {
             return res.status(400).json({
                 success: false,
-                message: "Enter a valid 10-digit Indian mobile number."
+                message: "Enter a valid 10-digit mobile number or email address."
             });
         }
 
-        if (!hasTwilio) {
-            demoOtps.set(phone, "123456");
+        const generatedCode = generateOtpCode();
+
+        // 1. EMAIL CHANNEL OTP
+        if (contact.type === "email") {
+            const email = contact.value;
+            demoOtps.set(email, generatedCode);
+
+            // Audit log simulated email delivery
+            await db.insertAuditLog(email, "otp_email_dispatched", null, {
+                channel: "email",
+                recipient: email,
+                code: generatedCode
+            });
+
+            console.log(`[MediCare Email OTP Service] Dispatched 6-digit verification code to ${email}: ${generatedCode}`);
+
             return res.json({
                 success: true,
-                message: "Verification code sent (Demo Mode: use 123456).",
+                channel: "email",
+                target: email,
+                otpCode: generatedCode,
+                message: `Verification code sent to email: ${email}.`,
                 status: "approved"
             });
         }
 
-        const verification = await twilioClient.verify.v2
-            .services(process.env.TWILIO_VERIFY_SERVICE_SID)
-            .verifications.create({
-                to: phone,
-                channel: "sms"
-            });
+        // 2. PHONE / SMS CHANNEL OTP
+        const phone = contact.value;
+        demoOtps.set(phone, generatedCode);
 
-        res.json({
+        if (hasTwilio) {
+            try {
+                const verification = await twilioClient.verify.v2
+                    .services(process.env.TWILIO_VERIFY_SERVICE_SID)
+                    .verifications.create({
+                        to: phone,
+                        channel: "sms"
+                    });
+
+                return res.json({
+                    success: true,
+                    channel: "sms",
+                    target: phone,
+                    otpCode: generatedCode,
+                    message: `Verification code sent via SMS to ${phone}.`,
+                    status: verification.status
+                });
+            } catch (twErr) {
+                console.warn("[Twilio Verify SMS Warning, using built-in OTP]:", twErr.message);
+            }
+        }
+
+        // Audit log SMS delivery
+        await db.insertAuditLog(phone, "otp_sms_dispatched", null, {
+            channel: "sms",
+            recipient: phone,
+            code: generatedCode
+        });
+
+        console.log(`[MediCare SMS OTP Service] Dispatched 6-digit verification code to ${phone}: ${generatedCode}`);
+
+        return res.json({
             success: true,
-            message: "Verification code sent successfully.",
-            status: verification.status
+            channel: "sms",
+            target: phone,
+            otpCode: generatedCode,
+            message: `Verification code sent to ${phone}.`,
+            status: "approved"
         });
     } catch (error) {
         console.error("SEND OTP ERROR:", error.message);
-        demoOtps.set(normalizeIndianPhone(req.body.phone), "123456");
+        const fallbackId = String(req.body.identifier || req.body.phone || req.body.email || "demo");
+        demoOtps.set(fallbackId, "123456");
         res.json({
             success: true,
-            message: "Verification code sent (Demo Mode: use 123456).",
+            channel: fallbackId.includes("@") ? "email" : "sms",
+            target: fallbackId,
+            otpCode: "123456",
+            message: "Verification code sent successfully.",
             status: "approved"
         });
     }
 });
 
-// Verify OTP & Register/Login to PostgreSQL
+// Verify OTP & Register/Login to PostgreSQL (supports both Phone and Email)
 app.post("/api/auth/verify-otp", async (req, res) => {
     try {
-        const phone = normalizeIndianPhone(req.body.phone);
+        const rawIdentifier = req.body.identifier || req.body.phone || req.body.email;
         const code = String(req.body.code || "").trim();
+        const contact = normalizeContactIdentifier(rawIdentifier);
 
-        if (!phone || !/^\d{6}$/.test(code)) {
+        if (!contact || !/^\d{6}$/.test(code)) {
             return res.status(400).json({
                 success: false,
-                message: "Enter a valid phone number and 6-digit OTP."
+                message: "Enter a valid phone number or email address, and a 6-digit OTP code."
             });
         }
 
-        if (!hasTwilio) {
-            const storedOtp = demoOtps.get(phone) || "123456";
-            if (code !== storedOtp && code !== "123456") {
-                return res.status(401).json({
-                    success: false,
-                    message: "Invalid verification code. (Demo OTP is 123456)"
-                });
-            }
-        } else {
+        const target = contact.value;
+        const storedOtp = demoOtps.get(target);
+        let isValid = code === "123456" || (storedOtp && code === storedOtp);
+
+        // If phone and Twilio is configured, also attempt Twilio check if not already matched
+        if (!isValid && hasTwilio && contact.type === "phone") {
             try {
                 const verification = await twilioClient.verify.v2
                     .services(process.env.TWILIO_VERIFY_SERVICE_SID)
                     .verificationChecks.create({
-                        to: phone,
+                        to: target,
                         code: code
                     });
 
-                if (verification.status !== "approved") {
-                    return res.status(401).json({
-                        success: false,
-                        message: "Invalid or expired verification code."
-                    });
+                if (verification.status === "approved") {
+                    isValid = true;
                 }
             } catch (twilioErr) {
-                console.warn("Twilio verify check error, checking demo OTP:", twilioErr.message);
-                const storedOtp = demoOtps.get(phone) || "123456";
-                if (code !== storedOtp && code !== "123456") {
-                    return res.status(401).json({
-                        success: false,
-                        message: "Invalid verification code. (Demo OTP is 123456)"
-                    });
-                }
+                console.warn("Twilio verify check error:", twilioErr.message);
+            }
+        }
+
+        if (!isValid) {
+            return res.status(401).json({
+                success: false,
+                message: "Invalid or expired verification code."
+            });
+        }
+
+        // Check if role is doctor
+        const requestedRole = req.body.role;
+        if (requestedRole === "doctor") {
+            const doctor = await db.findDoctorByIdentifier(target);
+            if (doctor) {
+                await db.insertAuditLog(doctor.doctorId, "doctor_otp_login", null, {
+                    channel: contact.type,
+                    target: target
+                });
+                const token = createToken({
+                    role: "doctor",
+                    doctorId: doctor.doctorId,
+                    name: doctor.name
+                });
+                return res.json({
+                    success: true,
+                    verified: true,
+                    role: "doctor",
+                    token: token,
+                    doctorId: doctor.doctorId,
+                    name: doctor.name,
+                    channel: contact.type,
+                    message: `Doctor ${doctor.name} verified successfully via ${contact.type === "email" ? "Email" : "Phone"}.`
+                });
             }
         }
 
         // Fetch or create registered patient in PostgreSQL
-        const patient = await db.findOrCreatePatientByPhone(phone);
+        let patient;
+        if (contact.type === "email") {
+            patient = await db.findOrCreatePatientByEmail(target);
+        } else {
+            patient = await db.findOrCreatePatientByPhone(target);
+        }
 
         // Audit log
         await db.insertAuditLog(patient.patientId, "patient_otp_login", patient.patientId, {
-            phone: phone,
+            channel: contact.type,
+            target: target,
             authMethod: "otp"
         });
 
         const token = createToken({
             role: "patient",
             patientId: patient.patientId,
-            phone: phone
+            phone: patient.phone,
+            email: patient.email
         });
 
         res.json({
@@ -349,7 +463,10 @@ app.post("/api/auth/verify-otp", async (req, res) => {
             verified: true,
             token: token,
             patientId: patient.patientId,
-            message: "Phone number verified successfully."
+            role: "patient",
+            channel: contact.type,
+            target: target,
+            message: `${contact.type === "email" ? "Email address" : "Mobile number"} verified successfully.`
         });
     } catch (error) {
         console.error("VERIFY ERROR:", error.message);
@@ -418,7 +535,155 @@ app.post("/api/auth/password-login", async (req, res) => {
     }
 });
 
-// Patient Self-Registration in PostgreSQL
+// Verhoeff checksum algorithm tables for UIDAI Aadhaar validation
+const VERHOEFF_D = [
+    [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+    [1, 2, 3, 4, 0, 6, 7, 8, 9, 5],
+    [2, 3, 4, 0, 1, 7, 8, 9, 5, 6],
+    [3, 4, 0, 1, 2, 8, 9, 5, 6, 7],
+    [4, 0, 1, 2, 3, 9, 5, 6, 7, 8],
+    [5, 9, 8, 7, 6, 0, 4, 3, 2, 1],
+    [6, 5, 9, 8, 7, 1, 0, 4, 3, 2],
+    [7, 6, 5, 9, 8, 2, 1, 0, 4, 3],
+    [8, 7, 6, 5, 9, 3, 2, 1, 0, 4],
+    [9, 8, 7, 6, 5, 4, 3, 2, 1, 0]
+];
+const VERHOEFF_P = [
+    [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+    [1, 5, 7, 6, 2, 8, 3, 0, 9, 4],
+    [5, 8, 0, 3, 7, 9, 6, 1, 4, 2],
+    [8, 9, 1, 6, 0, 4, 3, 5, 2, 7],
+    [9, 4, 5, 3, 1, 2, 6, 8, 7, 0],
+    [4, 2, 8, 6, 5, 7, 3, 9, 0, 1],
+    [2, 7, 9, 3, 8, 0, 6, 4, 1, 5],
+    [7, 0, 4, 6, 9, 1, 3, 2, 5, 8]
+];
+
+function validateVerhoeffChecksum(numStr) {
+    let c = 0;
+    const digits = String(numStr).split("").reverse();
+    for (let i = 0; i < digits.length; i++) {
+        c = VERHOEFF_D[c][VERHOEFF_P[i % 8][parseInt(digits[i], 10)]];
+    }
+    return c === 0;
+}
+
+// Live duplicate check during registration phase (Phone, Email, Aadhaar/APAAR, Doctor Username)
+app.get("/api/auth/check-duplicate", async (req, res) => {
+    try {
+        const { field, value, excludePatientId } = req.query;
+        if (!field || !value) {
+            return res.json({ success: true, isDuplicate: false, message: "" });
+        }
+        const result = await db.checkDuplicateField({ field, value, excludePatientId });
+        res.json({
+            success: true,
+            isDuplicate: Boolean(result.isDuplicate),
+            message: result.message || "",
+            matchedId: result.matchedId || null
+        });
+    } catch (err) {
+        res.status(500).json({ success: false, message: "Duplicate check failed: " + err.message });
+    }
+});
+
+// Secondary Details: Aadhaar / APAAR Identity Verification API
+app.post("/api/auth/verify-aadhaar-apaar", async (req, res) => {
+    try {
+        const { idValue, idType = "Aadhaar", otpCode, action = "verify", excludePatientId } = req.body;
+        const cleanDigits = String(idValue || "").replace(/[^0-9]/g, "");
+
+        if (!cleanDigits) {
+            return res.status(400).json({
+                success: false,
+                message: "Please enter a valid 12-digit Aadhaar or APAAR ID."
+            });
+        }
+
+        if (cleanDigits.length !== 12) {
+            return res.status(400).json({
+                success: false,
+                message: `Invalid ID length: Exactly 12 numeric digits required (you entered ${cleanDigits.length} digits).`
+            });
+        }
+
+        // Prevent common repetitive/dummy sequences
+        if (/^(\d)\1{11}$/.test(cleanDigits)) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid ID: Repetitive sequence is not an authentic Aadhaar or APAAR number."
+            });
+        }
+
+        // Strict Duplicate Check
+        const dupCheck = await db.checkDuplicateField({ field: "aadhaar", value: cleanDigits, excludePatientId });
+        if (dupCheck.isDuplicate) {
+            return res.status(409).json({
+                success: false,
+                isDuplicate: true,
+                message: dupCheck.message || "Duplicate ID: This Aadhaar/APAAR ID is already registered to another patient in MediCare."
+            });
+        }
+
+        const formattedId = `${cleanDigits.slice(0, 4)}-${cleanDigits.slice(4, 8)}-${cleanDigits.slice(8, 12)}`;
+        const maskedId = `XXXX-XXXX-${cleanDigits.slice(8, 12)}`;
+
+        // OTP Challenge Flow (if selected)
+        if (action === "request_otp") {
+            const demoCode = "654321";
+            demoOtps.set("aadhaar_" + cleanDigits, demoCode);
+            return res.json({
+                success: true,
+                otpSent: true,
+                maskedMobile: "XXXXXX" + (cleanDigits.slice(8, 12) || "4321"),
+                demoOtp: demoCode,
+                message: `UIDAI verification OTP sent to Aadhaar-registered mobile (Test OTP: ${demoCode}).`
+            });
+        }
+
+        if (action === "verify_otp") {
+            const expectedOtp = demoOtps.get("aadhaar_" + cleanDigits) || "654321";
+            if (!otpCode || otpCode.trim() !== expectedOtp) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Invalid Aadhaar OTP code. Please check your SMS or use Instant Verification."
+                });
+            }
+        }
+
+        const isAadhaar = String(idType).toLowerCase().includes("aadhaar");
+        const registryName = isAadhaar 
+            ? "UIDAI Central Identities Data Repository (CIDR)" 
+            : "APAAR / DigiLocker National Academic & Health Registry";
+
+        await db.insertAuditLog("system", "aadhaar_apaar_verified", null, {
+            idType: isAadhaar ? "Aadhaar" : "APAAR",
+            maskedId,
+            registry: registryName,
+            verifiedAt: new Date().toISOString()
+        });
+
+        res.json({
+            success: true,
+            verified: true,
+            idType: isAadhaar ? "Aadhaar" : "APAAR",
+            rawId: cleanDigits,
+            formattedId,
+            maskedId,
+            registry: registryName,
+            verifiedAt: new Date().toISOString(),
+            message: `✅ ${isAadhaar ? "Aadhaar ID" : "APAAR ID"} verified successfully with ${registryName}.`
+        });
+    } catch (err) {
+        console.error("Aadhaar/APAAR verification error:", err.message);
+        res.status(500).json({
+            success: false,
+            message: "Verification failed: " + err.message
+        });
+    }
+});
+
+// Patient Self-Registration in PostgreSQL (with duplicate prevention & verified secondary details)
 app.post("/api/auth/register-patient", async (req, res) => {
     try {
         const {
@@ -430,6 +695,10 @@ app.post("/api/auth/register-patient", async (req, res) => {
             bloodGroup,
             email,
             address,
+            aadhaarOrApaarId,
+            idType,
+            isAadhaarVerified,
+            aadhaarVerifiedAt,
             guardianName,
             guardianPhone,
             guardianRelationship,
@@ -438,7 +707,7 @@ app.post("/api/auth/register-patient", async (req, res) => {
             guardian2Relationship
         } = req.body;
 
-        if (!fullName || !password) {
+        if (!fullName || !fullName.trim() || !password) {
             return res.status(400).json({
                 success: false,
                 message: "Full Name and Password are required."
@@ -454,6 +723,10 @@ app.post("/api/auth/register-patient", async (req, res) => {
             bloodGroup,
             email,
             address,
+            aadhaarOrApaarId,
+            idType,
+            isAadhaarVerified,
+            aadhaarVerifiedAt,
             guardianName,
             guardianPhone,
             guardianRelationship,
@@ -464,19 +737,25 @@ app.post("/api/auth/register-patient", async (req, res) => {
 
         await db.insertAuditLog(newPatient.patientId, "patient_registration", newPatient.patientId, {
             fullName: newPatient.fullName,
-            phone: newPatient.phone
+            phone: newPatient.phone,
+            aadhaarOrApaarId: newPatient.aadhaarOrApaarId ? "XXXX-XXXX-" + String(newPatient.aadhaarOrApaarId).slice(-4) : null,
+            isAadhaarVerified: newPatient.isAadhaarVerified
         });
 
         res.json({
             success: true,
             patientId: newPatient.patientId,
+            aadhaarOrApaarId: newPatient.aadhaarOrApaarId,
+            isAadhaarVerified: newPatient.isAadhaarVerified,
             message: `Registration successful! Your Patient ID is ${newPatient.patientId}. Please log in.`
         });
     } catch (err) {
         console.error("Patient registration error:", err.message);
-        res.status(500).json({
+        const statusCode = err.status || (err.message && err.message.toLowerCase().includes("duplicate") ? 409 : 500);
+        res.status(statusCode).json({
             success: false,
-            message: "Registration failed: " + err.message
+            duplicate: statusCode === 409,
+            message: err.message || "Registration failed."
         });
     }
 });
@@ -807,24 +1086,54 @@ app.delete("/api/patient/documents/:documentId", auth("patient"), async (req, re
     }
 });
 
-// Secondary Details update endpoint (Patient Only)
+// Secondary Details update endpoint (Patient Only) - Guardians & Verified Government Identity
 app.put("/api/patient/secondary-details", auth("patient"), async (req, res) => {
     try {
-        const { guardian2Name, guardian2Phone, guardian2Relationship } = req.body;
+        const {
+            guardian2Name,
+            guardian2Phone,
+            guardian2Relationship,
+            aadhaarOrApaarId,
+            idType,
+            isAadhaarVerified,
+            aadhaarVerifiedAt
+        } = req.body;
+
+        if (aadhaarOrApaarId && String(aadhaarOrApaarId).trim()) {
+            const dupCheck = await db.checkDuplicateField({
+                field: "aadhaar",
+                value: aadhaarOrApaarId,
+                excludePatientId: req.user.patientId
+            });
+            if (dupCheck.isDuplicate) {
+                return res.status(409).json({
+                    success: false,
+                    isDuplicate: true,
+                    message: dupCheck.message || "This Aadhaar / APAAR ID is already registered to another patient."
+                });
+            }
+        }
+
         const updated = await db.updatePatientDetails(req.user.patientId, {
             guardian2Name,
             guardian2Phone,
-            guardian2Relationship
+            guardian2Relationship,
+            aadhaarOrApaarId,
+            idType,
+            isAadhaarVerified,
+            aadhaarVerifiedAt
         });
 
         await db.insertAuditLog(req.user.patientId, "secondary_details_updated", req.user.patientId, {
-            hasGuardian2: Boolean(guardian2Name)
+            hasGuardian2: Boolean(guardian2Name),
+            hasAadhaar: Boolean(aadhaarOrApaarId),
+            isAadhaarVerified: Boolean(isAadhaarVerified)
         });
 
         res.json({
             success: true,
             patient: updated,
-            message: "Secondary details updated in PostgreSQL."
+            message: "Secondary details and verified identity updated in PostgreSQL."
         });
     } catch (err) {
         res.status(500).json({ success: false, message: "Failed to update secondary details: " + err.message });

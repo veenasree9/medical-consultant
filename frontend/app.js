@@ -1,6 +1,8 @@
 let selectedLogin = "patient";
 let resendTimer = null;
 let patientToken = localStorage.getItem("patientToken");
+let currentLoginMode = "otp";
+let lastReceivedOtpCode = "";
 
 
 function $(id) {
@@ -46,6 +48,112 @@ function hideAll() {
 }
 
 
+/* ================= LOGIN MODE SWITCHER & HELPERS ================= */
+
+function switchLoginMode(mode) {
+    currentLoginMode = mode;
+    const tabOtp = $("tabOtpLogin");
+    const tabPassword = $("tabPasswordLogin");
+    const otpForm = $("otpLoginForm");
+    const passwordForm = $("passwordLoginForm");
+
+    if (mode === "otp") {
+        if (tabOtp) {
+            tabOtp.classList.add("active");
+            tabOtp.style.background = "white";
+            tabOtp.style.color = "#0284c7";
+            tabOtp.style.boxShadow = "0 1px 3px rgba(0,0,0,0.1)";
+        }
+        if (tabPassword) {
+            tabPassword.classList.remove("active");
+            tabPassword.style.background = "transparent";
+            tabPassword.style.color = "#64748b";
+            tabPassword.style.boxShadow = "none";
+        }
+        if (otpForm) otpForm.classList.remove("hidden");
+        if (passwordForm) passwordForm.classList.add("hidden");
+    } else {
+        if (tabPassword) {
+            tabPassword.classList.add("active");
+            tabPassword.style.background = "white";
+            tabPassword.style.color = "#0284c7";
+            tabPassword.style.boxShadow = "0 1px 3px rgba(0,0,0,0.1)";
+        }
+        if (tabOtp) {
+            tabOtp.classList.remove("active");
+            tabOtp.style.background = "transparent";
+            tabOtp.style.color = "#64748b";
+            tabOtp.style.boxShadow = "none";
+        }
+        if (passwordForm) passwordForm.classList.remove("hidden");
+        if (otpForm) otpForm.classList.add("hidden");
+    }
+
+    if ($("loginMessage")) {
+        $("loginMessage").textContent = "";
+        $("loginMessage").className = "error";
+    }
+}
+window.switchLoginMode = switchLoginMode;
+
+function handleOtpIdentifierInput(value) {
+    const val = String(value || "").trim();
+    const badge = $("detectedChannelBadge");
+    if ($("phone")) $("phone").value = val;
+
+    if (!badge) return;
+
+    if (val.includes("@")) {
+        badge.textContent = "✉️ Email Detected";
+        badge.style.color = "#0f766e";
+        badge.style.background = "#ccfbf1";
+    } else if (/\d{4,}/.test(val)) {
+        badge.textContent = "📱 Mobile Number Detected";
+        badge.style.color = "#0284c7";
+        badge.style.background = "#e0f2fe";
+    } else {
+        badge.textContent = "📱 SMS or ✉️ Email";
+        badge.style.color = "#64748b";
+        badge.style.background = "#f1f5f9";
+    }
+}
+window.handleOtpIdentifierInput = handleOtpIdentifierInput;
+
+function fillDemoOtp(channel) {
+    switchLoginMode("otp");
+    const input = $("otpIdentifier");
+
+    if (channel === "email") {
+        if (input) input.value = "rahul@example.com";
+        handleOtpIdentifierInput("rahul@example.com");
+    } else {
+        if (input) input.value = "+919876543210";
+        handleOtpIdentifierInput("+919876543210");
+    }
+
+    if ($("loginMessage")) {
+        $("loginMessage").textContent = "";
+        $("loginMessage").className = "error";
+    }
+
+    showToast(`Pre-filled demo ${channel === "email" ? "email" : "mobile number"}. Click "Send Verification Code".`);
+    if ($("sendOtpBtn")) $("sendOtpBtn").focus();
+}
+window.fillDemoOtp = fillDemoOtp;
+
+function quickFillReceivedOtp() {
+    const code = lastReceivedOtpCode || "123456";
+    if ($("otp")) {
+        $("otp").value = code;
+        showToast(`Filled OTP code: ${code}`);
+    }
+    if ($("verifyOtpBtn")) {
+        $("verifyOtpBtn").focus();
+    }
+}
+window.quickFillReceivedOtp = quickFillReceivedOtp;
+
+
 /* ================= OPEN LOGIN ================= */
 
 function openLogin(type) {
@@ -66,6 +174,7 @@ function openLogin(type) {
 
     if ($("loginMessage")) {
         $("loginMessage").textContent = "";
+        $("loginMessage").className = "error";
     }
 
     if ($("username")) $("username").value = "";
@@ -75,6 +184,13 @@ function openLogin(type) {
     }
     if ($("togglePasswordBtn")) {
         $("togglePasswordBtn").textContent = "👁️";
+    }
+
+    if ($("otpSection")) {
+        $("otpSection").classList.add("hidden");
+    }
+    if ($("otp")) {
+        $("otp").value = "";
     }
 
     if (type === "doctor") {
@@ -90,6 +206,10 @@ function openLogin(type) {
 
         $("password").placeholder =
             window.t ? window.t("login.passwordPlaceholder", "Enter your password") : "Enter your password";
+
+        if ($("otpIdentifier")) {
+            $("otpIdentifier").placeholder = "Enter Doctor Phone (+919876543200) or Email";
+        }
 
         if ($("registerPrompt")) {
             $("registerPrompt").classList.remove("hidden");
@@ -116,6 +236,10 @@ function openLogin(type) {
         $("password").placeholder =
             window.t ? window.t("login.passwordPlaceholder", "Enter your password") : "Enter your password";
 
+        if ($("otpIdentifier")) {
+            $("otpIdentifier").placeholder = "Enter mobile (e.g. 9876543210) or email (e.g. rahul@example.com)";
+        }
+
         if ($("registerPrompt")) {
             $("registerPrompt").classList.remove("hidden");
             if ($("registerPromptText")) $("registerPromptText").textContent = "New patient? ";
@@ -126,9 +250,13 @@ function openLogin(type) {
         }
 
     }
+
+    // Default to OTP mode
+    switchLoginMode(currentLoginMode || "otp");
 }
 
 function fillDemoCredentials(role) {
+    switchLoginMode("password");
     if (role === "doctor") {
         selectedLogin = "doctor";
         if ($("loginTitle")) $("loginTitle").textContent = window.t ? window.t("login.doctorTitle", "Doctor Login") : "Doctor Login";
@@ -197,304 +325,216 @@ function goHome() {
 }
 
 
-/* ================= PHONE ================= */
+/* ================= CONTACT IDENTIFIER CLIENT NORMALIZATION ================= */
 
-function normalizeIndianPhone(value) {
+function normalizeContactIdentifierClient(value) {
+    const raw = String(value || "").trim();
+    if (!raw) return null;
 
-    const digits =
-        value.replace(/\D/g, "");
-
-    if (!/^\d{10}$/.test(digits)) {
-
-        return null;
-
+    if (raw.includes("@")) {
+        const email = raw.toLowerCase();
+        if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+            return { type: "email", value: email };
+        }
     }
 
-    return "+91" + digits;
+    const digits = raw.replace(/\D/g, "");
+    if (/^\d{10}$/.test(digits)) {
+        return { type: "phone", value: "+91" + digits };
+    }
+    if (digits.length === 12 && digits.startsWith("91")) {
+        return { type: "phone", value: "+" + digits };
+    }
+    if (raw.startsWith("+") && digits.length >= 10 && digits.length <= 15) {
+        return { type: "phone", value: "+" + digits };
+    }
+
+    return null;
 }
 
+function normalizeIndianPhone(value) {
+    const res = normalizeContactIdentifierClient(value);
+    return res && res.type === "phone" ? res.value : null;
+}
 
-/* ================= SEND OTP ================= */
+/* ================= SEND OTP (NUMBERS & EMAILS) ================= */
 
 async function sendOTP(isResend = false) {
+    const rawVal = ($("otpIdentifier") ? $("otpIdentifier").value : "") || ($("phone") ? $("phone").value : "");
+    const contact = normalizeContactIdentifierClient(rawVal);
 
-    const phone =
-        normalizeIndianPhone(
-            $("phone").value
-        );
+    if ($("loginMessage")) {
+        $("loginMessage").textContent = "";
+        $("loginMessage").className = "error";
+    }
 
-
-    $("loginMessage").textContent = "";
-
-
-    if (!phone) {
-
-        $("loginMessage").textContent =
-            "Enter a valid 10-digit Indian mobile number.";
-
+    if (!contact) {
+        if ($("loginMessage")) {
+            $("loginMessage").textContent = "Please enter a valid 10-digit mobile number or email address.";
+        }
+        if ($("otpIdentifier")) $("otpIdentifier").focus();
         return;
     }
 
-
-    const button =
-        $("sendOtpBtn");
-
-    button.disabled = true;
-
-    button.textContent =
-        "Sending...";
-
+    const button = $("sendOtpBtn");
+    if (button) {
+        button.disabled = true;
+        button.textContent = "Sending Verification Code...";
+    }
 
     try {
+        const response = await fetch(`${API_URL}/api/auth/send-otp`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                identifier: contact.value,
+                phone: contact.type === "phone" ? contact.value : undefined,
+                email: contact.type === "email" ? contact.value : undefined,
+                role: selectedLogin
+            })
+        });
 
-        const response =
-            await fetch(
-                `${API_URL}/api/auth/send-otp`,
-                {
+        const data = await response.json();
 
-                    method: "POST",
-
-                    headers: {
-                        "Content-Type":
-                            "application/json"
-                    },
-
-                    body: JSON.stringify({
-                        phone: phone
-                    })
-
-                }
-            );
-
-
-        const data =
-            await response.json();
-
-
-        if (!response.ok ||
-            !data.success) {
-
-            throw new Error(
-                data.message ||
-                "Unable to send verification code."
-            );
-
+        if (!response.ok || !data.success) {
+            throw new Error(data.message || "Unable to send verification code.");
         }
-
 
         if ($("otpSection")) {
             $("otpSection").classList.remove("hidden");
         }
 
+        if ($("otp")) {
+            $("otp").focus();
+        }
 
-        $("otp").focus();
-
-
-        $("loginMessage")
-            .className =
-            "success-message";
-
-
-        $("loginMessage").textContent =
-            "Verification code sent successfully.";
-
+        if ($("loginMessage")) {
+            $("loginMessage").className = "success-message";
+            $("loginMessage").textContent = data.message || `Verification code sent to ${contact.value}.`;
+        }
 
         startResendTimer();
 
-
-        showToast(
-            isResend
-                ? "OTP resent."
-                : "OTP sent."
-        );
-
-    }
-
-
-    catch (error) {
-
-        console.error(error);
-
-        $("loginMessage")
-            .className = "error";
-
-
-        $("loginMessage").textContent =
-            error.message;
-
-    }
-
-
-    finally {
-
-        button.disabled = false;
-
-        button.textContent =
-            "Send Verification Code";
+        showToast(isResend ? "Verification code resent." : `Code sent to ${contact.type === "email" ? "Email" : "Phone"}.`);
+    } catch (error) {
+        console.error("sendOTP error:", error);
+        if ($("loginMessage")) {
+            $("loginMessage").className = "error";
+            $("loginMessage").textContent = error.message;
+        }
+    } finally {
+        if (button) {
+            button.disabled = false;
+            button.textContent = "📲 Send Verification Code";
+        }
     }
 }
-
+window.sendOTP = sendOTP;
 
 /* ================= TIMER ================= */
 
 function startResendTimer() {
-
     let seconds = 60;
-
-    $("resendBtn").disabled = true;
-
-    $("timer").textContent =
-        "(60s)";
-
+    if ($("resendBtn")) $("resendBtn").disabled = true;
+    if ($("timer")) $("timer").textContent = "(60s)";
 
     clearInterval(resendTimer);
 
+    resendTimer = setInterval(() => {
+        seconds--;
+        if ($("timer")) $("timer").textContent = `(${seconds}s)`;
 
-    resendTimer =
-        setInterval(() => {
-
-            seconds--;
-
-            $("timer").textContent =
-                `(${seconds}s)`;
-
-
-            if (seconds <= 0) {
-
-                clearInterval(
-                    resendTimer
-                );
-
-                $("resendBtn").disabled =
-                    false;
-
-                $("timer").textContent =
-                    "";
-
-            }
-
-        }, 1000);
+        if (seconds <= 0) {
+            clearInterval(resendTimer);
+            if ($("resendBtn")) $("resendBtn").disabled = false;
+            if ($("timer")) $("timer").textContent = "";
+        }
+    }, 1000);
 }
-
+window.startResendTimer = startResendTimer;
 
 /* ================= VERIFY OTP ================= */
 
 async function verifyOTP() {
+    const rawVal = ($("otpIdentifier") ? $("otpIdentifier").value : "") || ($("phone") ? $("phone").value : "");
+    const contact = normalizeContactIdentifierClient(rawVal);
+    const code = ($("otp") ? $("otp").value : "").trim();
 
-    const phone =
-        normalizeIndianPhone(
-            $("phone").value
-        );
-
-
-    const code =
-        $("otp").value.trim();
-
-
-    if (!phone) {
-
-        $("loginMessage").textContent =
-            "Enter a valid phone number.";
-
-        return;
+    if ($("loginMessage")) {
+        $("loginMessage").textContent = "";
+        $("loginMessage").className = "error";
     }
 
+    if (!contact) {
+        if ($("loginMessage")) {
+            $("loginMessage").textContent = "Enter a valid phone number or email address.";
+        }
+        if ($("otpIdentifier")) $("otpIdentifier").focus();
+        return;
+    }
 
     if (!/^\d{6}$/.test(code)) {
-
-        $("loginMessage").textContent =
-            "Enter the 6-digit OTP.";
-
+        if ($("loginMessage")) {
+            $("loginMessage").textContent = "Enter the 6-digit verification code.";
+        }
+        if ($("otp")) $("otp").focus();
         return;
     }
 
-
-    $("verifyOtpBtn").disabled = true;
-
-    $("verifyOtpBtn").textContent =
-        "Verifying...";
-
+    const verifyBtn = $("verifyOtpBtn");
+    if (verifyBtn) {
+        verifyBtn.disabled = true;
+        verifyBtn.textContent = "Verifying Code...";
+    }
 
     try {
+        const response = await fetch(`${API_URL}/api/auth/verify-otp`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                identifier: contact.value,
+                phone: contact.type === "phone" ? contact.value : undefined,
+                email: contact.type === "email" ? contact.value : undefined,
+                code: code,
+                role: selectedLogin
+            })
+        });
 
-        const response =
-            await fetch(
-                `${API_URL}/api/auth/verify-otp`,
-                {
+        const data = await response.json();
 
-                    method: "POST",
-
-                    headers: {
-                        "Content-Type":
-                            "application/json"
-                    },
-
-                    body: JSON.stringify({
-                        phone: phone,
-                        code: code
-                    })
-
-                }
-            );
-
-
-        const data =
-            await response.json();
-
-
-        if (!response.ok ||
-            !data.success) {
-
-            throw new Error(
-                data.message ||
-                "Invalid verification code."
-            );
-
+        if (!response.ok || !data.success) {
+            throw new Error(data.message || "Invalid verification code.");
         }
 
-
-        patientToken =
-            data.token;
-
-
-        localStorage.setItem(
-            "patientToken",
-            patientToken
-        );
-
-
-        await loadPatientDashboard();
-
-
-        showToast(
-            "Phone verified successfully."
-        );
-
-    }
-
-
-    catch (error) {
-
-        console.error(error);
-
-        $("loginMessage")
-            .className = "error";
-
-        $("loginMessage").textContent =
-            error.message;
-
-    }
-
-
-    finally {
-
-        $("verifyOtpBtn").disabled =
-            false;
-
-        $("verifyOtpBtn").textContent =
-            "Verify Code";
+        if (data.role === "doctor") {
+            const docToken = data.token;
+            localStorage.setItem("doctorToken", docToken);
+            await loadDoctorDashboard();
+            showToast(`Welcome Dr. ${data.name || ""}! Signed in successfully.`);
+        } else {
+            patientToken = data.token;
+            localStorage.setItem("patientToken", patientToken);
+            await loadPatientDashboard();
+            showToast(`${contact.type === "email" ? "Email" : "Phone"} verified successfully.`);
+        }
+    } catch (error) {
+        console.error("verifyOTP error:", error);
+        if ($("loginMessage")) {
+            $("loginMessage").className = "error";
+            $("loginMessage").textContent = error.message;
+        }
+    } finally {
+        if (verifyBtn) {
+            verifyBtn.disabled = false;
+            verifyBtn.textContent = "✓ Verify Code & Sign In";
+        }
     }
 }
+window.verifyOTP = verifyOTP;
 
 
 /* ================= PASSWORD LOGIN ================= */
