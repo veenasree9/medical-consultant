@@ -1,4 +1,4 @@
-const CACHE_NAME = "medicare-pwa-v1";
+const CACHE_NAME = "medicare-pwa-v2";
 
 const PRECACHE_ASSETS = [
     "/",
@@ -102,9 +102,15 @@ self.addEventListener("fetch", (event) => {
     // HTML Navigation requests: Network first, fallback to cached index.html or offline.html
     if (req.mode === "navigate") {
         event.respondWith(
-            fetch(req).catch(async () => {
+            fetch(req).then((networkResp) => {
+                if (networkResp && networkResp.status === 200) {
+                    const clone = networkResp.clone();
+                    caches.open(CACHE_NAME).then((cache) => cache.put(req, clone));
+                }
+                return networkResp;
+            }).catch(async () => {
                 const cache = await caches.open(CACHE_NAME);
-                const cachedIndex = await cache.match("/index.html");
+                const cachedIndex = (await cache.match("/index.html")) || (await cache.match("/"));
                 if (cachedIndex) return cachedIndex;
                 const cachedOffline = await cache.match("/offline.html");
                 if (cachedOffline) return cachedOffline;

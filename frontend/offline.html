@@ -148,6 +148,33 @@
 
         <a href="/" class="btn-secondary">🔄 Return to Cached App (Offline Mode)</a>
 
+        <!-- LOCAL PATIENT IDENTIFICATION DIRECTORY (OFFLINE RESCUE) -->
+        <div class="directory-section" style="margin-top: 24px; padding: 18px; background: #ffffff; border: 1.5px solid #cbd5e1; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.04);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span style="font-size: 20px;">📋</span>
+                    <div>
+                        <h3 style="margin: 0; font-size: 16px; color: #0f172a; font-weight: 700;">Local Patient Identification Directory</h3>
+                        <p style="margin: 2px 0 0; font-size: 12px; color: #64748b;">Stored on device for offline emergency lookup &amp; guardian contact</p>
+                    </div>
+                </div>
+                <span id="offlineDirectoryBadge" style="background: #e0f2fe; color: #0369a1; font-size: 11.5px; font-weight: 700; padding: 3px 8px; border-radius: 6px;">
+                    Device Cache
+                </span>
+            </div>
+
+            <input
+                type="text"
+                id="offlineSearchInput"
+                placeholder="Search cached patients by Name, ID (PAT1001), or Blood Group..."
+                style="width: 100%; box-sizing: border-box; padding: 10px 12px; border: 1.5px solid #cbd5e1; border-radius: 8px; font-size: 14px; margin-bottom: 12px;"
+                oninput="renderOfflineDirectory(this.value)">
+
+            <div id="offlineDirectoryContainer" style="display: flex; flex-direction: column; gap: 10px; max-height: 280px; overflow-y: auto;">
+                <!-- Populated via script below -->
+            </div>
+        </div>
+
         <div class="cellular-note">
             💡 <b>Cellular Network Note:</b> Emergency voice calls (`tel:112` and `tel:108`) rely on cellular tower reception, NOT internet or Wi-Fi. If your phone has cellular signal from any telecom carrier, emergency calls will connect.
         </div>
@@ -163,5 +190,85 @@
             </ol>
         </div>
     </div>
+
+    <script>
+        function getOfflinePatients() {
+            try {
+                const raw = localStorage.getItem("medicare_emergency_directory");
+                if (raw) {
+                    const list = JSON.parse(raw);
+                    if (Array.isArray(list) && list.length > 0) return list;
+                }
+            } catch (_) {}
+            return [
+                {
+                    id: "PAT1001",
+                    name: "Rahul Kumar",
+                    bloodGroup: "O+",
+                    guardianName: "Suresh Kumar",
+                    guardianPhone: "+919876543211"
+                }
+            ];
+        }
+
+        function renderOfflineDirectory(filterText = "") {
+            const container = document.getElementById("offlineDirectoryContainer");
+            const badge = document.getElementById("offlineDirectoryBadge");
+            if (!container) return;
+
+            const patients = getOfflinePatients();
+            if (badge) {
+                badge.textContent = `${patients.length} Cached Patient${patients.length === 1 ? '' : 's'}`;
+            }
+
+            const query = (filterText || "").trim().toLowerCase();
+            const filtered = patients.filter(p => {
+                if (!query) return true;
+                const name = (p.name || "").toLowerCase();
+                const id = (p.id || p.patientId || "").toLowerCase();
+                const bg = (p.bloodGroup || "").toLowerCase();
+                const gPhone = (p.guardianPhone || "").toLowerCase();
+                return name.includes(query) || id.includes(query) || bg.includes(query) || gPhone.includes(query);
+            });
+
+            if (filtered.length === 0) {
+                container.innerHTML = `
+                    <div style="text-align: center; padding: 18px; color: #64748b; font-size: 13px; background: #f8fafc; border-radius: 8px;">
+                        No cached patients found matching your search.
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = filtered.map(p => {
+                const safePhone = (p.guardianPhone || "").replace(/[^0-9+]/g, '');
+                return `
+                    <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 12px; display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap;">
+                        <div>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <strong style="color: #0f172a; font-size: 14.5px;">${p.name || "Unknown"}</strong>
+                                <span style="font-size: 11px; background: #e2e8f0; color: #334155; padding: 2px 6px; border-radius: 4px;">${p.id || p.patientId || "PAT----"}</span>
+                                <span style="font-size: 11px; background: #fee2e2; color: #b91c1c; font-weight: 800; padding: 2px 6px; border-radius: 4px;">🩸 ${p.bloodGroup || "O+"}</span>
+                            </div>
+                            <div style="font-size: 12px; color: #64748b; margin-top: 3px;">
+                                Guardian: ${p.guardianName || "Not Provided"}
+                            </div>
+                        </div>
+                        <div>
+                            ${safePhone ? `
+                                <a href="tel:${safePhone}" style="display: inline-flex; align-items: center; gap: 4px; background: #059669; color: white; text-decoration: none; font-size: 12px; font-weight: 700; padding: 6px 12px; border-radius: 6px;">
+                                    📞 Call Guardian (${safePhone})
+                                </a>
+                            ` : ''}
+                        </div>
+                    </div>
+                `;
+            }).join("");
+        }
+
+        document.addEventListener("DOMContentLoaded", () => {
+            renderOfflineDirectory("");
+        });
+    </script>
 </body>
 </html>

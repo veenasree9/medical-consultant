@@ -44,6 +44,11 @@ function hideAll() {
         if (el) el.classList.add("hidden");
     });
 
+    const fab = $("helperQuickVitalsFab");
+    if (fab) fab.classList.add("hidden");
+    const modal = $("quickVitalsModal");
+    if (modal) modal.classList.add("hidden");
+
     hideChatBoard();
 }
 
@@ -2137,15 +2142,237 @@ function createUser() {
     openRegisterModal();
 }
 
+/* ================= REGISTRATION OTP CONTROLLER (MAILS & NUMBERS) ================= */
+
+let regVerifiedContact = null;
+let regLastReceivedOtp = "";
+let regResendTimer = null;
+
+let regDocVerifiedContact = null;
+let regDocLastReceivedOtp = "";
+let regDocResendTimer = null;
+
+function handleRegContactInput(value) {
+    const val = String(value || "").trim();
+    const badge = $("regContactBadge");
+    const container = $("regOtpContainer");
+
+    // Invalidate prior verification if input changed
+    if (regVerifiedContact && regVerifiedContact.value !== val) {
+        regVerifiedContact = null;
+        if ($("regVerifiedBadge")) $("regVerifiedBadge").classList.add("hidden");
+        if (container) container.classList.remove("verified");
+    }
+
+    if (!badge) return;
+
+    if (val.includes("@")) {
+        badge.textContent = "✉️ Email Address Detected";
+        badge.style.color = "#0f766e";
+        badge.style.background = "#ccfbf1";
+    } else if (/\d{4,}/.test(val)) {
+        badge.textContent = "📱 Mobile Number Detected";
+        badge.style.color = "#0284c7";
+        badge.style.background = "#e0f2fe";
+    } else {
+        badge.textContent = "📱 Mobile or ✉️ Email";
+        badge.style.color = "#0369a1";
+        badge.style.background = "#e0f2fe";
+    }
+}
+
+function fillRegDemoContact(channel) {
+    const input = $("regContact");
+    if (!input) return;
+
+    if (channel === "email") {
+        input.value = "priya@example.com";
+        handleRegContactInput("priya@example.com");
+    } else {
+        input.value = "+919876543210";
+        handleRegContactInput("+919876543210");
+    }
+
+    if ($("regMessage")) $("regMessage").textContent = "";
+    showToast(`Pre-filled demo ${channel === "email" ? "email" : "mobile number"}. Click "Send OTP" to verify.`);
+    if ($("regSendOtpBtn")) $("regSendOtpBtn").focus();
+}
+
+async function sendRegOTP(isResend = false) {
+    const input = $("regContact");
+    const rawVal = input ? input.value.trim() : "";
+
+    if ($("regMessage")) $("regMessage").textContent = "";
+
+    if (!rawVal) {
+        if ($("regMessage")) {
+            $("regMessage").textContent = "Please enter your mobile number or email address.";
+        }
+        if (input) input.focus();
+        return;
+    }
+
+    const btn = $("regSendOtpBtn");
+    if (btn) {
+        btn.disabled = true;
+        btn.textContent = isResend ? "Resending..." : "Sending...";
+    }
+
+    try {
+        const response = await fetch(`${API_URL}/api/auth/register-send-otp`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ identifier: rawVal })
+        });
+
+        const data = await response.json();
+        if (!response.ok || !data.success) {
+            throw new Error(data.message || "Failed to send verification code.");
+        }
+
+        regLastReceivedOtp = data.otpCode || "123456";
+
+        if ($("regOtpBox")) $("regOtpBox").classList.remove("hidden");
+        if ($("regOtpCode")) {
+            $("regOtpCode").value = "";
+            $("regOtpCode").focus();
+        }
+
+        // Start countdown timer
+        startRegResendTimer();
+
+        showToast(isResend ? "Verification code resent." : `6-digit code sent to ${data.channel === "email" ? "email" : "mobile"}!`);
+    } catch (err) {
+        if ($("regMessage")) $("regMessage").textContent = err.message;
+        showToast(err.message);
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = "Send OTP";
+        }
+    }
+}
+
+function startRegResendTimer() {
+    let seconds = 60;
+    if ($("regResendBtn")) $("regResendBtn").disabled = true;
+    if ($("regTimer")) $("regTimer").textContent = "(60s)";
+
+    clearInterval(regResendTimer);
+    regResendTimer = setInterval(() => {
+        seconds--;
+        if ($("regTimer")) $("regTimer").textContent = `(${seconds}s)`;
+        if (seconds <= 0) {
+            clearInterval(regResendTimer);
+            if ($("regResendBtn")) $("regResendBtn").disabled = false;
+            if ($("regTimer")) $("regTimer").textContent = "";
+        }
+    }, 1000);
+}
+
+function quickFillRegOtp() {
+    const code = regLastReceivedOtp || "123456";
+    if ($("regOtpCode")) {
+        $("regOtpCode").value = code;
+        showToast(`Filled OTP: ${code}`);
+    }
+    if ($("regVerifyOtpBtn")) $("regVerifyOtpBtn").focus();
+}
+
+async function verifyRegOTP() {
+    const input = $("regContact");
+    const contactVal = input ? input.value.trim() : "";
+    const codeInput = $("regOtpCode");
+    const code = codeInput ? codeInput.value.trim() : "";
+
+    if (!code || code.length !== 6) {
+        if ($("regMessage")) $("regMessage").textContent = "Please enter the 6-digit verification code.";
+        if (codeInput) codeInput.focus();
+        return;
+    }
+
+    const verifyBtn = $("regVerifyOtpBtn");
+    if (verifyBtn) {
+        verifyBtn.disabled = true;
+        verifyBtn.textContent = "Verifying...";
+    }
+
+    try {
+        const response = await fetch(`${API_URL}/api/auth/verify-registration-otp`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ identifier: contactVal, code })
+        });
+
+        const data = await response.json();
+        if (!response.ok || !data.success) {
+            throw new Error(data.message || "Invalid or expired verification code.");
+        }
+
+        regVerifiedContact = {
+            type: data.channel,
+            value: data.target,
+            code: code
+        };
+
+        if (data.channel === "phone") {
+            if ($("regPhone")) $("regPhone").value = data.target;
+        } else {
+            if ($("regEmail")) $("regEmail").value = data.target;
+        }
+
+        if ($("regOtpBox")) $("regOtpBox").classList.add("hidden");
+        if ($("regVerifiedBadge")) $("regVerifiedBadge").classList.remove("hidden");
+        if ($("regVerifiedText")) {
+            $("regVerifiedText").textContent = `✅ ${data.channel === "email" ? "Email" : "Mobile"} Verified: ${data.target}`;
+        }
+        if ($("regOtpContainer")) $("regOtpContainer").classList.add("verified");
+        if ($("regMessage")) $("regMessage").textContent = "";
+
+        showToast(`✅ ${data.channel === "email" ? "Email" : "Mobile number"} verified with OTP!`);
+    } catch (err) {
+        if ($("regMessage")) $("regMessage").textContent = err.message;
+        showToast(err.message);
+    } finally {
+        if (verifyBtn) {
+            verifyBtn.disabled = false;
+            verifyBtn.textContent = "✓ Verify OTP";
+        }
+    }
+}
+
+function resetRegContact() {
+    regVerifiedContact = null;
+    if ($("regVerifiedBadge")) $("regVerifiedBadge").classList.add("hidden");
+    if ($("regOtpBox")) $("regOtpBox").classList.add("hidden");
+    if ($("regOtpContainer")) $("regOtpContainer").classList.remove("verified");
+    if ($("regContact")) {
+        $("regContact").value = "";
+        $("regContact").focus();
+    }
+}
+
 function openRegisterModal() {
     if ($("regName")) $("regName").value = "";
+    if ($("regContact")) $("regContact").value = "";
     if ($("regPhone")) $("regPhone").value = "";
+    if ($("regEmail")) $("regEmail").value = "";
+    if ($("regOtpCode")) $("regOtpCode").value = "";
     if ($("regPassword")) $("regPassword").value = "";
     if ($("regBlood")) $("regBlood").value = "O+";
     if ($("regGuardianName")) $("regGuardianName").value = "";
     if ($("regGuardianPhone")) $("regGuardianPhone").value = "";
     if ($("regGuardianRel")) $("regGuardianRel").value = "";
     if ($("regMessage")) $("regMessage").textContent = "";
+
+    regVerifiedContact = null;
+    regLastReceivedOtp = "";
+    clearInterval(regResendTimer);
+    if ($("regTimer")) $("regTimer").textContent = "";
+    if ($("regOtpBox")) $("regOtpBox").classList.add("hidden");
+    if ($("regVerifiedBadge")) $("regVerifiedBadge").classList.add("hidden");
+    if ($("regOtpContainer")) $("regOtpContainer").classList.remove("verified");
+
     if ($("registerModal")) $("registerModal").classList.remove("hidden");
 }
 
@@ -2155,7 +2382,7 @@ function closeRegisterModal() {
 
 async function submitRegistration() {
     const fullName = $("regName") ? $("regName").value.trim() : "";
-    const phone = $("regPhone") ? $("regPhone").value.trim() : "";
+    const contactVal = $("regContact") ? $("regContact").value.trim() : "";
     const password = $("regPassword") ? $("regPassword").value.trim() : "";
     const bloodGroup = $("regBlood") ? $("regBlood").value : "O+";
     const guardianName = $("regGuardianName") ? $("regGuardianName").value.trim() : "";
@@ -2167,6 +2394,25 @@ async function submitRegistration() {
         return;
     }
 
+    if (!contactVal) {
+        if ($("regMessage")) $("regMessage").textContent = "Please enter your Mobile Number or Email Address.";
+        if ($("regContact")) $("regContact").focus();
+        return;
+    }
+
+    // MANDATORY OTP VERIFICATION CHECK (Mails & Numbers)
+    if (!regVerifiedContact || regVerifiedContact.value !== contactVal) {
+        if ($("regMessage")) {
+            $("regMessage").textContent = "⚠️ OTP Verification Required: Please verify your mobile number or email address with OTP before completing registration.";
+        }
+        if ($("regContact")) $("regContact").focus();
+        showToast("Please verify your mobile number or email with OTP first.");
+        return;
+    }
+
+    const phone = regVerifiedContact.type === "phone" ? regVerifiedContact.value : ($("regPhone") ? $("regPhone").value.trim() : "");
+    const email = regVerifiedContact.type === "email" ? regVerifiedContact.value : ($("regEmail") ? $("regEmail").value.trim() : "");
+
     try {
         const response = await fetch(`${API_URL}/api/auth/register-patient`, {
             method: "POST",
@@ -2174,11 +2420,14 @@ async function submitRegistration() {
             body: JSON.stringify({
                 fullName,
                 phone,
+                email,
                 password,
                 bloodGroup,
                 guardianName,
                 guardianPhone,
-                guardianRelationship
+                guardianRelationship,
+                otpCode: regVerifiedContact.code,
+                isContactVerified: true
             })
         });
 
@@ -2198,12 +2447,212 @@ async function submitRegistration() {
     }
 }
 
-/* ================= DOCTOR REGISTRATION ================= */
+/* ================= DOCTOR REGISTRATION OTP CONTROLLER ================= */
+
+function handleRegDocContactInput(value) {
+    const val = String(value || "").trim();
+    const badge = $("regDocContactBadge");
+    const container = $("regDocOtpContainer");
+
+    if (regDocVerifiedContact && regDocVerifiedContact.value !== val) {
+        regDocVerifiedContact = null;
+        if ($("regDocVerifiedBadge")) $("regDocVerifiedBadge").classList.add("hidden");
+        if (container) container.classList.remove("verified");
+    }
+
+    if (!badge) return;
+
+    if (val.includes("@")) {
+        badge.textContent = "✉️ Email Address Detected";
+        badge.style.color = "#0f766e";
+        badge.style.background = "#ccfbf1";
+    } else if (/\d{4,}/.test(val)) {
+        badge.textContent = "📱 Mobile Number Detected";
+        badge.style.color = "#0284c7";
+        badge.style.background = "#e0f2fe";
+    } else {
+        badge.textContent = "📱 Mobile or ✉️ Email";
+        badge.style.color = "#0369a1";
+        badge.style.background = "#e0f2fe";
+    }
+}
+
+function fillRegDocDemoContact(channel) {
+    const input = $("regDocContact");
+    if (!input) return;
+
+    if (channel === "email") {
+        input.value = "doctor@hospital.com";
+        handleRegDocContactInput("doctor@hospital.com");
+    } else {
+        input.value = "+919876543220";
+        handleRegDocContactInput("+919876543220");
+    }
+
+    if ($("regDocMessage")) $("regDocMessage").textContent = "";
+    showToast(`Pre-filled doctor ${channel === "email" ? "email" : "mobile number"}. Click "Send OTP" to verify.`);
+    if ($("regDocSendOtpBtn")) $("regDocSendOtpBtn").focus();
+}
+
+async function sendDocRegOTP(isResend = false) {
+    const input = $("regDocContact");
+    const rawVal = input ? input.value.trim() : "";
+
+    if ($("regDocMessage")) $("regDocMessage").textContent = "";
+
+    if (!rawVal) {
+        if ($("regDocMessage")) {
+            $("regDocMessage").textContent = "Please enter Doctor mobile number or email address.";
+        }
+        if (input) input.focus();
+        return;
+    }
+
+    const btn = $("regDocSendOtpBtn");
+    if (btn) {
+        btn.disabled = true;
+        btn.textContent = isResend ? "Resending..." : "Sending...";
+    }
+
+    try {
+        const response = await fetch(`${API_URL}/api/auth/register-send-otp`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ identifier: rawVal })
+        });
+
+        const data = await response.json();
+        if (!response.ok || !data.success) {
+            throw new Error(data.message || "Failed to send verification code.");
+        }
+
+        regDocLastReceivedOtp = data.otpCode || "123456";
+
+        if ($("regDocOtpBox")) $("regDocOtpBox").classList.remove("hidden");
+        if ($("regDocOtpCode")) {
+            $("regDocOtpCode").value = "";
+            $("regDocOtpCode").focus();
+        }
+
+        startRegDocResendTimer();
+        showToast(isResend ? "Verification code resent." : `6-digit code sent to ${data.channel === "email" ? "email" : "mobile"}!`);
+    } catch (err) {
+        if ($("regDocMessage")) $("regDocMessage").textContent = err.message;
+        showToast(err.message);
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = "Send OTP";
+        }
+    }
+}
+
+function startRegDocResendTimer() {
+    let seconds = 60;
+    if ($("regDocResendBtn")) $("regDocResendBtn").disabled = true;
+    if ($("regDocTimer")) $("regDocTimer").textContent = "(60s)";
+
+    clearInterval(regDocResendTimer);
+    regDocResendTimer = setInterval(() => {
+        seconds--;
+        if ($("regDocTimer")) $("regDocTimer").textContent = `(${seconds}s)`;
+        if (seconds <= 0) {
+            clearInterval(regDocResendTimer);
+            if ($("regDocResendBtn")) $("regDocResendBtn").disabled = false;
+            if ($("regDocTimer")) $("regDocTimer").textContent = "";
+        }
+    }, 1000);
+}
+
+function quickFillRegDocOtp() {
+    const code = regDocLastReceivedOtp || "123456";
+    if ($("regDocOtpCode")) {
+        $("regDocOtpCode").value = code;
+        showToast(`Filled OTP: ${code}`);
+    }
+    if ($("regDocVerifyOtpBtn")) $("regDocVerifyOtpBtn").focus();
+}
+
+async function verifyDocRegOTP() {
+    const input = $("regDocContact");
+    const contactVal = input ? input.value.trim() : "";
+    const codeInput = $("regDocOtpCode");
+    const code = codeInput ? codeInput.value.trim() : "";
+
+    if (!code || code.length !== 6) {
+        if ($("regDocMessage")) $("regDocMessage").textContent = "Please enter the 6-digit verification code.";
+        if (codeInput) codeInput.focus();
+        return;
+    }
+
+    const verifyBtn = $("regDocVerifyOtpBtn");
+    if (verifyBtn) {
+        verifyBtn.disabled = true;
+        verifyBtn.textContent = "Verifying...";
+    }
+
+    try {
+        const response = await fetch(`${API_URL}/api/auth/verify-registration-otp`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ identifier: contactVal, code })
+        });
+
+        const data = await response.json();
+        if (!response.ok || !data.success) {
+            throw new Error(data.message || "Invalid or expired verification code.");
+        }
+
+        regDocVerifiedContact = {
+            type: data.channel,
+            value: data.target,
+            code: code
+        };
+
+        if (data.channel === "phone") {
+            if ($("regDocPhone")) $("regDocPhone").value = data.target;
+        } else {
+            if ($("regDocEmail")) $("regDocEmail").value = data.target;
+        }
+
+        if ($("regDocOtpBox")) $("regDocOtpBox").classList.add("hidden");
+        if ($("regDocVerifiedBadge")) $("regDocVerifiedBadge").classList.remove("hidden");
+        if ($("regDocVerifiedText")) {
+            $("regDocVerifiedText").textContent = `✅ ${data.channel === "email" ? "Email" : "Mobile"} Verified: ${data.target}`;
+        }
+        if ($("regDocOtpContainer")) $("regDocOtpContainer").classList.add("verified");
+        if ($("regDocMessage")) $("regDocMessage").textContent = "";
+
+        showToast(`✅ Doctor ${data.channel === "email" ? "email" : "mobile number"} verified with OTP!`);
+    } catch (err) {
+        if ($("regDocMessage")) $("regDocMessage").textContent = err.message;
+        showToast(err.message);
+    } finally {
+        if (verifyBtn) {
+            verifyBtn.disabled = false;
+            verifyBtn.textContent = "✓ Verify OTP";
+        }
+    }
+}
+
+function resetRegDocContact() {
+    regDocVerifiedContact = null;
+    if ($("regDocVerifiedBadge")) $("regDocVerifiedBadge").classList.add("hidden");
+    if ($("regDocOtpBox")) $("regDocOtpBox").classList.add("hidden");
+    if ($("regDocOtpContainer")) $("regDocOtpContainer").classList.remove("verified");
+    if ($("regDocContact")) {
+        $("regDocContact").value = "";
+        $("regDocContact").focus();
+    }
+}
 
 function openDoctorRegisterModal() {
     if ($("regDocName")) $("regDocName").value = "";
     if ($("regDocUsername")) $("regDocUsername").value = "";
+    if ($("regDocContact")) $("regDocContact").value = "";
     if ($("regDocPhone")) $("regDocPhone").value = "";
+    if ($("regDocEmail")) $("regDocEmail").value = "";
+    if ($("regDocOtpCode")) $("regDocOtpCode").value = "";
     const specSelect = $("regDocSpecialization");
     if (specSelect) {
         for (let i = 0; i < specSelect.options.length; i++) {
@@ -2212,6 +2661,15 @@ function openDoctorRegisterModal() {
     }
     if ($("regDocPassword")) $("regDocPassword").value = "";
     if ($("regDocMessage")) $("regDocMessage").textContent = "";
+
+    regDocVerifiedContact = null;
+    regDocLastReceivedOtp = "";
+    clearInterval(regDocResendTimer);
+    if ($("regDocTimer")) $("regDocTimer").textContent = "";
+    if ($("regDocOtpBox")) $("regDocOtpBox").classList.add("hidden");
+    if ($("regDocVerifiedBadge")) $("regDocVerifiedBadge").classList.add("hidden");
+    if ($("regDocOtpContainer")) $("regDocOtpContainer").classList.remove("verified");
+
     if ($("doctorRegisterModal")) $("doctorRegisterModal").classList.remove("hidden");
 }
 
@@ -2222,7 +2680,7 @@ function closeDoctorRegisterModal() {
 async function submitDoctorRegistration() {
     const fullName = $("regDocName") ? $("regDocName").value.trim() : "";
     const username = $("regDocUsername") ? $("regDocUsername").value.trim() : "";
-    const phone = $("regDocPhone") ? $("regDocPhone").value.trim() : "";
+    const contactVal = $("regDocContact") ? $("regDocContact").value.trim() : "";
     const specSelect = $("regDocSpecialization");
     const selectedOptions = specSelect ? Array.from(specSelect.selectedOptions).map(o => o.value.trim()).filter(Boolean) : [];
     const password = $("regDocPassword") ? $("regDocPassword").value.trim() : "";
@@ -2232,12 +2690,30 @@ async function submitDoctorRegistration() {
         return;
     }
 
+    if (!contactVal) {
+        if ($("regDocMessage")) $("regDocMessage").textContent = "Please enter Doctor mobile number or email address.";
+        if ($("regDocContact")) $("regDocContact").focus();
+        return;
+    }
+
+    // MANDATORY OTP CHECK (Doctor Mails & Numbers)
+    if (!regDocVerifiedContact || regDocVerifiedContact.value !== contactVal) {
+        if ($("regDocMessage")) {
+            $("regDocMessage").textContent = "⚠️ OTP Verification Required: Please verify doctor mobile number or email address with OTP before completing registration.";
+        }
+        if ($("regDocContact")) $("regDocContact").focus();
+        showToast("Please verify doctor mobile or email with OTP first.");
+        return;
+    }
+
     if (selectedOptions.length === 0) {
         if ($("regDocMessage")) $("regDocMessage").textContent = "Please select at least one specialization from the dropdown.";
         return;
     }
 
     const specialization = selectedOptions.join(", ");
+    const phone = regDocVerifiedContact.type === "phone" ? regDocVerifiedContact.value : "";
+    const email = regDocVerifiedContact.type === "email" ? regDocVerifiedContact.value : "";
 
     try {
         const response = await fetch(`${API_URL}/api/auth/register-doctor`, {
@@ -2247,8 +2723,11 @@ async function submitDoctorRegistration() {
                 fullName,
                 username,
                 phone,
+                email,
                 specialization,
-                password
+                password,
+                otpCode: regDocVerifiedContact.code,
+                isContactVerified: true
             })
         });
 
@@ -3463,6 +3942,14 @@ function updateNetworkStatus() {
             badge.title = "Offline: Using locally stored authorized patient emergency directory";
         }
     }
+    const offlineBanner = $("helperOfflineNoticeBanner");
+    if (offlineBanner) {
+        if (!isOnline) {
+            setElementHidden(offlineBanner, false);
+        } else {
+            setElementHidden(offlineBanner, true);
+        }
+    }
     updatePendingOfflineCountUI();
 }
 
@@ -3509,6 +3996,10 @@ async function refreshLocalEmergencyDirectory(isSilent = false) {
             if (!isSilent) {
                 showToast(`✅ Emergency directory updated (${data.directory.length} registered patients cached for offline rescue).`);
             }
+            const modal = $("helperEmergencyDirectoryModal");
+            if (modal && !modal.classList.contains("hidden")) {
+                renderEmergencyDirectoryList($("emergencyDirectorySearchInput") ? $("emergencyDirectorySearchInput").value : "");
+            }
         }
     } catch (err) {
         console.warn("Emergency directory cache refresh notice:", err.message);
@@ -3540,6 +4031,202 @@ function getLocalEmergencyDirectory() {
             lastSynced: new Date().toISOString()
         }
     ];
+}
+
+/* ================= LOCAL PATIENT IDENTIFICATION DIRECTORY (OFFLINE RESCUE) ================= */
+
+function openEmergencyDirectoryModal() {
+    const modal = $("helperEmergencyDirectoryModal");
+    if (!modal) return;
+    setElementHidden(modal, false);
+    const searchInput = $("emergencyDirectorySearchInput");
+    if (searchInput) {
+        searchInput.value = "";
+        setTimeout(() => searchInput.focus(), 60);
+    }
+    renderEmergencyDirectoryList("");
+}
+
+function closeEmergencyDirectoryModal() {
+    const modal = $("helperEmergencyDirectoryModal");
+    if (modal) setElementHidden(modal, true);
+}
+
+function filterEmergencyDirectory(query) {
+    renderEmergencyDirectoryList(query);
+}
+
+function renderEmergencyDirectoryList(filterText = "") {
+    const container = $("emergencyDirectoryListContainer");
+    const metaEl = $("emergencyDirectoryCacheMeta");
+    if (!container) return;
+
+    const directory = getLocalEmergencyDirectory();
+    const lastSync = localStorage.getItem("medicare_emergency_cache_timestamp");
+    const isOnline = navigator.onLine;
+
+    if (metaEl) {
+        const timeStr = lastSync ? formatRelativeTime(lastSync) : "Initial offline seed";
+        metaEl.innerHTML = `📁 <b>${directory.length} patient${directory.length === 1 ? '' : 's'}</b> cached • ${isOnline ? '🟢 Connected' : '📡 Offline Rescue Mode'} • Synced: ${timeStr}`;
+    }
+
+    const query = (filterText || "").trim().toLowerCase();
+    const filtered = directory.filter(p => {
+        if (!query) return true;
+        const name = (p.name || "").toLowerCase();
+        const id = (p.id || p.patientId || "").toLowerCase();
+        const bg = (p.bloodGroup || "").toLowerCase();
+        const gName = (p.guardianName || "").toLowerCase();
+        const gPhone = (p.guardianPhone || "").toLowerCase();
+        return name.includes(query) || id.includes(query) || bg.includes(query) || gName.includes(query) || gPhone.includes(query);
+    });
+
+    if (filtered.length === 0) {
+        container.innerHTML = `
+            <div style="text-align: center; padding: 28px 16px; color: #64748b; background: #f8fafc; border: 1.5px dashed #cbd5e1; border-radius: 12px;">
+                <div style="font-size: 30px; margin-bottom: 6px;">🔍</div>
+                <h4 style="margin: 0 0 4px 0; color: #334155; font-size: 15px;">No Matching Patients in Local Directory</h4>
+                <p style="margin: 0; font-size: 12.5px;">No cached records match "${escapeHtml(filterText)}".</p>
+                <button type="button" class="btn-small secondary" style="margin-top: 10px;" onclick="$('emergencyDirectorySearchInput').value=''; renderEmergencyDirectoryList('');">
+                    Clear Search
+                </button>
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = filtered.map(patient => {
+        const patientId = patient.id || patient.patientId || "PAT----";
+        const name = patient.name || "Unknown Patient";
+        const bloodGroup = patient.bloodGroup || "O+";
+        const guardianName = patient.guardianName || "Not Provided";
+        const guardianPhone = patient.guardianPhone || "Not Provided";
+        const safePhone = guardianPhone.replace(/[^0-9+]/g, '');
+
+        return `
+            <div class="patient-directory-card" style="background: white; border: 1.5px solid #e2e8f0; border-radius: 12px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 2px 6px rgba(0,0,0,0.03);">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; flex-wrap: wrap;">
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <div style="width: 42px; height: 42px; border-radius: 50%; background: #e0f2fe; color: #0284c7; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 16px;">
+                            ${escapeHtml(name.charAt(0).toUpperCase())}
+                        </div>
+                        <div>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <h4 style="margin: 0; font-size: 15.5px; color: #0f172a; font-weight: 700;">
+                                    ${escapeHtml(name)}
+                                </h4>
+                                <span style="background: #f1f5f9; color: #475569; font-size: 11px; padding: 2px 6px; border-radius: 4px; font-weight: 700;">
+                                    ${escapeHtml(patientId)}
+                                </span>
+                            </div>
+                            <div style="font-size: 12.5px; color: #64748b; margin-top: 2px;">
+                                Primary Guardian: <b>${escapeHtml(guardianName)}</b>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <span class="blood-group-badge" style="background: #fee2e2; color: #b91c1c; font-size: 13.5px; font-weight: 800; padding: 3px 9px; border-radius: 6px;">
+                            🩸 ${escapeHtml(bloodGroup)}
+                        </span>
+                    </div>
+                </div>
+
+                <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 10px; border-top: 1px dashed #e2e8f0; flex-wrap: wrap; gap: 8px;">
+                    <div style="display: flex; align-items: center; gap: 6px; font-size: 13px; color: #065f46; font-weight: 700;">
+                        <span>📞</span>
+                        <a href="tel:${safePhone}" style="color: #065f46; text-decoration: none;" onclick="onEmergencyCallInitiated('${safePhone}', 'Guardian of ${escapeHtml(name)}')">
+                            ${escapeHtml(guardianPhone)}
+                        </a>
+                    </div>
+
+                    <div style="display: flex; gap: 6px;">
+                        ${safePhone ? `
+                            <button
+                                type="button"
+                                class="btn-small"
+                                style="background: #059669; color: white; border: none; font-size: 12px; padding: 6px 12px; border-radius: 6px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 4px;"
+                                onclick="openEmergencyCallConfirmation('${safePhone}', 'Guardian of ${escapeHtml(name)} (${escapeHtml(guardianName)})')">
+                                📞 Call Guardian
+                            </button>
+                        ` : ''}
+                        <button
+                            type="button"
+                            class="btn-small primary"
+                            style="background: #0284c7; color: white; border: none; font-size: 12px; padding: 6px 12px; border-radius: 6px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 4px;"
+                            onclick="selectPatientFromDirectory('${patientId}')">
+                            🚑 Select for Rescue
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join("");
+}
+
+function selectPatientFromDirectory(patientId) {
+    const directory = getLocalEmergencyDirectory();
+    const patient = directory.find(p => (p.id === patientId || p.patientId === patientId));
+    if (!patient) {
+        showToast("Patient record not found in offline emergency directory.");
+        return;
+    }
+
+    currentMatchedPatient = {
+        id: patient.id || patient.patientId,
+        name: patient.name,
+        bloodGroup: patient.bloodGroup || "O+",
+        guardianName: patient.guardianName || "Not Provided",
+        guardianPhone: patient.guardianPhone || "Not Provided"
+    };
+
+    // Populate the Match Result Card
+    const nameEl = $("resPatientName");
+    const idEl = $("resPatientId");
+    const bgBadge = $("resBloodGroupBadge");
+    const gNameEl = $("resGuardianName");
+    const gPhoneEl = $("resGuardianPhone");
+    const sourceEl = $("matchSourceLabel");
+    const confBadge = $("matchConfidenceBadge");
+
+    if (nameEl) nameEl.textContent = currentMatchedPatient.name;
+    if (idEl) idEl.textContent = currentMatchedPatient.id;
+    if (bgBadge) bgBadge.textContent = currentMatchedPatient.bloodGroup;
+    if (gNameEl) gNameEl.textContent = currentMatchedPatient.guardianName;
+    if (gPhoneEl) gPhoneEl.textContent = currentMatchedPatient.guardianPhone;
+    if (sourceEl) sourceEl.textContent = "Selected via Local Emergency Directory (Offline Available)";
+    if (confBadge) {
+        confBadge.textContent = "100.0% Verified (Directory)";
+        confBadge.style.background = "#dbeafe";
+        confBadge.style.color = "#1e40af";
+    }
+
+    // Attach vitals if already logged
+    if (typeof currentRescueVitals !== "undefined" && currentRescueVitals) {
+        if (typeof renderAttachedRescueVitals === "function") {
+            renderAttachedRescueVitals(currentRescueVitals);
+        }
+    }
+
+    setElementHidden("matchResult", false);
+    setElementHidden("noMatchResult", true);
+
+    // Queue offline audit event
+    queueOfflineEmergencyEvent({
+        action: "manual_emergency_directory_selection",
+        matched: true,
+        matchedPatientId: currentMatchedPatient.id,
+        confidence: "100%",
+        source: "offline_directory"
+    });
+
+    closeEmergencyDirectoryModal();
+    showToast(`✅ Selected ${currentMatchedPatient.name} (${currentMatchedPatient.id}) for emergency rescue.`);
+
+    const matchCard = $("matchResult");
+    if (matchCard) {
+        matchCard.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
 }
 
 /* ================= 3. OFFLINE EMERGENCY AUDIT QUEUE (Req 5 & 6) ================= */
@@ -3630,6 +4317,9 @@ function openHelperEmergency() {
     if ($("helperDashboard")) {
         $("helperDashboard").classList.remove("hidden");
     }
+    const fab = $("helperQuickVitalsFab");
+    if (fab) fab.classList.remove("hidden");
+
     updateNetworkStatus();
     // Default camera contrast to 120% to enhance face recognition in varying lighting
     cameraContrast = 120;
@@ -3637,10 +4327,20 @@ function openHelperEmergency() {
     resetEmergencyCameraUI();
     refreshLocalEmergencyDirectory(true);
     checkCameraHardwareAvailability();
+
+    // Render previously recorded rescue vitals if present in session
+    if (currentRescueVitals) {
+        renderAttachedRescueVitals(currentRescueVitals);
+    } else {
+        renderAttachedRescueVitals(null);
+    }
 }
 
 function exitHelperMode() {
     stopEmergencyCamera();
+    const fab = $("helperQuickVitalsFab");
+    if (fab) fab.classList.add("hidden");
+    closeQuickVitalsModal();
     goHome();
 }
 
@@ -4160,6 +4860,40 @@ async function identifyEmergencyPatient() {
                 $("matchSourceLabel").textContent = `Match verified via Real Biometric Engine (${matchResult.source})`;
             }
 
+            // Link existing attached rescue vitals with the identified patient
+            if (currentRescueVitals) {
+                currentRescueVitals.patientId = p.id;
+                currentRescueVitals.patientName = p.name;
+                try {
+                    sessionStorage.setItem("medicare_current_rescue_vitals", JSON.stringify(currentRescueVitals));
+                } catch (_) {}
+                renderAttachedRescueVitals(currentRescueVitals);
+
+                if (navigator.onLine) {
+                    fetch(`${API_URL}/api/helper/rescue-vitals`, {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                            "X-Helper-Session": emergencySessionId
+                        },
+                        body: JSON.stringify({
+                            sessionId: emergencySessionId,
+                            patientId: p.id,
+                            patientName: p.name,
+                            vitals: {
+                                pulse: currentRescueVitals.pulse,
+                                spo2: currentRescueVitals.spo2,
+                                bloodPressure: currentRescueVitals.bloodPressure,
+                                consciousness: currentRescueVitals.consciousness || currentRescueVitals.avpu,
+                                notes: (currentRescueVitals.notes || "") + ` (Linked to identified patient ${p.name} [${p.id}])`,
+                                triageStatus: currentRescueVitals.triageStatus || currentRescueVitals.triageLevel,
+                                recordedAt: currentRescueVitals.recordedAt
+                            }
+                        })
+                    }).catch(() => {});
+                }
+            }
+
             setElementHidden("noMatchResult", true);
             setElementHidden("matchResult", false);
 
@@ -4290,6 +5024,534 @@ window.setCameraBrightness = setCameraBrightness;
 window.setCameraContrast = setCameraContrast;
 window.applyCameraFilterPreset = applyCameraFilterPreset;
 window.resetCameraFilters = resetCameraFilters;
+window.openEmergencyDirectoryModal = openEmergencyDirectoryModal;
+window.closeEmergencyDirectoryModal = closeEmergencyDirectoryModal;
+window.filterEmergencyDirectory = filterEmergencyDirectory;
+window.renderEmergencyDirectoryList = renderEmergencyDirectoryList;
+window.selectPatientFromDirectory = selectPatientFromDirectory;
+
+/* ================= 10. QUICK VITALS OVERLAY & RESCUE EVENT ATTACHMENT ================= */
+
+let currentRescueVitals = null;
+try {
+    const savedVitals = sessionStorage.getItem("medicare_current_rescue_vitals");
+    if (savedVitals) {
+        currentRescueVitals = JSON.parse(savedVitals);
+    }
+} catch (_) {
+    currentRescueVitals = null;
+}
+
+let currentAvpuLevel = "Alert";
+
+function openQuickVitalsModal() {
+    const modal = $("quickVitalsModal");
+    if (!modal) return;
+    modal.classList.remove("hidden");
+
+    // Update patient identification context indicator inside modal
+    const badge = $("vitalsModalPatientBadge");
+    if (badge) {
+        if (currentMatchedPatient && currentMatchedPatient.name) {
+            badge.textContent = `👤 Linked Patient: ${currentMatchedPatient.name} (${currentMatchedPatient.id || "ID"}) • Blood: ${currentMatchedPatient.bloodGroup || "Unknown"}`;
+            badge.style.background = "#dcfce7";
+            badge.style.color = "#15803d";
+        } else {
+            badge.textContent = "⚠️ Emergency Subject (Unidentified / In-progress) — Will link automatically upon ID";
+            badge.style.background = "#fef3c7";
+            badge.style.color = "#92400e";
+        }
+    }
+
+    // Populate with existing vitals if available, else standard defaults
+    if (currentRescueVitals) {
+        if ($("vitalPulseInput")) $("vitalPulseInput").value = currentRescueVitals.pulse || 78;
+        if ($("vitalSpo2Input")) $("vitalSpo2Input").value = currentRescueVitals.spo2 || 98;
+        if (currentRescueVitals.systolic && $("vitalSystolicInput")) {
+            $("vitalSystolicInput").value = currentRescueVitals.systolic;
+        }
+        if (currentRescueVitals.diastolic && $("vitalDiastolicInput")) {
+            $("vitalDiastolicInput").value = currentRescueVitals.diastolic;
+        }
+        if (currentRescueVitals.notes && $("vitalNotesInput")) {
+            $("vitalNotesInput").value = currentRescueVitals.notes;
+        }
+        setAvpuLevel(currentRescueVitals.consciousness || currentRescueVitals.avpu || "Alert");
+    } else {
+        if ($("vitalPulseInput") && !$("vitalPulseInput").value) $("vitalPulseInput").value = 78;
+        if ($("vitalSpo2Input") && !$("vitalSpo2Input").value) $("vitalSpo2Input").value = 98;
+        setAvpuLevel(currentAvpuLevel || "Alert");
+    }
+
+    onPulseChanged($("vitalPulseInput") ? $("vitalPulseInput").value : 78);
+    onSpo2Changed($("vitalSpo2Input") ? $("vitalSpo2Input").value : 98);
+    updateLiveTriageUI();
+}
+
+function closeQuickVitalsModal() {
+    const modal = $("quickVitalsModal");
+    if (modal) modal.classList.add("hidden");
+}
+
+function applyVitalsPreset(type) {
+    const pulseInp = $("vitalPulseInput");
+    const spo2Inp = $("vitalSpo2Input");
+    const sysInp = $("vitalSystolicInput");
+    const diaInp = $("vitalDiastolicInput");
+
+    if (type === "normal") {
+        if (pulseInp) pulseInp.value = 76;
+        if (spo2Inp) spo2Inp.value = 98;
+        if (sysInp) sysInp.value = 120;
+        if (diaInp) diaInp.value = 80;
+        setAvpuLevel("Alert");
+        showToast("Normal preset applied (76 bpm, 98% SpO2, 120/80 mmHg)");
+    } else if (type === "tachycardia") {
+        if (pulseInp) pulseInp.value = 118;
+        if (spo2Inp) spo2Inp.value = 95;
+        if (sysInp) sysInp.value = 138;
+        if (diaInp) diaInp.value = 88;
+        setAvpuLevel("Alert");
+        showToast("Tachycardia preset applied (118 bpm, 95% SpO2)");
+    } else if (type === "critical") {
+        if (pulseInp) pulseInp.value = 138;
+        if (spo2Inp) spo2Inp.value = 84;
+        if (sysInp) sysInp.value = 85;
+        if (diaInp) diaInp.value = 54;
+        setAvpuLevel("Pain");
+        showToast("Critical Hypoxia & Shock preset applied (138 bpm, 84% SpO2)");
+    }
+
+    if (pulseInp) onPulseChanged(pulseInp.value);
+    if (spo2Inp) onSpo2Changed(spo2Inp.value);
+    updateLiveTriageUI();
+}
+
+function stepVital(inputId, delta) {
+    const el = $(inputId);
+    if (!el) return;
+    const min = el.min !== "" ? parseInt(el.min, 10) : 0;
+    const max = el.max !== "" ? parseInt(el.max, 10) : 300;
+    const current = parseInt(el.value, 10) || min;
+    const nextVal = Math.max(min, Math.min(max, current + delta));
+    el.value = nextVal;
+
+    if (inputId === "vitalPulseInput") {
+        onPulseChanged(nextVal);
+    } else if (inputId === "vitalSpo2Input") {
+        onSpo2Changed(nextVal);
+    }
+    updateLiveTriageUI();
+}
+
+function setPulseVal(val) {
+    const el = $("vitalPulseInput");
+    if (el) {
+        el.value = val;
+        onPulseChanged(val);
+        updateLiveTriageUI();
+    }
+}
+
+function setSpo2Val(val) {
+    const el = $("vitalSpo2Input");
+    if (el) {
+        el.value = val;
+        onSpo2Changed(val);
+        updateLiveTriageUI();
+    }
+}
+
+function onPulseChanged(val) {
+    const p = parseInt(val, 10) || 0;
+    const pill = $("pulseStatusPill");
+    if (!pill) return;
+
+    if (p <= 0) {
+        pill.className = "vital-status-pill critical";
+        pill.textContent = "No Pulse / Cardiac Arrest";
+    } else if (p < 45 || p > 130) {
+        pill.className = "vital-status-pill critical";
+        pill.textContent = p < 45 ? "Severe Bradycardia (<45 bpm)" : "Severe Tachycardia (>130 bpm)";
+    } else if (p < 60 || p > 100) {
+        pill.className = "vital-status-pill warning";
+        pill.textContent = p < 60 ? "Mild Bradycardia (45-59 bpm)" : "Mild Tachycardia (101-130 bpm)";
+    } else {
+        pill.className = "vital-status-pill normal";
+        pill.textContent = "Normal (60-100 bpm)";
+    }
+    updateLiveTriageUI();
+}
+
+function onSpo2Changed(val) {
+    const s = parseInt(val, 10) || 0;
+    const pill = $("spo2StatusPill");
+    if (!pill) return;
+
+    if (s < 88) {
+        pill.className = "vital-status-pill critical";
+        pill.textContent = "🚨 Critical Hypoxia (<88%)";
+    } else if (s < 95) {
+        pill.className = "vital-status-pill warning";
+        pill.textContent = "⚠️ Low Oxygenation (88-94%)";
+    } else {
+        pill.className = "vital-status-pill normal";
+        pill.textContent = "Normal (95-100%)";
+    }
+    updateLiveTriageUI();
+}
+
+function setAvpuLevel(level, btnEl) {
+    currentAvpuLevel = level;
+    const btns = document.querySelectorAll(".avpu-btn");
+    btns.forEach(btn => {
+        if (btn.getAttribute("data-avpu") === level || btn === btnEl) {
+            btn.classList.add("active");
+        } else {
+            btn.classList.remove("active");
+        }
+    });
+    updateLiveTriageUI();
+}
+
+function toggleObservationChip(btnEl, text) {
+    if (!btnEl) return;
+    const isSelected = btnEl.classList.contains("selected");
+    const notesInp = $("vitalNotesInput");
+
+    if (isSelected) {
+        btnEl.classList.remove("selected");
+        if (notesInp && notesInp.value) {
+            const parts = notesInp.value.split(",").map(p => p.trim()).filter(p => p && p !== text);
+            notesInp.value = parts.join(", ");
+        }
+    } else {
+        btnEl.classList.add("selected");
+        if (notesInp) {
+            const existing = notesInp.value.trim();
+            notesInp.value = existing ? `${existing}, ${text}` : text;
+        }
+    }
+}
+
+function calculateTriageAssessment(pulse, spo2, avpu, systolic, diastolic) {
+    const p = parseInt(pulse, 10);
+    const s = parseInt(spo2, 10);
+    const sys = systolic ? parseInt(systolic, 10) : null;
+
+    // Critical conditions
+    if (
+        (s && s < 88) ||
+        (p && (p < 45 || p > 130)) ||
+        avpu === "Unresponsive" ||
+        avpu === "Pain" ||
+        (sys && sys < 80)
+    ) {
+        return {
+            badgeClass: "critical",
+            title: "🚨 CODE RED / RESUSCITATION PRIORITY",
+            desc: "Immediate life threat identified: Extreme hypoxia, severe brady/tachycardia, or altered consciousness. Prepare emergency airway/oxygen and notify dispatch.",
+            icon: "🚨",
+            statusLabel: "CRITICAL"
+        };
+    }
+
+    // Warning / Urgent conditions
+    if (
+        (s && s < 95) ||
+        (p && (p < 60 || p > 100)) ||
+        avpu === "Voice" ||
+        (sys && (sys > 160 || sys < 95))
+    ) {
+        return {
+            badgeClass: "warning",
+            title: "⚠️ YELLOW / URGENT ATTENTION",
+            desc: "Abnormal physiological vitals: Paramedic monitoring indicated. Supplemental oxygen or fluid resuscitation support may be required.",
+            icon: "⚠️",
+            statusLabel: "URGENT"
+        };
+    }
+
+    // Stable condition
+    return {
+        badgeClass: "stable",
+        title: "🟢 GREEN / PHYSIOLOGICALLY STABLE",
+        desc: "Recorded vitals are within acceptable physiological limits. Continue ongoing emergency observation.",
+        icon: "🟢",
+        statusLabel: "STABLE"
+    };
+}
+
+function updateLiveTriageUI() {
+    const pulseInp = $("vitalPulseInput");
+    const spo2Inp = $("vitalSpo2Input");
+    const sysInp = $("vitalSystolicInput");
+    const diaInp = $("vitalDiastolicInput");
+
+    const pulse = pulseInp ? pulseInp.value : 78;
+    const spo2 = spo2Inp ? spo2Inp.value : 98;
+    const sys = sysInp ? sysInp.value : 120;
+    const dia = diaInp ? diaInp.value : 80;
+
+    const triage = calculateTriageAssessment(pulse, spo2, currentAvpuLevel, sys, dia);
+
+    const alertBox = $("vitalsLiveTriageAlert");
+    const iconEl = $("triageIcon");
+    const titleEl = $("triageTitle");
+    const descEl = $("triageDesc");
+
+    if (alertBox) {
+        alertBox.className = `vitals-live-triage ${triage.badgeClass}`;
+    }
+    if (iconEl) iconEl.textContent = triage.icon;
+    if (titleEl) titleEl.textContent = triage.title;
+    if (descEl) descEl.textContent = triage.desc;
+}
+
+async function submitQuickVitals() {
+    const pulseInp = $("vitalPulseInput");
+    const spo2Inp = $("vitalSpo2Input");
+    const sysInp = $("vitalSystolicInput");
+    const diaInp = $("vitalDiastolicInput");
+    const notesInp = $("vitalNotesInput");
+    const submitBtn = $("submitQuickVitalsBtn");
+
+    const pulse = pulseInp ? parseInt(pulseInp.value, 10) : null;
+    const spo2 = spo2Inp ? parseInt(spo2Inp.value, 10) : null;
+    const systolic = sysInp && sysInp.value ? parseInt(sysInp.value, 10) : null;
+    const diastolic = diaInp && diaInp.value ? parseInt(diaInp.value, 10) : null;
+    const notes = notesInp ? notesInp.value.trim() : "";
+
+    if (pulse === null || isNaN(pulse) || pulse < 20 || pulse > 250) {
+        showToast("Please enter a valid pulse rate (20-250 bpm).");
+        return;
+    }
+    if (spo2 === null || isNaN(spo2) || spo2 < 50 || spo2 > 100) {
+        showToast("Please enter a valid SpO2 oxygen percentage (50-100%).");
+        return;
+    }
+
+    const bpString = (systolic && diastolic) ? `${systolic}/${diastolic} mmHg` : null;
+    const triage = calculateTriageAssessment(pulse, spo2, currentAvpuLevel, systolic, diastolic);
+
+    const vitalsRecord = {
+        pulse,
+        spo2,
+        systolic,
+        diastolic,
+        bloodPressure: bpString,
+        consciousness: currentAvpuLevel,
+        avpu: currentAvpuLevel,
+        notes,
+        triageStatus: triage.badgeClass,
+        triageLevel: triage.badgeClass,
+        triageSummary: triage.title,
+        patientId: currentMatchedPatient ? currentMatchedPatient.id : null,
+        patientName: currentMatchedPatient ? currentMatchedPatient.name : null,
+        sessionId: emergencySessionId,
+        recordedAt: new Date().toISOString()
+    };
+
+    if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = "⏳ Attaching Vitals...";
+    }
+
+    const isOnline = navigator.onLine;
+
+    try {
+        if (isOnline) {
+            const res = await fetch(`${API_URL}/api/helper/rescue-vitals`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-Helper-Session": emergencySessionId
+                },
+                body: JSON.stringify({
+                    sessionId: emergencySessionId,
+                    patientId: vitalsRecord.patientId,
+                    patientName: vitalsRecord.patientName,
+                    vitals: {
+                        pulse: vitalsRecord.pulse,
+                        spo2: vitalsRecord.spo2,
+                        bloodPressure: vitalsRecord.bloodPressure,
+                        consciousness: vitalsRecord.consciousness,
+                        notes: vitalsRecord.notes,
+                        triageStatus: vitalsRecord.triageStatus
+                    }
+                })
+            });
+
+            if (res.ok) {
+                const data = await res.json();
+                if (data.eventId) {
+                    vitalsRecord.eventId = data.eventId;
+                }
+            } else {
+                console.warn("Rescue vitals API responded non-OK, keeping local copy.");
+            }
+        } else {
+            // Offline queueing
+            queueOfflineEmergencyEvent({
+                action: "emergency_rescue_vitals_logged",
+                patientId: vitalsRecord.patientId,
+                patientName: vitalsRecord.patientName,
+                vitals: vitalsRecord
+            });
+        }
+
+        // Store active vitals in session
+        currentRescueVitals = vitalsRecord;
+        try {
+            sessionStorage.setItem("medicare_current_rescue_vitals", JSON.stringify(vitalsRecord));
+        } catch (_) {}
+
+        renderAttachedRescueVitals(vitalsRecord);
+        closeQuickVitalsModal();
+
+        const destinationNotice = vitalsRecord.patientId
+            ? `Attached to Patient ${vitalsRecord.patientName || vitalsRecord.patientId}`
+            : "Attached to Emergency Event (will link upon identification)";
+        showToast(`✅ Vitals logged: Pulse ${pulse} bpm, SpO2 ${spo2}% (${triage.statusLabel}). ${destinationNotice}`);
+
+        // If triage is critical, trigger guidance prompt
+        if (triage.badgeClass === "critical") {
+            setTimeout(() => {
+                showToast("🚨 CRITICAL VITALS DETECTED! Use Quick 112 button to dispatch emergency services immediately.");
+            }, 1200);
+        }
+    } catch (err) {
+        console.error("Error submitting vitals:", err);
+        // Fallback offline queue
+        queueOfflineEmergencyEvent({
+            action: "emergency_rescue_vitals_logged",
+            patientId: vitalsRecord.patientId,
+            patientName: vitalsRecord.patientName,
+            vitals: vitalsRecord
+        });
+        currentRescueVitals = vitalsRecord;
+        try {
+            sessionStorage.setItem("medicare_current_rescue_vitals", JSON.stringify(vitalsRecord));
+        } catch (_) {}
+        renderAttachedRescueVitals(vitalsRecord);
+        closeQuickVitalsModal();
+        showToast("Vitals attached locally. Will sync when connection is restored.");
+    } finally {
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = "Attach Vitals to Rescue Event";
+        }
+    }
+}
+
+function renderAttachedRescueVitals(vitals) {
+    const card = $("attachedRescueVitalsCard");
+    const resRow = $("resAttachedVitalsRow");
+    const fabSub = $("fabVitalsSubStatus");
+
+    if (!vitals) {
+        if (card) card.classList.add("hidden");
+        if (resRow) resRow.classList.add("hidden");
+        if (fabSub) fabSub.textContent = "Tap to log";
+        return;
+    }
+
+    // Update FAB sub status
+    if (fabSub) {
+        fabSub.textContent = `${vitals.pulse} bpm | ${vitals.spo2}%`;
+    }
+
+    // Update Attached Rescue Vitals Card in Helper Dashboard
+    if (card) {
+        card.classList.remove("hidden");
+
+        const pulseEl = $("attachedPulseDisplay");
+        if (pulseEl) pulseEl.textContent = `${vitals.pulse} bpm`;
+
+        const spo2El = $("attachedSpo2Display");
+        if (spo2El) spo2El.textContent = `${vitals.spo2}%`;
+
+        const bpEl = $("attachedBpDisplay");
+        if (bpEl) bpEl.textContent = vitals.bloodPressure || (vitals.systolic && vitals.diastolic ? `${vitals.systolic}/${vitals.diastolic} mmHg` : "Not recorded");
+
+        const avpuEl = $("attachedAvpuDisplay");
+        if (avpuEl) avpuEl.textContent = vitals.consciousness || vitals.avpu || "Alert";
+
+        const badge = $("attachedVitalsTriageBadge");
+        if (badge) {
+            const cls = vitals.triageStatus || vitals.triageLevel || "stable";
+            badge.className = `vitals-status-pill ${cls}`;
+            badge.textContent = cls.toUpperCase();
+        }
+
+        const notesWrap = $("attachedNotesWrap");
+        const notesDisplay = $("attachedNotesDisplay");
+        if (vitals.notes) {
+            if (notesWrap) notesWrap.classList.remove("hidden");
+            if (notesDisplay) notesDisplay.textContent = vitals.notes;
+        } else {
+            if (notesWrap) notesWrap.classList.add("hidden");
+        }
+
+        const timeEl = $("attachedVitalsTimestamp");
+        if (timeEl) {
+            const timeStr = vitals.recordedAt ? new Date(vitals.recordedAt).toLocaleTimeString() : "Just now";
+            const patientNotice = vitals.patientId
+                ? `Attached to Identified Patient (${vitals.patientName || vitals.patientId})`
+                : "Attached to Emergency Event Session (Unidentified Subject)";
+            timeEl.textContent = `Logged at ${timeStr} • ${patientNotice}`;
+        }
+    }
+
+    // Update Match Result row if visible
+    if (resRow) {
+        resRow.classList.remove("hidden");
+
+        const badge = $("resAttachedVitalsBadge");
+        if (badge) {
+            const cls = vitals.triageStatus || vitals.triageLevel || "stable";
+            badge.className = `vitals-status-pill ${cls}`;
+            badge.textContent = cls.toUpperCase();
+        }
+
+        const summaryEl = $("resAttachedVitalsSummary");
+        if (summaryEl) {
+            const bpStr = vitals.bloodPressure || (vitals.systolic && vitals.diastolic ? `${vitals.systolic}/${vitals.diastolic} mmHg` : "N/A");
+            summaryEl.textContent = `Pulse: ${vitals.pulse} bpm | SpO2: ${vitals.spo2}% | BP: ${bpStr} | AVPU: ${vitals.consciousness || vitals.avpu || "Alert"}`;
+        }
+
+        const timeEl = $("resAttachedVitalsTime");
+        if (timeEl) {
+            const timeStr = vitals.recordedAt ? new Date(vitals.recordedAt).toLocaleTimeString() : "Just now";
+            timeEl.textContent = `Logged at ${timeStr} by Helper (Attached to Rescue Event)`;
+        }
+    }
+}
+
+function clearAttachedRescueVitals() {
+    currentRescueVitals = null;
+    try {
+        sessionStorage.removeItem("medicare_current_rescue_vitals");
+    } catch (_) {}
+    renderAttachedRescueVitals(null);
+    showToast("Attached rescue vitals cleared.");
+}
+
+// Window export bindings for Quick Vitals
+window.openQuickVitalsModal = openQuickVitalsModal;
+window.closeQuickVitalsModal = closeQuickVitalsModal;
+window.applyVitalsPreset = applyVitalsPreset;
+window.stepVital = stepVital;
+window.setPulseVal = setPulseVal;
+window.setSpo2Val = setSpo2Val;
+window.onPulseChanged = onPulseChanged;
+window.onSpo2Changed = onSpo2Changed;
+window.setAvpuLevel = setAvpuLevel;
+window.toggleObservationChip = toggleObservationChip;
+window.updateLiveTriageUI = updateLiveTriageUI;
+window.submitQuickVitals = submitQuickVitals;
+window.renderAttachedRescueVitals = renderAttachedRescueVitals;
+window.clearAttachedRescueVitals = clearAttachedRescueVitals;
 
 
 /* ================= MEDICAL DOCUMENTS & FILE UPLOADS ================= */
@@ -4943,6 +6205,21 @@ window.submitDoctorRegistration = submitDoctorRegistration;
 window.openRegisterModal = openRegisterModal;
 window.closeRegisterModal = closeRegisterModal;
 window.submitRegistration = submitRegistration;
+
+// Registration OTP window exports
+window.handleRegContactInput = handleRegContactInput;
+window.fillRegDemoContact = fillRegDemoContact;
+window.sendRegOTP = sendRegOTP;
+window.quickFillRegOtp = quickFillRegOtp;
+window.verifyRegOTP = verifyRegOTP;
+window.resetRegContact = resetRegContact;
+
+window.handleRegDocContactInput = handleRegDocContactInput;
+window.fillRegDocDemoContact = fillRegDocDemoContact;
+window.sendDocRegOTP = sendDocRegOTP;
+window.quickFillRegDocOtp = quickFillRegDocOtp;
+window.verifyDocRegOTP = verifyDocRegOTP;
+window.resetRegDocContact = resetRegDocContact;
 window.openDoctorChatMode = openDoctorChatMode;
 window.openDoctorChatForPatient = openDoctorChatForPatient;
 window.openDoctorChatFromPortal = openDoctorChatFromPortal;

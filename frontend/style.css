@@ -3457,5 +3457,724 @@ hr {
     }
 }
 
+/* ================= FLOATING QUICK VITALS BUTTON & MINIMAL OVERLAY ================= */
 
+.helper-quick-vitals-fab {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    z-index: 995;
+    background: linear-gradient(135deg, #e11d48, #be123c);
+    color: white;
+    border: none;
+    border-radius: 50px;
+    padding: 13px 22px;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    box-shadow: 0 8px 24px rgba(225, 29, 72, 0.4), 0 2px 6px rgba(0, 0, 0, 0.12);
+    transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease, background 0.2s ease;
+    user-select: none;
+}
 
+.helper-quick-vitals-fab:hover {
+    transform: translateY(-2px) scale(1.03);
+    box-shadow: 0 12px 30px rgba(225, 29, 72, 0.55), 0 4px 10px rgba(0, 0, 0, 0.16);
+    background: linear-gradient(135deg, #f43f5e, #be123c);
+}
+
+.helper-quick-vitals-fab:active {
+    transform: translateY(1px) scale(0.98);
+}
+
+.vitals-fab-icon {
+    font-size: 20px;
+    line-height: 1;
+    display: inline-block;
+    animation: heartBeatPulse 1.8s infinite ease-in-out;
+}
+
+@keyframes heartBeatPulse {
+    0% { transform: scale(1); }
+    14% { transform: scale(1.22); }
+    28% { transform: scale(1); }
+    42% { transform: scale(1.22); }
+    70% { transform: scale(1); }
+}
+
+.vitals-fab-pulse-ring {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    border-radius: 50px;
+    border: 2px solid rgba(244, 63, 94, 0.6);
+    animation: vitalsPulseRing 2.4s infinite cubic-bezier(0.24, 0, 0.38, 1);
+    pointer-events: none;
+}
+
+@keyframes vitalsPulseRing {
+    0% {
+        transform: scale(0.95);
+        opacity: 0.9;
+    }
+    50% {
+        transform: scale(1.15);
+        opacity: 0;
+    }
+    100% {
+        transform: scale(1.15);
+        opacity: 0;
+    }
+}
+
+.vitals-fab-badge {
+    background: #10b981;
+    color: white;
+    font-size: 11px;
+    font-weight: 800;
+    padding: 2px 7px;
+    border-radius: 12px;
+    line-height: 1;
+    border: 1px solid rgba(255, 255, 255, 0.4);
+}
+
+/* Quick Vitals Modal Box & Styling */
+.quick-vitals-modal-box {
+    max-width: 620px;
+    width: 95%;
+    border-radius: 16px;
+    box-shadow: 0 20px 45px rgba(0, 0, 0, 0.2);
+    border-top: 6px solid #e11d48;
+    padding: 22px 24px;
+    background: #ffffff;
+}
+
+.quick-vitals-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-bottom: 14px;
+    border-bottom: 1px solid #f1f5f9;
+    margin-bottom: 14px;
+}
+
+.quick-vitals-icon-badge {
+    width: 42px;
+    height: 42px;
+    border-radius: 10px;
+    background: #ffe4e6;
+    color: #e11d48;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    flex-shrink: 0;
+}
+
+.vitals-context-bar {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 12.5px;
+    color: #334155;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 14px;
+    flex-wrap: wrap;
+}
+
+.vitals-context-bar.context-matched {
+    background: #f0fdf4;
+    border-color: #86efac;
+    color: #166534;
+}
+
+.vitals-fast-presets {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: #fff1f2;
+    border: 1px dashed #fecdd3;
+    border-radius: 8px;
+    padding: 8px 12px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+}
+
+.preset-pill {
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 4px 10px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    color: #1e293b;
+}
+
+.preset-pill:hover {
+    background: #f8fafc;
+    border-color: #94a3b8;
+    transform: translateY(-1px);
+}
+
+.preset-pill.preset-normal:hover {
+    border-color: #16a34a;
+    color: #15803d;
+}
+
+.preset-pill.preset-tachy:hover {
+    border-color: #f59e0b;
+    color: #b45309;
+}
+
+.preset-pill.preset-hypoxia:hover {
+    border-color: #dc2626;
+    color: #b91c1c;
+}
+
+/* Vitals Inputs Grid */
+.vitals-inputs-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+}
+
+.vital-input-card {
+    background: #f8fafc;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.vital-input-card:focus-within {
+    border-color: #0284c7;
+    box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.12);
+}
+
+.vital-label-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.vital-label-row label {
+    font-size: 13px;
+    font-weight: 700;
+    color: #0f172a;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0;
+}
+
+.vital-status-pill {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 7px;
+    border-radius: 10px;
+    line-height: 1.2;
+}
+
+.vital-status-pill.pill-normal {
+    background: #dcfce7;
+    color: #166534;
+    border: 1px solid #86efac;
+}
+
+.vital-status-pill.pill-warning {
+    background: #fef3c7;
+    color: #92400e;
+    border: 1px solid #fde68a;
+}
+
+.vital-status-pill.pill-critical {
+    background: #fee2e2;
+    color: #991b1b;
+    border: 1px solid #fca5a5;
+    animation: flashCritical 1.4s infinite;
+}
+
+@keyframes flashCritical {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.75; }
+}
+
+.vital-hint {
+    font-size: 11px;
+    color: #64748b;
+    font-weight: 500;
+}
+
+/* Number Stepper Control */
+.vital-number-control {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+
+.vital-number-control .stepper-btn {
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    color: #334155;
+    font-size: 13px;
+    font-weight: 800;
+    padding: 8px 10px;
+    border-radius: 8px;
+    cursor: pointer;
+    min-width: 40px;
+    min-height: 40px;
+    transition: background 0.15s, border-color 0.15s;
+    user-select: none;
+}
+
+.vital-number-control .stepper-btn:hover {
+    background: #f1f5f9;
+    border-color: #94a3b8;
+}
+
+.vital-number-control .stepper-btn:active {
+    background: #e2e8f0;
+}
+
+.vital-input-wrapper {
+    position: relative;
+    flex: 1;
+}
+
+.vital-input-wrapper input {
+    width: 100%;
+    padding: 8px 46px 8px 12px;
+    font-size: 18px;
+    font-weight: 800;
+    color: #0f172a;
+    border: 1.5px solid #cbd5e1;
+    border-radius: 8px;
+    box-sizing: border-box;
+    text-align: center;
+}
+
+.vital-input-wrapper .unit-suffix {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 12px;
+    font-weight: 700;
+    color: #64748b;
+    pointer-events: none;
+}
+
+.vital-chips-row {
+    display: flex;
+    gap: 5px;
+    flex-wrap: wrap;
+}
+
+.chip-val {
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    font-size: 11.5px;
+    font-weight: 600;
+    padding: 3px 7px;
+    color: #475569;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.chip-val:hover {
+    background: #f1f5f9;
+    border-color: #94a3b8;
+}
+
+.chip-val.active {
+    background: #0284c7;
+    color: white;
+    border-color: #0284c7;
+    font-weight: 700;
+}
+
+.chip-val.critical {
+    color: #dc2626;
+    border-color: #fca5a5;
+}
+
+/* AVPU Scale Selector */
+.avpu-selector {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+    margin-top: 4px;
+}
+
+.avpu-btn {
+    background: #ffffff;
+    border: 1.5px solid #cbd5e1;
+    border-radius: 8px;
+    padding: 6px 4px;
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.15s;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+.avpu-btn b {
+    font-size: 14px;
+    color: #0f172a;
+}
+
+.avpu-btn span {
+    font-size: 10px;
+    color: #64748b;
+    margin-top: 2px;
+}
+
+.avpu-btn:hover {
+    border-color: #0284c7;
+    background: #f0f9ff;
+}
+
+.avpu-btn.active {
+    background: #0284c7;
+    border-color: #0284c7;
+}
+
+.avpu-btn.active b,
+.avpu-btn.active span {
+    color: white;
+}
+
+.avpu-btn.critical.active {
+    background: #dc2626;
+    border-color: #dc2626;
+}
+
+/* BP Quick Inputs */
+.bp-inputs-row {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.bp-quick-chips {
+    display: flex;
+    gap: 5px;
+}
+
+/* Observation Chips */
+.obs-chip {
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    font-size: 11.5px;
+    font-weight: 500;
+    padding: 4px 8px;
+    color: #334155;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.obs-chip:hover {
+    background: #f1f5f9;
+}
+
+.obs-chip.selected {
+    background: #ffe4e6;
+    border-color: #f43f5e;
+    color: #be123c;
+    font-weight: 700;
+}
+
+/* Dynamic Live Triage Alert Box */
+.vitals-live-triage {
+    border-radius: 10px;
+    padding: 12px 14px;
+    transition: background 0.25s, border-color 0.25s;
+}
+
+.vitals-live-triage.triage-alert-stable {
+    background: #f0fdf4;
+    border: 1.5px solid #86efac;
+}
+
+.vitals-live-triage.triage-alert-warning {
+    background: #fffbeb;
+    border: 1.5px solid #fde68a;
+}
+
+.vitals-live-triage.triage-alert-critical {
+    background: #fef2f2;
+    border: 2px solid #ef4444;
+}
+
+.quick-vitals-modal-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-top: 1px solid #f1f5f9;
+    padding-top: 14px;
+    margin-top: 14px;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.btn-emergency-vitals-save {
+    background: #e11d48;
+    color: white;
+    border: none;
+    font-size: 14px;
+    font-weight: 800;
+    padding: 11px 22px;
+    border-radius: 8px;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(225, 29, 72, 0.3);
+    transition: all 0.2s;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.btn-emergency-vitals-save:hover {
+    background: #be123c;
+    transform: translateY(-1px);
+    box-shadow: 0 6px 16px rgba(225, 29, 72, 0.4);
+}
+
+.btn-emergency-vitals-save:active {
+    transform: translateY(1px);
+}
+
+/* Attached Rescue Vitals Card in Helper Dashboard */
+.vitals-attached-card {
+    background: #ffffff;
+    border: 2px solid #38bdf8;
+    border-radius: 14px;
+    padding: 16px 20px;
+    box-shadow: 0 4px 16px rgba(2, 132, 199, 0.12);
+    margin-bottom: 0;
+    animation: fadeInSlideDown 0.3s ease;
+}
+
+@keyframes fadeInSlideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.vitals-attached-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #e0f2fe;
+    padding-bottom: 10px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.vitals-header-pulse-icon {
+    font-size: 22px;
+    animation: heartBeatPulse 1.8s infinite;
+}
+
+.triage-badge {
+    font-size: 11.5px;
+    font-weight: 800;
+    padding: 3px 9px;
+    border-radius: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.triage-badge.triage-stable {
+    background: #dcfce7;
+    color: #166534;
+    border: 1px solid #86efac;
+}
+
+.triage-badge.triage-warning {
+    background: #fef3c7;
+    color: #92400e;
+    border: 1px solid #fde68a;
+}
+
+.triage-badge.triage-critical {
+    background: #fee2e2;
+    color: #991b1b;
+    border: 1.5px solid #ef4444;
+}
+
+.vitals-metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+}
+
+.vital-metric-chip {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 10px 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.vital-metric-chip .metric-icon {
+    font-size: 20px;
+}
+
+.vital-metric-chip .metric-body {
+    display: flex;
+    flex-direction: column;
+}
+
+.vital-metric-chip .metric-label {
+    font-size: 10.5px;
+    font-weight: 700;
+    color: #64748b;
+    text-transform: uppercase;
+}
+
+.vital-metric-chip .metric-value {
+    font-size: 16px;
+    font-weight: 800;
+    color: #0f172a;
+}
+
+.vital-metric-chip .metric-tag {
+    font-size: 10.5px;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 6px;
+}
+
+.vital-metric-chip .metric-tag.tag-normal {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.vital-metric-chip .metric-tag.tag-warning {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.vital-metric-chip .metric-tag.tag-critical {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+.vital-metric-chip .metric-tag.tag-neutral {
+    background: #f1f5f9;
+    color: #64748b;
+}
+
+.vitals-notes-preview {
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px dashed #e2e8f0;
+    font-size: 12px;
+    color: #475569;
+}
+
+/* Mobile responsive adjustments for Quick Vitals */
+@media (max-width: 640px) {
+    .vitals-inputs-grid {
+        grid-template-columns: 1fr !important;
+        gap: 10px !important;
+    }
+
+    .vitals-metrics-grid {
+        grid-template-columns: 1fr 1fr !important;
+        gap: 8px !important;
+    }
+
+    .helper-quick-vitals-fab {
+        bottom: 16px !important;
+        right: 16px !important;
+        padding: 11px 18px !important;
+        font-size: 13.5px !important;
+    }
+
+    .quick-vitals-modal-footer {
+        flex-direction: column-reverse !important;
+    }
+
+    .quick-vitals-modal-footer button {
+        width: 100% !important;
+        justify-content: center !important;
+        min-height: 44px !important;
+    }
+}
+
+/* ================= REGISTRATION OTP VERIFICATION STYLES ================= */
+.reg-otp-verification-container {
+    background: #f8fafc;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 14px;
+    margin-bottom: 14px;
+    transition: all 0.2s ease;
+}
+
+.reg-otp-verification-container.verified {
+    border-color: #86efac;
+    background: #f0fdf4;
+}
+
+.reg-otp-verification-container.has-error {
+    border-color: #fca5a5;
+    background: #fef2f2;
+}
+
+.btn-micro {
+    padding: 3px 8px;
+    font-size: 11px;
+    font-weight: 500;
+    background: #f1f5f9;
+    color: #475569;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+}
+
+.btn-micro:hover {
+    background: #e2e8f0;
+    color: #0f172a;
+}
+
+.btn-micro:active {
+    transform: scale(0.97);
+}
+
+.modal-card {
+    max-height: 90vh;
+    overflow-y: auto;
+}

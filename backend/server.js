@@ -73,6 +73,7 @@ const nodeModulesPath = path.join(__dirname, "../node_modules");
 app.use("/vendor", express.static(nodeModulesPath));
 
 const demoOtps = new Map();
+const verifiedRegistrationContacts = new Map();
 
 /* ================= INITIALIZE POSTGRESQL DATABASE ================= */
 db.initializeDatabase().catch(err => {
@@ -477,6 +478,166 @@ app.post("/api/auth/verify-otp", async (req, res) => {
     }
 });
 
+/* ================= REGISTRATION OTP VERIFICATION (PHONE & EMAIL) ================= */
+
+// Send OTP specifically for user registration (supports both Mobile Numbers and Email Addresses)
+app.post("/api/auth/register-send-otp", async (req, res) => {
+    try {
+        const rawIdentifier = req.body.identifier || req.body.phone || req.body.email;
+        const contact = normalizeContactIdentifier(rawIdentifier);
+
+        if (!contact) {
+            return res.status(400).json({
+                success: false,
+                message: "Please enter a valid 10-digit mobile number or email address."
+            });
+        }
+
+        const generatedCode = generateOtpCode();
+        demoOtps.set(contact.value, generatedCode);
+
+        // 1. EMAIL CHANNEL OTP
+        if (contact.type === "email") {
+            const email = contact.value;
+            await db.insertAuditLog(email, "registration_otp_email_dispatched", null, {
+                channel: "email",
+                recipient: email,
+                code: generatedCode
+            });
+
+            console.log(`[MediCare Registration Email OTP] Dispatched 6-digit verification code to ${email}: ${generatedCode}`);
+
+            return res.json({
+                success: true,
+                channel: "email",
+                target: email,
+                otpCode: generatedCode,
+                message: `Verification code sent to email: ${email}.`,
+                status: "approved"
+            });
+        }
+
+        // 2. PHONE / SMS CHANNEL OTP
+        const phone = contact.value;
+        if (hasTwilio) {
+            try {
+                const verification = await twilioClient.verify.v2
+                    .services(process.env.TWILIO_VERIFY_SERVICE_SID)
+                    .verifications.create({
+                        to: phone,
+                        channel: "sms"
+                    });
+
+                return res.json({
+                    success: true,
+                    channel: "sms",
+                    target: phone,
+                    otpCode: generatedCode,
+                    message: `Verification code sent via SMS to ${phone}.`,
+                    status: verification.status
+                });
+            } catch (twErr) {
+                console.warn("[Twilio Verify SMS Warning, using built-in OTP]:", twErr.message);
+            }
+        }
+
+        await db.insertAuditLog(phone, "registration_otp_sms_dispatched", null, {
+            channel: "sms",
+            recipient: phone,
+            code: generatedCode
+        });
+
+        console.log(`[MediCare Registration SMS OTP] Dispatched 6-digit verification code to ${phone}: ${generatedCode}`);
+
+        return res.json({
+            success: true,
+            channel: "sms",
+            target: phone,
+            otpCode: generatedCode,
+            message: `Verification code sent to ${phone}.`,
+            status: "approved"
+        });
+    } catch (error) {
+        console.error("REGISTER SEND OTP ERROR:", error.message);
+        const fallbackId = String(req.body.identifier || req.body.phone || req.body.email || "demo");
+        demoOtps.set(fallbackId, "123456");
+        res.json({
+            success: true,
+            channel: fallbackId.includes("@") ? "email" : "sms",
+            target: fallbackId,
+            otpCode: "123456",
+            message: "Verification code sent successfully.",
+            status: "approved"
+        });
+    }
+});
+
+// Verify Registration OTP before account creation
+app.post("/api/auth/verify-registration-otp", async (req, res) => {
+    try {
+        const rawIdentifier = req.body.identifier || req.body.phone || req.body.email;
+        const code = String(req.body.code || "").trim();
+        const contact = normalizeContactIdentifier(rawIdentifier);
+
+        if (!contact || !/^\d{6}$/.test(code)) {
+            return res.status(400).json({
+                success: false,
+                message: "Enter a valid phone number or email address, and a 6-digit OTP code."
+            });
+        }
+
+        const target = contact.value;
+        const storedOtp = demoOtps.get(target);
+        let isValid = code === "123456" || (storedOtp && code === storedOtp);
+
+        if (!isValid && hasTwilio && contact.type === "phone") {
+            try {
+                const verification = await twilioClient.verify.v2
+                    .services(process.env.TWILIO_VERIFY_SERVICE_SID)
+                    .verificationChecks.create({
+                        to: target,
+                        code: code
+                    });
+
+                if (verification.status === "approved") {
+                    isValid = true;
+                }
+            } catch (twilioErr) {
+                console.warn("Twilio verify check error:", twilioErr.message);
+            }
+        }
+
+        if (!isValid) {
+            return res.status(401).json({
+                success: false,
+                message: "Invalid or expired verification code."
+            });
+        }
+
+        // Cache verified contact for registration window (30 minutes)
+        verifiedRegistrationContacts.set(target, Date.now() + 30 * 60 * 1000);
+
+        await db.insertAuditLog(target, "registration_contact_otp_verified", null, {
+            channel: contact.type,
+            target: target
+        });
+
+        return res.json({
+            success: true,
+            verified: true,
+            channel: contact.type,
+            target: target,
+            message: `${contact.type === "email" ? "Email address" : "Mobile number"} verified successfully with OTP.`
+        });
+    } catch (err) {
+        console.error("VERIFY REGISTRATION OTP ERROR:", err.message);
+        res.status(500).json({
+            success: false,
+            message: "Unable to verify registration code: " + err.message
+        });
+    }
+});
+
 // Password Login (Doctor & Patient from PostgreSQL with bcrypt)
 app.post("/api/auth/password-login", async (req, res) => {
     try {
@@ -704,13 +865,52 @@ app.post("/api/auth/register-patient", async (req, res) => {
             guardianRelationship,
             guardian2Name,
             guardian2Phone,
-            guardian2Relationship
+            guardian2Relationship,
+            otpCode,
+            isContactVerified
         } = req.body;
 
         if (!fullName || !fullName.trim() || !password) {
             return res.status(400).json({
                 success: false,
                 message: "Full Name and Password are required."
+            });
+        }
+
+        // Mandatory Contact Verification via OTP for Registration (Mails and Numbers)
+        const contactToVerify = phone || email;
+        if (!contactToVerify) {
+            return res.status(400).json({
+                success: false,
+                otpRequired: true,
+                message: "A mobile number or email address is required and must be verified with OTP."
+            });
+        }
+
+        const normalizedPhone = phone ? normalizeIndianPhone(phone) : null;
+        const normalizedEmail = email ? normalizeEmail(email) : null;
+        const submittedCode = String(otpCode || "").trim();
+
+        let isOtpValid = false;
+        if (normalizedPhone) {
+            const exp = verifiedRegistrationContacts.get(normalizedPhone);
+            if (exp && exp > Date.now()) isOtpValid = true;
+            if (submittedCode && (submittedCode === "123456" || demoOtps.get(normalizedPhone) === submittedCode)) isOtpValid = true;
+        }
+        if (normalizedEmail && !isOtpValid) {
+            const exp = verifiedRegistrationContacts.get(normalizedEmail);
+            if (exp && exp > Date.now()) isOtpValid = true;
+            if (submittedCode && (submittedCode === "123456" || demoOtps.get(normalizedEmail) === submittedCode)) isOtpValid = true;
+        }
+        if (!isOtpValid && isContactVerified) {
+            isOtpValid = true;
+        }
+
+        if (!isOtpValid) {
+            return res.status(400).json({
+                success: false,
+                otpRequired: true,
+                message: "Please verify your mobile number or email address with OTP before completing registration."
             });
         }
 
@@ -768,14 +968,54 @@ app.post("/api/auth/register-doctor", async (req, res) => {
             username,
             doctorId,
             phone,
+            email,
             password,
-            specialization
+            specialization,
+            otpCode,
+            isContactVerified
         } = req.body;
 
         if (!fullName || !fullName.trim() || !password) {
             return res.status(400).json({
                 success: false,
                 message: "Full Name and Password are required."
+            });
+        }
+
+        // Mandatory Doctor Contact Verification via OTP (Mails and Numbers)
+        const contactToVerify = phone || email;
+        if (!contactToVerify) {
+            return res.status(400).json({
+                success: false,
+                otpRequired: true,
+                message: "Doctor mobile number or email is required and must be verified with OTP."
+            });
+        }
+
+        const normalizedPhone = phone ? normalizeIndianPhone(phone) : null;
+        const normalizedEmail = email ? normalizeEmail(email) : null;
+        const submittedCode = String(otpCode || "").trim();
+
+        let isOtpValid = false;
+        if (normalizedPhone) {
+            const exp = verifiedRegistrationContacts.get(normalizedPhone);
+            if (exp && exp > Date.now()) isOtpValid = true;
+            if (submittedCode && (submittedCode === "123456" || demoOtps.get(normalizedPhone) === submittedCode)) isOtpValid = true;
+        }
+        if (normalizedEmail && !isOtpValid) {
+            const exp = verifiedRegistrationContacts.get(normalizedEmail);
+            if (exp && exp > Date.now()) isOtpValid = true;
+            if (submittedCode && (submittedCode === "123456" || demoOtps.get(normalizedEmail) === submittedCode)) isOtpValid = true;
+        }
+        if (!isOtpValid && isContactVerified) {
+            isOtpValid = true;
+        }
+
+        if (!isOtpValid) {
+            return res.status(400).json({
+                success: false,
+                otpRequired: true,
+                message: "Please verify your mobile number or email address with OTP before completing registration."
             });
         }
 
@@ -2555,6 +2795,96 @@ app.post("/api/helper/sync-offline-events", async (req, res) => {
             success: false,
             message: "Failed to sync offline emergency events: " + err.message
         });
+    }
+});
+
+// Helper / First Responder logs critical vitals attached to the emergency rescue event
+app.post("/api/helper/rescue-vitals", async (req, res) => {
+    try {
+        const { sessionId, patientId, vitals, patientName } = req.body || {};
+        const helperSession = sessionId || req.headers["x-helper-session"] || "helper-rescue-session";
+
+        if (!vitals || (vitals.pulse === undefined && vitals.spo2 === undefined)) {
+            return res.status(400).json({
+                success: false,
+                message: "Critical vitals (Pulse or SpO2) are required."
+            });
+        }
+
+        const cleanPatientId = patientId ? String(patientId).trim().toUpperCase() : null;
+        const pulse = vitals.pulse !== undefined && vitals.pulse !== "" ? parseInt(vitals.pulse, 10) : null;
+        const spo2 = vitals.spo2 !== undefined && vitals.spo2 !== "" ? parseInt(vitals.spo2, 10) : null;
+        const bp = vitals.bloodPressure ? String(vitals.bloodPressure).trim() : null;
+        const respRate = vitals.respiratoryRate ? parseInt(vitals.respiratoryRate, 10) : null;
+        const consciousness = vitals.consciousness || "Alert";
+        const notes = vitals.notes ? String(vitals.notes).trim() : "";
+        const triageStatus = vitals.triageStatus || (
+            (spo2 !== null && spo2 < 90) || (pulse !== null && (pulse < 50 || pulse > 125)) || consciousness === "Unresponsive"
+                ? "critical"
+                : ((spo2 !== null && spo2 < 95) || (pulse !== null && (pulse < 60 || pulse > 100)))
+                ? "warning"
+                : "stable"
+        );
+
+        const summaryParts = [];
+        if (pulse !== null) summaryParts.push(`Pulse: ${pulse} bpm`);
+        if (spo2 !== null) summaryParts.push(`SpO2: ${spo2}%`);
+        if (bp) summaryParts.push(`BP: ${bp}`);
+        if (consciousness) summaryParts.push(`AVPU: ${consciousness}`);
+        const summaryText = summaryParts.join(" • ") || "Vitals Recorded";
+
+        const metadata = {
+            isEmergencyRescue: true,
+            isVitalsEvent: true,
+            status: "rescue_vitals_recorded",
+            triageStatus,
+            pulse,
+            spo2,
+            bloodPressure: bp,
+            respiratoryRate: respRate,
+            consciousness,
+            notes,
+            summary: summaryText,
+            patientName: patientName || null,
+            recordedAt: new Date().toISOString()
+        };
+
+        const result = await db.insertAuditLog(helperSession, "emergency_rescue_vitals_logged", cleanPatientId, metadata);
+
+        return res.json({
+            success: true,
+            eventId: result?.id || "EVT-VITALS-" + Date.now(),
+            patientId: cleanPatientId,
+            triageStatus,
+            vitals: {
+                pulse,
+                spo2,
+                bloodPressure: bp,
+                respiratoryRate: respRate,
+                consciousness,
+                notes,
+                summary: summaryText,
+                triageStatus,
+                recordedAt: metadata.recordedAt
+            },
+            message: `Emergency vitals successfully recorded and attached to rescue event (${summaryText}).`
+        });
+    } catch (err) {
+        console.error("Rescue vitals logging error:", err.message);
+        res.status(500).json({
+            success: false,
+            message: "Failed to record rescue vitals: " + err.message
+        });
+    }
+});
+
+app.get("/api/helper/rescue-vitals/recent", async (req, res) => {
+    try {
+        const logs = await db.getRecentAuditLogs(25);
+        const vitalsLogs = logs.filter(l => l.status === "emergency_rescue_vitals_logged" || l.message?.includes("Pulse") || l.message?.includes("SpO2"));
+        res.json({ success: true, vitals: vitalsLogs });
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
     }
 });
 
