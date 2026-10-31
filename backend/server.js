@@ -67,7 +67,15 @@ app.use(
 app.use(express.json({ limit: "15mb" }));
 
 const frontendPath = path.join(__dirname, "../frontend");
-app.use(express.static(frontendPath));
+app.use(express.static(frontendPath, {
+    setHeaders: (res, filePath) => {
+        if (filePath.endsWith(".html") || filePath.endsWith(".js") || filePath.endsWith(".css")) {
+            res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+            res.setHeader("Pragma", "no-cache");
+            res.setHeader("Expires", "0");
+        }
+    }
+}));
 
 const nodeModulesPath = path.join(__dirname, "../node_modules");
 app.use("/vendor", express.static(nodeModulesPath));
@@ -80,19 +88,58 @@ db.initializeDatabase().catch(err => {
     console.error("Database startup initialization error:", err.message);
 });
 
-/* ================= TWILIO ================= */
-const hasTwilio = Boolean(
-    process.env.TWILIO_ACCOUNT_SID &&
-    !process.env.TWILIO_ACCOUNT_SID.includes("xxx") &&
-    process.env.TWILIO_AUTH_TOKEN &&
-    !process.env.TWILIO_AUTH_TOKEN.includes("xxx") &&
-    process.env.TWILIO_VERIFY_SERVICE_SID &&
-    !process.env.TWILIO_VERIFY_SERVICE_SID.includes("xxx")
-);
+/* ================= TWILIO VERIFY API SETUP ================= */
+function getTwilioConfig() {
+    try {
+        const envPath = path.join(__dirname, "../.env");
+        if (fs.existsSync(envPath)) {
+            const envContent = fs.readFileSync(envPath, "utf8");
+            const parsed = dotenv.parse(envContent);
+            for (const [k, v] of Object.entries(parsed)) {
+                if (v && (!process.env[k] || process.env[k] !== v)) {
+                    process.env[k] = v;
+                }
+            }
+        }
+    } catch (_) {}
 
-const twilioClient = hasTwilio
-    ? twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN)
-    : null;
+    const accountSid = (process.env.TWILIO_ACCOUNT_SID || "").trim();
+    const authToken = (process.env.TWILIO_AUTH_TOKEN || "").trim();
+    const verifySid = (process.env.TWILIO_VERIFY_SERVICE_SID || "").trim();
+
+    const isConfigured = Boolean(
+        accountSid &&
+        !accountSid.includes("xxx") &&
+        authToken &&
+        !authToken.includes("xxx") &&
+        verifySid &&
+        !verifySid.includes("xxx")
+    );
+
+    return {
+        isConfigured,
+        accountSid,
+        authToken,
+        verifySid,
+        hasAccountSid: Boolean(accountSid && !accountSid.includes("xxx")),
+        hasAuthToken: Boolean(authToken && !authToken.includes("xxx")),
+        hasVerifySid: Boolean(verifySid && !verifySid.includes("xxx"))
+    };
+}
+
+let cachedTwilioClient = null;
+let lastTwilioKey = "";
+
+function getTwilioClient() {
+    const config = getTwilioConfig();
+    if (!config.isConfigured) return null;
+    const key = `${config.accountSid}:${config.authToken}`;
+    if (!cachedTwilioClient || lastTwilioKey !== key) {
+        cachedTwilioClient = twilio(config.accountSid, config.authToken);
+        lastTwilioKey = key;
+    }
+    return cachedTwilioClient;
+}
 
 /* ================= JWT ================= */
 const JWT_SECRET = process.env.JWT_SECRET || "MEDICARE_SECURE_JWT_SECRET_PROD";
@@ -224,12 +271,15 @@ app.get("/api/health", async (req, res) => {
         dbStatus = "disconnected";
     }
 
+    const twilioCfg = getTwilioConfig();
+
     res.json({
         success: true,
         backend: "online",
         database: "PostgreSQL",
         databaseStatus: dbStatus,
-        otpProvider: hasTwilio ? "Twilio" : "Demo Mode (123456)",
+        otpProvider: twilioCfg.isConfigured ? "Twilio Verify API" : "Demo Mode (123456)",
+        twilioConfigured: twilioCfg.isConfigured,
         faceIdentificationService: hasRealFaceService
             ? (hasAwsRekognition ? "AWS Rekognition" : "Azure Face API")
             : "Not configured"
@@ -304,52 +354,76 @@ app.post("/api/auth/send-otp", async (req, res) => {
                 channel: "email",
                 target: email,
                 otpCode: generatedCode,
-                message: `Verification code sent to email: ${email}.`,
+                isRealSms: false,
+                isDemoMode: true,
+                message: `Demo Mode: Verification code generated for ${email}. Enter code ${generatedCode} or universal test code 123456.`,
                 status: "approved"
             });
         }
 
         // 2. PHONE / SMS CHANNEL OTP
         const phone = contact.value;
-        demoOtps.set(phone, generatedCode);
+        const twilioCfg = getTwilioConfig();
 
-        if (hasTwilio) {
+        if (twilioCfg.isConfigured) {
             try {
-                const verification = await twilioClient.verify.v2
-                    .services(process.env.TWILIO_VERIFY_SERVICE_SID)
+                const client = getTwilioClient();
+                const verification = await client.verify.v2
+                    .services(twilioCfg.verifySid)
                     .verifications.create({
                         to: phone,
                         channel: "sms"
                     });
 
+                await db.insertAuditLog(phone, "twilio_verify_dispatched", null, {
+                    channel: "sms",
+                    recipient: phone,
+                    verificationSid: verification.sid,
+                    status: verification.status
+                });
+
+                console.log(`[Twilio Verify] Live SMS OTP dispatched to ${phone}. SID: ${verification.sid}`);
+
                 return res.json({
                     success: true,
                     channel: "sms",
                     target: phone,
-                    otpCode: generatedCode,
-                    message: `Verification code sent via SMS to ${phone}.`,
-                    status: verification.status
+                    isRealSms: true,
+                    isDemoMode: false,
+                    verificationSid: verification.sid,
+                    status: verification.status,
+                    message: `Verification code successfully dispatched via SMS to ${phone}.`
                 });
             } catch (twErr) {
-                console.warn("[Twilio Verify SMS Warning, using built-in OTP]:", twErr.message);
+                console.error("[Twilio Verify SMS Error]:", twErr);
+                return res.status(twErr.status || 400).json({
+                    success: false,
+                    isRealSms: false,
+                    isDemoMode: false,
+                    code: twErr.code,
+                    message: `Twilio Verify error: ${twErr.message}`
+                });
             }
         }
 
-        // Audit log SMS delivery
+        // Audit log simulated SMS delivery in Demo Mode
+        demoOtps.set(phone, generatedCode);
         await db.insertAuditLog(phone, "otp_sms_dispatched", null, {
             channel: "sms",
             recipient: phone,
             code: generatedCode
         });
 
-        console.log(`[MediCare SMS OTP Service] Dispatched 6-digit verification code to ${phone}: ${generatedCode}`);
+        console.log(`[MediCare SMS OTP Service] (Demo) Dispatched 6-digit verification code to ${phone}: ${generatedCode}`);
 
         return res.json({
             success: true,
             channel: "sms",
             target: phone,
             otpCode: generatedCode,
-            message: `Verification code sent to ${phone}.`,
+            isRealSms: false,
+            isDemoMode: true,
+            message: `Demo Mode: Verification code generated for ${phone}. Enter code ${generatedCode} or universal test code 123456.`,
             status: "approved"
         });
     } catch (error) {
@@ -367,6 +441,183 @@ app.post("/api/auth/send-otp", async (req, res) => {
     }
 });
 
+/* ================= TWILIO VERIFY SPECIFIC ENDPOINTS ================= */
+
+// Check Twilio Verify Service configuration status
+app.get("/api/auth/twilio/status", (req, res) => {
+    const cfg = getTwilioConfig();
+    res.json({
+        success: true,
+        configured: cfg.isConfigured,
+        hasAccountSid: cfg.hasAccountSid,
+        hasAuthToken: cfg.hasAuthToken,
+        hasVerifySid: cfg.hasVerifySid,
+        accountSidMasked: cfg.hasAccountSid ? (cfg.accountSid.slice(0, 6) + "..." + cfg.accountSid.slice(-4)) : null,
+        verifySidMasked: cfg.hasVerifySid ? (cfg.verifySid.slice(0, 6) + "..." + cfg.verifySid.slice(-4)) : null,
+        instructions: cfg.isConfigured
+            ? "Twilio Verify API is active and ready to dispatch live SMS."
+            : "Twilio Verify is in Demo Mode. Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_VERIFY_SERVICE_SID in .env to dispatch live SMS."
+    });
+});
+
+// Explicit Twilio Verify OTP trigger
+app.post("/api/auth/twilio/send-verification", async (req, res) => {
+    try {
+        const rawPhone = req.body.phone || req.body.identifier;
+        const phone = normalizeIndianPhone(rawPhone);
+
+        if (!phone) {
+            return res.status(400).json({
+                success: false,
+                message: "Please enter a valid mobile number with country code (e.g. +919876543210 or 10-digit number)."
+            });
+        }
+
+        const cfg = getTwilioConfig();
+        if (!cfg.isConfigured) {
+            return res.status(400).json({
+                success: false,
+                configured: false,
+                message: "Twilio Verify API is not configured. Missing TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, or TWILIO_VERIFY_SERVICE_SID in environment variables.",
+                requiredEnv: ["TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_VERIFY_SERVICE_SID"]
+            });
+        }
+
+        const client = getTwilioClient();
+        const verification = await client.verify.v2
+            .services(cfg.verifySid)
+            .verifications.create({
+                to: phone,
+                channel: "sms"
+            });
+
+        await db.insertAuditLog(phone, "twilio_verify_explicit_dispatched", null, {
+            channel: "sms",
+            recipient: phone,
+            verificationSid: verification.sid,
+            status: verification.status
+        });
+
+        console.log(`[Twilio Verify API] Direct dispatch to ${phone}. SID: ${verification.sid}`);
+
+        return res.json({
+            success: true,
+            isRealSms: true,
+            channel: "sms",
+            target: phone,
+            verificationSid: verification.sid,
+            status: verification.status,
+            message: `Live verification code dispatched via Twilio Verify SMS to ${phone}.`
+        });
+    } catch (err) {
+        console.error("Twilio Verify API Dispatch Error:", err);
+        return res.status(err.status || 500).json({
+            success: false,
+            isRealSms: false,
+            error: err.message,
+            code: err.code,
+            message: `Twilio Verify dispatch failed: ${err.message}`
+        });
+    }
+});
+
+// Explicit Twilio Verify OTP check & login
+app.post("/api/auth/twilio/check-verification", async (req, res) => {
+    try {
+        const rawPhone = req.body.phone || req.body.identifier;
+        const code = String(req.body.code || "").trim();
+        const phone = normalizeIndianPhone(rawPhone);
+
+        if (!phone || !/^\d{4,8}$/.test(code)) {
+            return res.status(400).json({
+                success: false,
+                message: "Enter a valid phone number and the verification code sent to your phone."
+            });
+        }
+
+        const cfg = getTwilioConfig();
+        if (!cfg.isConfigured) {
+            return res.status(400).json({
+                success: false,
+                message: "Twilio Verify API is not configured."
+            });
+        }
+
+        const client = getTwilioClient();
+        const verificationCheck = await client.verify.v2
+            .services(cfg.verifySid)
+            .verificationChecks.create({
+                to: phone,
+                code: code
+            });
+
+        if (verificationCheck.status !== "approved") {
+            return res.status(401).json({
+                success: false,
+                verified: false,
+                status: verificationCheck.status,
+                message: "Invalid or expired Twilio verification code."
+            });
+        }
+
+        const requestedRole = req.body.role;
+        if (requestedRole === "doctor") {
+            const doctor = await db.findDoctorByIdentifier(phone);
+            if (doctor) {
+                await db.insertAuditLog(doctor.doctorId, "doctor_twilio_verify_login", null, {
+                    channel: "sms",
+                    target: phone
+                });
+                const token = createToken({
+                    role: "doctor",
+                    doctorId: doctor.doctorId,
+                    name: doctor.name
+                });
+                return res.json({
+                    success: true,
+                    verified: true,
+                    role: "doctor",
+                    token: token,
+                    doctorId: doctor.doctorId,
+                    name: doctor.name,
+                    message: `Dr. ${doctor.name} verified successfully via Twilio Verify.`
+                });
+            }
+        }
+
+        const patient = await db.findOrCreatePatientByPhone(phone);
+        await db.insertAuditLog(patient.patientId, "patient_twilio_verify_login", patient.patientId, {
+            channel: "sms",
+            target: phone
+        });
+
+        const token = createToken({
+            role: "patient",
+            patientId: patient.patientId,
+            phone: patient.phone,
+            email: patient.email
+        });
+
+        return res.json({
+            success: true,
+            verified: true,
+            token: token,
+            patientId: patient.patientId,
+            role: "patient",
+            phone: patient.phone,
+            message: "Mobile number verified successfully via Twilio Verify."
+        });
+    } catch (err) {
+        console.error("Twilio Verify Check Error:", err);
+        return res.status(err.status || 500).json({
+            success: false,
+            error: err.message,
+            code: err.code,
+            message: `Verification check failed: ${err.message}`
+        });
+    }
+});
+
 // Verify OTP & Register/Login to PostgreSQL (supports both Phone and Email)
 app.post("/api/auth/verify-otp", async (req, res) => {
     try {
@@ -374,33 +625,37 @@ app.post("/api/auth/verify-otp", async (req, res) => {
         const code = String(req.body.code || "").trim();
         const contact = normalizeContactIdentifier(rawIdentifier);
 
-        if (!contact || !/^\d{6}$/.test(code)) {
+        if (!contact || !/^\d{4,8}$/.test(code)) {
             return res.status(400).json({
                 success: false,
-                message: "Enter a valid phone number or email address, and a 6-digit OTP code."
+                message: "Enter a valid phone number or email address, and a valid verification code."
             });
         }
 
         const target = contact.value;
         const storedOtp = demoOtps.get(target);
-        let isValid = code === "123456" || (storedOtp && code === storedOtp);
+        const twilioCfg = getTwilioConfig();
+        let isValid = code === "123456";
 
-        // If phone and Twilio is configured, also attempt Twilio check if not already matched
-        if (!isValid && hasTwilio && contact.type === "phone") {
+        // If phone and Twilio Verify is configured, check with Twilio Verify API
+        if (!isValid && contact.type === "phone" && twilioCfg.isConfigured) {
             try {
-                const verification = await twilioClient.verify.v2
-                    .services(process.env.TWILIO_VERIFY_SERVICE_SID)
+                const client = getTwilioClient();
+                const check = await client.verify.v2
+                    .services(twilioCfg.verifySid)
                     .verificationChecks.create({
                         to: target,
                         code: code
                     });
 
-                if (verification.status === "approved") {
+                if (check.status === "approved") {
                     isValid = true;
                 }
             } catch (twilioErr) {
-                console.warn("Twilio verify check error:", twilioErr.message);
+                console.warn("[Twilio Verify Check Error]:", twilioErr.message);
             }
+        } else if (!isValid && storedOtp && code === storedOtp) {
+            isValid = true;
         }
 
         if (!isValid) {
@@ -519,10 +774,13 @@ app.post("/api/auth/register-send-otp", async (req, res) => {
 
         // 2. PHONE / SMS CHANNEL OTP
         const phone = contact.value;
-        if (hasTwilio) {
+        const twilioCfg = getTwilioConfig();
+
+        if (twilioCfg.isConfigured) {
             try {
-                const verification = await twilioClient.verify.v2
-                    .services(process.env.TWILIO_VERIFY_SERVICE_SID)
+                const client = getTwilioClient();
+                const verification = await client.verify.v2
+                    .services(twilioCfg.verifySid)
                     .verifications.create({
                         to: phone,
                         channel: "sms"
@@ -532,7 +790,9 @@ app.post("/api/auth/register-send-otp", async (req, res) => {
                     success: true,
                     channel: "sms",
                     target: phone,
-                    otpCode: generatedCode,
+                    isRealSms: true,
+                    isDemoMode: false,
+                    verificationSid: verification.sid,
                     message: `Verification code sent via SMS to ${phone}.`,
                     status: verification.status
                 });
@@ -554,6 +814,8 @@ app.post("/api/auth/register-send-otp", async (req, res) => {
             channel: "sms",
             target: phone,
             otpCode: generatedCode,
+            isRealSms: false,
+            isDemoMode: true,
             message: `Verification code sent to ${phone}.`,
             status: "approved"
         });
@@ -579,21 +841,23 @@ app.post("/api/auth/verify-registration-otp", async (req, res) => {
         const code = String(req.body.code || "").trim();
         const contact = normalizeContactIdentifier(rawIdentifier);
 
-        if (!contact || !/^\d{6}$/.test(code)) {
+        if (!contact || !/^\d{4,8}$/.test(code)) {
             return res.status(400).json({
                 success: false,
-                message: "Enter a valid phone number or email address, and a 6-digit OTP code."
+                message: "Enter a valid phone number or email address, and a valid verification code."
             });
         }
 
         const target = contact.value;
         const storedOtp = demoOtps.get(target);
-        let isValid = code === "123456" || (storedOtp && code === storedOtp);
+        const twilioCfg = getTwilioConfig();
+        let isValid = code === "123456" || (storedOtp && code === storedOtp) || !twilioCfg.isConfigured;
 
-        if (!isValid && hasTwilio && contact.type === "phone") {
+        if (!isValid && twilioCfg.isConfigured && contact.type === "phone") {
             try {
-                const verification = await twilioClient.verify.v2
-                    .services(process.env.TWILIO_VERIFY_SERVICE_SID)
+                const client = getTwilioClient();
+                const verification = await client.verify.v2
+                    .services(twilioCfg.verifySid)
                     .verificationChecks.create({
                         to: target,
                         code: code
@@ -892,6 +1156,10 @@ app.post("/api/auth/register-patient", async (req, res) => {
         const submittedCode = String(otpCode || "").trim();
 
         let isOtpValid = false;
+        const twilioConfig = getTwilioConfig();
+        if (!twilioConfig.isConfigured || isContactVerified) {
+            isOtpValid = true;
+        }
         if (normalizedPhone) {
             const exp = verifiedRegistrationContacts.get(normalizedPhone);
             if (exp && exp > Date.now()) isOtpValid = true;
@@ -901,9 +1169,6 @@ app.post("/api/auth/register-patient", async (req, res) => {
             const exp = verifiedRegistrationContacts.get(normalizedEmail);
             if (exp && exp > Date.now()) isOtpValid = true;
             if (submittedCode && (submittedCode === "123456" || demoOtps.get(normalizedEmail) === submittedCode)) isOtpValid = true;
-        }
-        if (!isOtpValid && isContactVerified) {
-            isOtpValid = true;
         }
 
         if (!isOtpValid) {
@@ -997,6 +1262,10 @@ app.post("/api/auth/register-doctor", async (req, res) => {
         const submittedCode = String(otpCode || "").trim();
 
         let isOtpValid = false;
+        const twilioConfig = getTwilioConfig();
+        if (!twilioConfig.isConfigured || isContactVerified) {
+            isOtpValid = true;
+        }
         if (normalizedPhone) {
             const exp = verifiedRegistrationContacts.get(normalizedPhone);
             if (exp && exp > Date.now()) isOtpValid = true;
@@ -1006,9 +1275,6 @@ app.post("/api/auth/register-doctor", async (req, res) => {
             const exp = verifiedRegistrationContacts.get(normalizedEmail);
             if (exp && exp > Date.now()) isOtpValid = true;
             if (submittedCode && (submittedCode === "123456" || demoOtps.get(normalizedEmail) === submittedCode)) isOtpValid = true;
-        }
-        if (!isOtpValid && isContactVerified) {
-            isOtpValid = true;
         }
 
         if (!isOtpValid) {
@@ -3116,6 +3382,6 @@ app.get("*", (req, res) => {
 app.listen(PORT, "0.0.0.0", () => {
     console.log(`MediCare backend running on port ${PORT}`);
     console.log(`Google Cloud SQL PostgreSQL integration active.`);
-    console.log(`Twilio configured: ${hasTwilio}`);
+    console.log(`Twilio Verify API configured: ${getTwilioConfig().isConfigured}`);
     console.log(`Face recognition configured: ${hasRealFaceService}`);
 });
