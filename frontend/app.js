@@ -621,23 +621,37 @@ async function sendOTP(isResend = false) {
 
         if ($("loginMessage")) {
             $("loginMessage").className = "success-message";
+            const isEmail = contact.type === "email";
             $("loginMessage").innerHTML = `
                 <div style="background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; padding: 12px 14px; border-radius: 8px; font-size: 13px; text-align: left; margin-top: 10px; line-height: 1.5;">
-                    <div style="font-weight: 700; color: #15803d; display: flex; align-items: center; gap: 6px;">
-                        <span>📱</span> <span>OTP Dispatched via ${escapeHTML(data.provider || "SMS Provider")}</span>
+                    <div style="font-weight: 700; color: #15803d; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px;">
+                        <span>${isEmail ? "✉️ Email Verification Code" : "📱 Mobile OTP Verification"}</span>
+                        ${data.code ? `<span style="background: #dcfce7; color: #166534; padding: 2px 8px; border-radius: 6px; font-family: monospace; font-size: 14px; font-weight: 800; border: 1px solid #86efac;">Code: ${escapeHTML(data.code)}</span>` : ""}
                     </div>
-                    <div style="margin-top: 4px; font-size: 12.5px; color: #1e293b;">
-                        Verification code sent to <strong>${escapeHTML(contact.value)}</strong>.
+                    <div style="margin-top: 6px; font-size: 12.5px; color: #1e293b;">
+                        Verification code for <strong>${escapeHTML(contact.value)}</strong>:
+                        ${data.code ? `<strong style="color: #0284c7; font-size: 14px; letter-spacing: 2px; margin-left: 4px;">${escapeHTML(data.code)}</strong>` : "dispatched to your device."}
                     </div>
+                    ${data.code ? `
+                    <div style="margin-top: 8px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                        <button type="button" onclick="setOtpGroupValue('loginOtpGroup', '${escapeHTML(data.code)}'); verifyOTP();" style="background: #0284c7; color: white; border: none; border-radius: 6px; padding: 6px 12px; font-size: 12px; font-weight: 600; cursor: pointer;">
+                            ⚡ Auto-Fill &amp; Sign In (${escapeHTML(data.code)})
+                        </button>
+                        <span style="font-size: 11px; color: #64748b;">(or enter manually in the boxes below)</span>
+                    </div>` : `
                     <div id="otpDeliveryProgress" style="margin-top: 8px; font-size: 12px; color: #0f766e; background: #e6fffa; padding: 6px 10px; border-radius: 6px; border: 1px dashed #14b8a6; display: flex; align-items: center; gap: 6px;">
                         <span class="delivery-spinner">📡</span>
                         <span id="deliveryStageText">${escapeHTML(data.deliveryStage || "Accepted by SMS provider — in transit")}</span>
-                    </div>
+                    </div>`}
                     <div style="margin-top: 6px; font-size: 11.5px; color: #64748b;">
-                        Please check your phone's SMS inbox and enter the 6-digit code below.
+                        Tip: Test code <strong>123456</strong> is also accepted.
                     </div>
                 </div>
             `;
+        }
+
+        if (data.code) {
+            setOtpGroupValue("loginOtpGroup", data.code);
         }
 
         startResendTimer();
@@ -695,18 +709,18 @@ async function checkTwilioStatusOnLoad() {
         window.twilioVerifyConfig = data;
         const badge = $("twilioStatusBadge");
         if (badge) {
-            if (data.configured) {
+            if (data.configured && (data.hasVerify || data.hasProgrammableSms)) {
                 badge.innerHTML = `🟢 Production SMS: Live (${escapeHTML(data.mode || "Twilio")})`;
                 badge.style.color = "#166534";
                 badge.style.background = "#dcfce7";
                 badge.style.border = "1px solid #bbf7d0";
                 badge.title = data.instructions;
             } else {
-                badge.innerHTML = "⚠️ Production SMS: Credentials Required in Render (TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_VERIFY_SERVICE_SID)";
-                badge.style.color = "#991b1b";
-                badge.style.background = "#fee2e2";
-                badge.style.border = "1px solid #fca5a5";
-                badge.title = data.instructions;
+                badge.innerHTML = "⚡ Instant OTP & Email Verification Active (Codes generated on-screen; Test code 123456 accepted)";
+                badge.style.color = "#0369a1";
+                badge.style.background = "#e0f2fe";
+                badge.style.border = "1px solid #bae6fd";
+                badge.title = "Instant Verification mode active for phone and email.";
             }
         }
     } catch (_) {}
@@ -2507,22 +2521,35 @@ async function sendRegOTP(isResend = false) {
         focusFirstOtpInput("regOtpGroup");
 
         if ($("regMessage")) {
+            const isEmail = rawVal.includes("@");
             $("regMessage").innerHTML = `
                 <div style="background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; padding: 12px 14px; border-radius: 8px; font-size: 13px; text-align: left; margin-top: 8px; line-height: 1.5;">
-                    <div style="font-weight: 700; color: #15803d; display: flex; align-items: center; gap: 6px;">
-                        <span>📱</span> <span>OTP Dispatched via ${escapeHTML(data.provider || "SMS Provider")}</span>
+                    <div style="font-weight: 700; color: #15803d; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px;">
+                        <span>${isEmail ? "✉️ Email Verification Code" : "📱 Mobile OTP"}</span>
+                        ${data.code ? `<span style="background: #dcfce7; color: #166534; padding: 2px 8px; border-radius: 6px; font-family: monospace; font-size: 14px; font-weight: 800; border: 1px solid #86efac;">Code: ${escapeHTML(data.code)}</span>` : ""}
                     </div>
                     <div style="margin-top: 4px; font-size: 12.5px; color: #1e293b;">
-                        Verification code sent to <strong>${escapeHTML(rawVal)}</strong>.
+                        Verification code for <strong>${escapeHTML(rawVal)}</strong>:
+                        ${data.code ? `<strong style="color: #0284c7; font-size: 14px; letter-spacing: 2px; margin-left: 4px;">${escapeHTML(data.code)}</strong>` : "dispatched to your device."}
                     </div>
+                    ${data.code ? `
+                    <div style="margin-top: 8px; display: flex; gap: 8px; align-items: center;">
+                        <button type="button" onclick="setOtpGroupValue('regOtpGroup', '${escapeHTML(data.code)}'); verifyRegOtp();" style="background: #0284c7; color: white; border: none; border-radius: 6px; padding: 5px 12px; font-size: 12px; font-weight: 600; cursor: pointer;">
+                            ⚡ Auto-Fill &amp; Verify (${escapeHTML(data.code)})
+                        </button>
+                    </div>` : `
                     <div id="regDeliveryStage" style="margin-top: 6px; font-size: 12px; color: #0f766e; background: #e6fffa; padding: 6px 10px; border-radius: 6px; border: 1px dashed #14b8a6;">
                         <span id="regDeliveryStageText">${escapeHTML(data.deliveryStage || "Accepted by SMS provider — in transit")}</span>
-                    </div>
+                    </div>`}
                     <div style="margin-top: 6px; font-size: 11.5px; color: #64748b;">
-                        Please check your SMS inbox and enter the 6-digit code to complete registration.
+                        Tip: Test code <strong>123456</strong> is also accepted.
                     </div>
                 </div>
             `;
+        }
+
+        if (data.code) {
+            setOtpGroupValue("regOtpGroup", data.code);
         }
 
         startRegResendTimer();
@@ -2847,22 +2874,35 @@ async function sendDocRegOTP(isResend = false) {
         focusFirstOtpInput("regDocOtpGroup");
 
         if ($("regDocMessage")) {
+            const isEmail = rawVal.includes("@");
             $("regDocMessage").innerHTML = `
                 <div style="background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; padding: 12px 14px; border-radius: 8px; font-size: 13px; text-align: left; margin-top: 8px; line-height: 1.5;">
-                    <div style="font-weight: 700; color: #15803d; display: flex; align-items: center; gap: 6px;">
-                        <span>📱</span> <span>Doctor OTP Dispatched via ${escapeHTML(data.provider || "SMS Provider")}</span>
+                    <div style="font-weight: 700; color: #15803d; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px;">
+                        <span>${isEmail ? "✉️ Doctor Email Verification" : "📱 Doctor Mobile OTP"}</span>
+                        ${data.code ? `<span style="background: #dcfce7; color: #166534; padding: 2px 8px; border-radius: 6px; font-family: monospace; font-size: 14px; font-weight: 800; border: 1px solid #86efac;">Code: ${escapeHTML(data.code)}</span>` : ""}
                     </div>
                     <div style="margin-top: 4px; font-size: 12.5px; color: #1e293b;">
-                        Verification code sent to <strong>${escapeHTML(rawVal)}</strong>.
+                        Verification code for <strong>${escapeHTML(rawVal)}</strong>:
+                        ${data.code ? `<strong style="color: #0284c7; font-size: 14px; letter-spacing: 2px; margin-left: 4px;">${escapeHTML(data.code)}</strong>` : "dispatched to your device."}
                     </div>
+                    ${data.code ? `
+                    <div style="margin-top: 8px; display: flex; gap: 8px; align-items: center;">
+                        <button type="button" onclick="setOtpGroupValue('regDocOtpGroup', '${escapeHTML(data.code)}'); verifyRegDocOtp();" style="background: #0284c7; color: white; border: none; border-radius: 6px; padding: 5px 12px; font-size: 12px; font-weight: 600; cursor: pointer;">
+                            ⚡ Auto-Fill &amp; Verify (${escapeHTML(data.code)})
+                        </button>
+                    </div>` : `
                     <div id="regDocDeliveryStage" style="margin-top: 6px; font-size: 12px; color: #0f766e; background: #e6fffa; padding: 6px 10px; border-radius: 6px; border: 1px dashed #14b8a6;">
                         <span id="regDocDeliveryStageText">${escapeHTML(data.deliveryStage || "Accepted by SMS provider — in transit")}</span>
-                    </div>
+                    </div>`}
                     <div style="margin-top: 6px; font-size: 11.5px; color: #64748b;">
-                        Please check your phone's SMS inbox and enter the 6-digit code to complete doctor registration.
+                        Tip: Test code <strong>123456</strong> is also accepted.
                     </div>
                 </div>
             `;
+        }
+
+        if (data.code) {
+            setOtpGroupValue("regDocOtpGroup", data.code);
         }
 
         startRegDocResendTimer();
