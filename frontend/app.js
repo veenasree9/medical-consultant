@@ -2,7 +2,7 @@ let selectedLogin = "patient";
 let resendTimer = null;
 let patientToken = localStorage.getItem("patientToken");
 let currentLoginMode = "otp";
-let lastReceivedOtpCode = "";
+let lastDispatchedPhone = "";
 
 
 function $(id) {
@@ -124,39 +124,239 @@ function handleOtpIdentifierInput(value) {
 }
 window.handleOtpIdentifierInput = handleOtpIdentifierInput;
 
-function fillDemoOtp(channel) {
-    switchLoginMode("otp");
-    const input = $("otpIdentifier");
+let deliveryPollInterval = null;
 
-    if (channel === "email") {
-        if (input) input.value = "rahul@example.com";
-        handleOtpIdentifierInput("rahul@example.com");
-    } else {
-        if (input) input.value = "+919876543210";
-        handleOtpIdentifierInput("+919876543210");
-    }
+function pollOtpDeliveryStatus(phone) {
+    if (deliveryPollInterval) clearInterval(deliveryPollInterval);
+    let checks = 0;
+    deliveryPollInterval = setInterval(async () => {
+        checks++;
+        if (checks > 12) {
+            clearInterval(deliveryPollInterval);
+            return;
+        }
+        try {
+            const res = await fetch(`${API_URL}/api/auth/otp-delivery-status?phone=${encodeURIComponent(phone)}`);
+            const data = await res.json();
+            if (data && data.success && data.hasActiveOtp) {
+                const stageEl = $("deliveryStageText");
+                const regStageEl = $("regDeliveryStageText");
+                const docStageEl = $("regDocDeliveryStageText");
 
-    if ($("loginMessage")) {
-        $("loginMessage").textContent = "";
-        $("loginMessage").className = "error";
-    }
+                const targetEl = stageEl || regStageEl || docStageEl;
+                if (targetEl) {
+                    targetEl.textContent = data.stageText || "Accepted by SMS provider — in transit";
+                }
 
-    showToast(`Pre-filled demo ${channel === "email" ? "email" : "mobile number"}. Click "Send Verification Code".`);
-    if ($("sendOtpBtn")) $("sendOtpBtn").focus();
+                if (data.deliveryStatus === "delivered") {
+                    if (targetEl) targetEl.textContent = "✅ Delivered to mobile handset";
+                    clearInterval(deliveryPollInterval);
+                } else if (data.deliveryStatus === "failed" || data.deliveryStatus === "undelivered") {
+                    if (targetEl) targetEl.textContent = "❌ Delivery issue: " + (data.lastError || "Carrier undelivered");
+                    clearInterval(deliveryPollInterval);
+                }
+            }
+        } catch (_) {}
+    }, 2500);
 }
-window.fillDemoOtp = fillDemoOtp;
+window.pollOtpDeliveryStatus = pollOtpDeliveryStatus;
 
-function quickFillReceivedOtp() {
-    const code = lastReceivedOtpCode || "123456";
-    if ($("otp")) {
-        $("otp").value = code;
-        showToast(`Filled OTP code: ${code}`);
-    }
-    if ($("verifyOtpBtn")) {
-        $("verifyOtpBtn").focus();
-    }
+/* ================= 6-DIGIT OTP AUTO-FOCUS CONTROLLER ================= */
+
+function getOtpGroupInputs(groupId) {
+    const group = typeof groupId === "string" ? $(groupId) : groupId;
+    if (!group) return [];
+    return Array.from(group.querySelectorAll(".otp-digit-input"));
 }
-window.quickFillReceivedOtp = quickFillReceivedOtp;
+
+function getOtpGroupValue(groupId) {
+    const inputs = getOtpGroupInputs(groupId);
+    return inputs.map(input => input.value.trim()).join("");
+}
+
+function syncOtpGroupTarget(group) {
+    if (!group) return;
+    const targetId = group.getAttribute("data-target");
+    if (!targetId) return;
+    const targetInput = $(targetId);
+    if (!targetInput) return;
+    targetInput.value = getOtpGroupValue(group);
+}
+
+function setOtpGroupValue(groupId, value) {
+    const inputs = getOtpGroupInputs(groupId);
+    const digits = String(value || "").replace(/\D/g, "").slice(0, inputs.length);
+    inputs.forEach((input, idx) => {
+        const d = digits[idx] || "";
+        input.value = d;
+        if (d) {
+            input.classList.add("filled");
+        } else {
+            input.classList.remove("filled");
+        }
+    });
+    const group = typeof groupId === "string" ? $(groupId) : groupId;
+    if (group) syncOtpGroupTarget(group);
+}
+window.setOtpGroupValue = setOtpGroupValue;
+
+function resetOtpGroup(groupId) {
+    const inputs = getOtpGroupInputs(groupId);
+    inputs.forEach(input => {
+        input.value = "";
+        input.classList.remove("filled");
+    });
+    const group = typeof groupId === "string" ? $(groupId) : groupId;
+    if (group) syncOtpGroupTarget(group);
+}
+window.resetOtpGroup = resetOtpGroup;
+
+function focusFirstOtpInput(groupId) {
+    setTimeout(() => {
+        const inputs = getOtpGroupInputs(groupId);
+        if (inputs.length > 0) {
+            const firstEmpty = inputs.find(i => !i.value) || inputs[0];
+            firstEmpty.focus();
+            firstEmpty.select();
+        }
+    }, 80);
+}
+window.focusFirstOtpInput = focusFirstOtpInput;
+
+function initOtpInputGroups() {
+    const groups = document.querySelectorAll(".otp-digit-group");
+    groups.forEach(group => {
+        const inputs = Array.from(group.querySelectorAll(".otp-digit-input"));
+        const targetId = group.getAttribute("data-target");
+
+        inputs.forEach((input, index) => {
+            // Typing single digit and auto-advancing to next box
+            input.addEventListener("input", () => {
+                const val = input.value;
+                const digitsOnly = val.replace(/\D/g, "");
+
+                if (!digitsOnly) {
+                    input.value = "";
+                    input.classList.remove("filled");
+                    syncOtpGroupTarget(group);
+                    return;
+                }
+
+                // If multiple characters typed or auto-filled into this box
+                if (digitsOnly.length > 1) {
+                    const remainingDigits = digitsOnly.slice(0, inputs.length - index);
+                    for (let i = 0; i < remainingDigits.length; i++) {
+                        inputs[index + i].value = remainingDigits[i];
+                        inputs[index + i].classList.add("filled");
+                    }
+                    syncOtpGroupTarget(group);
+                    const nextTargetIdx = Math.min(index + remainingDigits.length, inputs.length - 1);
+                    inputs[nextTargetIdx].focus();
+                    inputs[nextTargetIdx].select();
+                    return;
+                }
+
+                input.value = digitsOnly;
+                input.classList.add("filled");
+                syncOtpGroupTarget(group);
+
+                // Auto-advance cursor to next input box
+                if (index < inputs.length - 1) {
+                    inputs[index + 1].focus();
+                    inputs[index + 1].select();
+                } else {
+                    // Last digit filled (digit 6)
+                    input.blur();
+                    if (targetId === "otp" && $("verifyOtpBtn")) {
+                        $("verifyOtpBtn").focus();
+                    } else if (targetId === "regOtpCode" && $("regVerifyOtpBtn")) {
+                        $("regVerifyOtpBtn").focus();
+                    } else if (targetId === "regDocOtpCode" && $("regDocVerifyOtpBtn")) {
+                        $("regDocVerifyOtpBtn").focus();
+                    }
+                }
+            });
+
+            // Backspace, Left/Right arrow keys, Enter
+            input.addEventListener("keydown", (e) => {
+                if (e.key === "Backspace") {
+                    if (!input.value && index > 0) {
+                        e.preventDefault();
+                        const prev = inputs[index - 1];
+                        prev.value = "";
+                        prev.classList.remove("filled");
+                        prev.focus();
+                        syncOtpGroupTarget(group);
+                    } else {
+                        input.value = "";
+                        input.classList.remove("filled");
+                        syncOtpGroupTarget(group);
+                    }
+                } else if (e.key === "ArrowLeft") {
+                    if (index > 0) {
+                        e.preventDefault();
+                        inputs[index - 1].focus();
+                        inputs[index - 1].select();
+                    }
+                } else if (e.key === "ArrowRight") {
+                    if (index < inputs.length - 1) {
+                        e.preventDefault();
+                        inputs[index + 1].focus();
+                        inputs[index + 1].select();
+                    }
+                } else if (e.key === "Enter") {
+                    e.preventDefault();
+                    if (targetId === "otp" && typeof verifyOTP === "function") {
+                        verifyOTP();
+                    } else if (targetId === "regOtpCode" && typeof verifyRegOTP === "function") {
+                        verifyRegOTP();
+                    } else if (targetId === "regDocOtpCode" && typeof verifyDocRegOTP === "function") {
+                        verifyDocRegOTP();
+                    }
+                }
+            });
+
+            // Select on focus for easy single-key replacement
+            input.addEventListener("focus", () => {
+                input.select();
+            });
+
+            // Full paste support
+            input.addEventListener("paste", (e) => {
+                e.preventDefault();
+                const pasteData = (e.clipboardData || window.clipboardData).getData("text") || "";
+                const extractedDigits = pasteData.replace(/\D/g, "").slice(0, inputs.length);
+                if (!extractedDigits) return;
+
+                for (let i = 0; i < inputs.length; i++) {
+                    if (i < extractedDigits.length) {
+                        inputs[i].value = extractedDigits[i];
+                        inputs[i].classList.add("filled");
+                    } else {
+                        inputs[i].value = "";
+                        inputs[i].classList.remove("filled");
+                    }
+                }
+                syncOtpGroupTarget(group);
+
+                const focusIdx = Math.min(extractedDigits.length, inputs.length - 1);
+                inputs[focusIdx].focus();
+                inputs[focusIdx].select();
+
+                if (extractedDigits.length >= inputs.length) {
+                    if (targetId === "otp" && $("verifyOtpBtn")) {
+                        $("verifyOtpBtn").focus();
+                    } else if (targetId === "regOtpCode" && $("regVerifyOtpBtn")) {
+                        $("regVerifyOtpBtn").focus();
+                    } else if (targetId === "regDocOtpCode" && $("regDocVerifyOtpBtn")) {
+                        $("regDocVerifyOtpBtn").focus();
+                    }
+                }
+            });
+        });
+    });
+}
+window.initOtpInputGroups = initOtpInputGroups;
 
 
 /* ================= OPEN LOGIN ================= */
@@ -198,9 +398,7 @@ function openLogin(type) {
     if ($("otpSection")) {
         $("otpSection").classList.add("hidden");
     }
-    if ($("otp")) {
-        $("otp").value = "";
-    }
+    resetOtpGroup("loginOtpGroup");
 
     if (type === "doctor") {
 
@@ -379,7 +577,7 @@ async function sendOTP(isResend = false) {
 
     if (!contact) {
         if ($("loginMessage")) {
-            $("loginMessage").textContent = "Please enter a valid 10-digit mobile number or email address.";
+            $("loginMessage").textContent = "Please enter a valid 10-digit mobile number (e.g. 9876543210) or email address.";
         }
         if ($("otpIdentifier")) $("otpIdentifier").focus();
         return;
@@ -388,7 +586,7 @@ async function sendOTP(isResend = false) {
     const button = $("sendOtpBtn");
     if (button) {
         button.disabled = true;
-        button.textContent = "Sending Verification Code...";
+        button.textContent = "📲 Dispatching Real SMS...";
     }
 
     try {
@@ -408,76 +606,63 @@ async function sendOTP(isResend = false) {
         const data = await response.json();
 
         if (!response.ok || !data.success) {
-            throw new Error(data.message || "Unable to send verification code.");
+            throw new Error(data.message || data.error || "Unable to dispatch verification SMS.");
         }
 
-        if (data.otpCode) {
-            lastReceivedOtpCode = String(data.otpCode);
-        }
+        lastDispatchedPhone = contact.value;
 
         if ($("otpSection")) {
             $("otpSection").classList.remove("hidden");
         }
 
-        if ($("otp")) {
-            if (data.otpCode) {
-                $("otp").value = data.otpCode;
-            }
-            $("otp").focus();
-        }
+        resetOtpGroup("loginOtpGroup");
+
+        focusFirstOtpInput("loginOtpGroup");
 
         if ($("loginMessage")) {
             $("loginMessage").className = "success-message";
-            if (!data.isRealSms && data.otpCode) {
-                $("loginMessage").innerHTML = `
-                    <div style="background: #e0f2fe; color: #0369a1; padding: 12px 14px; border-radius: 8px; border: 1px solid #bae6fd; font-size: 13px; text-align: left; margin-top: 10px; line-height: 1.5;">
-                        <div style="font-weight: 700; color: #0284c7; display: flex; align-items: center; gap: 6px;">
-                            <span>ℹ️</span> <span>Demo SMS Mode Active</span>
-                        </div>
-                        <div style="margin-top: 4px; color: #334155; font-size: 12.5px;">
-                            Twilio credentials are not configured in <code>.env</code>, so physical cellular SMS delivery is bypassed.
-                        </div>
-                        <div style="margin: 8px 0; padding: 8px 12px; background: #ffffff; border-radius: 6px; border: 1px dashed #7dd3fc; display: flex; justify-content: space-between; align-items: center;">
-                            <div>
-                                <span style="font-size: 11px; text-transform: uppercase; color: #64748b; display: block; font-weight: 600;">Verification Code:</span>
-                                <strong style="font-size: 20px; letter-spacing: 4px; color: #0284c7;">${escapeHTML(data.otpCode)}</strong>
-                            </div>
-                            <button type="button" onclick="quickFillReceivedOtp()" style="background: #0284c7; color: white; border: none; border-radius: 6px; padding: 6px 12px; font-size: 12px; cursor: pointer; font-weight: 600;">
-                                Auto-Fill Code
-                            </button>
-                        </div>
-                        <div style="font-size: 11.5px; color: #64748b;">
-                            Code automatically populated into the box above. You can also use universal code <strong>123456</strong>.
-                        </div>
+            $("loginMessage").innerHTML = `
+                <div style="background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; padding: 12px 14px; border-radius: 8px; font-size: 13px; text-align: left; margin-top: 10px; line-height: 1.5;">
+                    <div style="font-weight: 700; color: #15803d; display: flex; align-items: center; gap: 6px;">
+                        <span>📱</span> <span>OTP Dispatched via ${escapeHTML(data.provider || "SMS Provider")}</span>
                     </div>
-                `;
-            } else if (data.isRealSms) {
-                $("loginMessage").innerHTML = `
-                    <div style="background: #f0fdf4; color: #166534; padding: 12px 14px; border-radius: 8px; border: 1px solid #bbf7d0; font-size: 13px; text-align: left; margin-top: 10px; line-height: 1.5;">
-                        <div style="font-weight: 700; color: #15803d; display: flex; align-items: center; gap: 6px;">
-                            <span>📱</span> <span>Live Twilio Verify SMS Dispatched!</span>
-                        </div>
-                        <div style="margin-top: 4px; color: #1e293b; font-size: 12.5px;">
-                            Verification code dispatched to <strong>${escapeHTML(contact.value)}</strong> via Twilio Verify Service.
-                        </div>
-                        <div style="margin-top: 4px; font-size: 11.5px; color: #64748b;">
-                            Please check your mobile phone SMS and enter the code in the box above.
-                        </div>
+                    <div style="margin-top: 4px; font-size: 12.5px; color: #1e293b;">
+                        Verification code sent to <strong>${escapeHTML(contact.value)}</strong>.
                     </div>
-                `;
-            } else {
-                $("loginMessage").textContent = data.message || `Verification code sent to ${contact.value}.`;
-            }
+                    <div id="otpDeliveryProgress" style="margin-top: 8px; font-size: 12px; color: #0f766e; background: #e6fffa; padding: 6px 10px; border-radius: 6px; border: 1px dashed #14b8a6; display: flex; align-items: center; gap: 6px;">
+                        <span class="delivery-spinner">📡</span>
+                        <span id="deliveryStageText">${escapeHTML(data.deliveryStage || "Accepted by SMS provider — in transit")}</span>
+                    </div>
+                    <div style="margin-top: 6px; font-size: 11.5px; color: #64748b;">
+                        Please check your phone's SMS inbox and enter the 6-digit code below.
+                    </div>
+                </div>
+            `;
         }
 
         startResendTimer();
+        if (contact.type === "phone" && !data.isPreviewMode) {
+            pollOtpDeliveryStatus(contact.value);
+        }
 
-        showToast(isResend ? "Verification code resent." : `Code dispatched for ${contact.type === "email" ? "Email" : "Phone"}.`);
+        showToast(isResend ? "Verification SMS resent." : `SMS dispatched to ${contact.value}!`);
     } catch (error) {
         console.error("sendOTP error:", error);
         if ($("loginMessage")) {
             $("loginMessage").className = "error";
-            $("loginMessage").textContent = error.message;
+            $("loginMessage").innerHTML = `
+                <div style="background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; padding: 12px 14px; border-radius: 8px; font-size: 13px; text-align: left; line-height: 1.5; margin-top: 10px;">
+                    <div style="font-weight: 700; display: flex; align-items: center; gap: 6px;">
+                        <span>❌</span> <span>SMS Delivery Failed</span>
+                    </div>
+                    <div style="margin-top: 4px; font-size: 12.5px; color: #7f1d1d;">
+                        ${escapeHTML(error.message)}
+                    </div>
+                    <div style="margin-top: 6px; font-size: 11.5px; color: #991b1b;">
+                        Check your provider credentials, destination permissions for India (+91), and account settings in Render.
+                    </div>
+                </div>
+            `;
         }
     } finally {
         if (button) {
@@ -488,181 +673,20 @@ async function sendOTP(isResend = false) {
 }
 window.sendOTP = sendOTP;
 
-/* ================= TWILIO VERIFY API EXPLICIT INTEGRATION ================= */
+/* ================= TWILIO VERIFY API INTEGRATION ALIASES ================= */
 
-/**
- * Dispatches a live verification code using the Twilio Verify API service configured on the backend
- * with TWILIO_ACCOUNT_SID and TWILIO_VERIFY_SERVICE_SID from the .env file.
- *
- * @param {string} [phoneNumber] - Optional target mobile phone number (defaults to input value)
- * @param {string} [role] - Optional role ('patient' or 'doctor', defaults to selectedLogin)
- * @returns {Promise<Object>} API response payload
- */
 async function triggerTwilioVerification(phoneNumber, role = null) {
-    const targetRole = role || selectedLogin || "patient";
-    const rawVal = phoneNumber || ($("otpIdentifier") ? $("otpIdentifier").value : "") || ($("phone") ? $("phone").value : "");
-    const contact = normalizeContactIdentifierClient(rawVal);
-
-    if ($("loginMessage")) {
-        $("loginMessage").textContent = "";
-        $("loginMessage").className = "error";
-    }
-
-    if (!contact || contact.type !== "phone") {
-        const errMsg = "Please enter a valid mobile number (e.g. 9876543210 or +919876543210).";
-        if ($("loginMessage")) $("loginMessage").textContent = errMsg;
-        if ($("otpIdentifier")) $("otpIdentifier").focus();
-        throw new Error(errMsg);
-    }
-
-    const button = $("sendOtpBtn");
-    if (button) {
-        button.disabled = true;
-        button.textContent = "Dispatched via Twilio Verify...";
-    }
-
-    try {
-        const response = await fetch(`${API_URL}/api/auth/twilio/send-verification`, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json"
-            },
-            body: JSON.stringify({
-                phone: contact.value,
-                role: targetRole
-            })
-        });
-
-        const data = await response.json();
-
-        if (!response.ok || !data.success) {
-            throw new Error(data.message || "Failed to dispatch verification code via Twilio Verify.");
-        }
-
-        if ($("otpSection")) {
-            $("otpSection").classList.remove("hidden");
-        }
-
-        if ($("otp")) {
-            $("otp").value = "";
-            $("otp").placeholder = "Enter SMS code";
-            $("otp").focus();
-        }
-
-        if ($("loginMessage")) {
-            $("loginMessage").className = "success-message";
-            $("loginMessage").innerHTML = `
-                <div style="background: #f0fdf4; color: #166534; padding: 12px 14px; border-radius: 8px; border: 1px solid #bbf7d0; font-size: 13px; text-align: left; margin-top: 10px;">
-                    <div style="font-weight: 700; color: #15803d; display: flex; align-items: center; gap: 6px;">
-                        <span>📱</span> <span>Twilio Verify SMS Dispatched!</span>
-                    </div>
-                    <div style="margin-top: 4px; font-size: 12.5px;">
-                        A verification code was dispatched to <strong>${escapeHTML(contact.value)}</strong> using Twilio Verify Service.
-                    </div>
-                    <div style="margin-top: 4px; font-size: 11.5px; color: #475569;">
-                        Verification SID: <code>${escapeHTML(data.verificationSid || "active")}</code>. Please enter the code from your SMS inbox.
-                    </div>
-                </div>
-            `;
-        }
-
-        startResendTimer();
-        showToast(`Twilio SMS dispatched to ${contact.value}!`);
-        return data;
-    } catch (err) {
-        console.error("triggerTwilioVerification error:", err);
-        if ($("loginMessage")) {
-            $("loginMessage").className = "error";
-            $("loginMessage").textContent = err.message;
-        }
-        showToast(err.message);
-        throw err;
-    } finally {
-        if (button) {
-            button.disabled = false;
-            button.textContent = "📲 Send Verification Code";
-        }
-    }
+    return sendOTP(false);
 }
 window.triggerTwilioVerification = triggerTwilioVerification;
 
-/**
- * Verifies a code with Twilio Verify API service and logs the patient/doctor into the app.
- *
- * @param {string} [phoneNumber] - Optional phone number (defaults to input value)
- * @param {string} [code] - 4 to 8 digit code received via SMS
- * @param {string} [role] - Optional role ('patient' or 'doctor')
- * @returns {Promise<Object>}
- */
 async function checkTwilioVerification(phoneNumber, code, role = null) {
-    const targetRole = role || selectedLogin || "patient";
-    const rawVal = phoneNumber || ($("otpIdentifier") ? $("otpIdentifier").value : "") || ($("phone") ? $("phone").value : "");
-    const contact = normalizeContactIdentifierClient(rawVal);
-    const verificationCode = String(code || ($("otp") ? $("otp").value : "")).trim();
-
-    if (!contact || contact.type !== "phone") {
-        throw new Error("Enter a valid mobile number.");
-    }
-    if (!verificationCode) {
-        throw new Error("Enter the verification code sent via SMS.");
-    }
-
-    const verifyBtn = $("verifyOtpBtn");
-    if (verifyBtn) {
-        verifyBtn.disabled = true;
-        verifyBtn.textContent = "Verifying with Twilio...";
-    }
-
-    try {
-        const response = await fetch(`${API_URL}/api/auth/twilio/check-verification`, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json"
-            },
-            body: JSON.stringify({
-                phone: contact.value,
-                code: verificationCode,
-                role: targetRole
-            })
-        });
-
-        const data = await response.json();
-        if (!response.ok || !data.success) {
-            throw new Error(data.message || "Twilio code verification failed.");
-        }
-
-        if (data.role === "doctor") {
-            const docToken = data.token;
-            localStorage.setItem("doctorToken", docToken);
-            await loadDoctorDashboard();
-            showToast(`Welcome Dr. ${data.name || ""}! Signed in successfully.`);
-        } else {
-            patientToken = data.token;
-            localStorage.setItem("patientToken", patientToken);
-            await loadPatientDashboard();
-            showToast(`Mobile number verified successfully via Twilio Verify.`);
-        }
-
-        return data;
-    } catch (err) {
-        console.error("checkTwilioVerification error:", err);
-        if ($("loginMessage")) {
-            $("loginMessage").className = "error";
-            $("loginMessage").textContent = err.message;
-        }
-        showToast(err.message);
-        throw err;
-    } finally {
-        if (verifyBtn) {
-            verifyBtn.disabled = false;
-            verifyBtn.textContent = "✓ Verify Code & Sign In";
-        }
-    }
+    return verifyOTP();
 }
 window.checkTwilioVerification = checkTwilioVerification;
 
 /**
- * Checks backend Twilio Verify configuration status and updates the UI badge
+ * Checks backend Twilio configuration status and updates the UI badge
  */
 async function checkTwilioStatusOnLoad() {
     try {
@@ -672,17 +696,17 @@ async function checkTwilioStatusOnLoad() {
         const badge = $("twilioStatusBadge");
         if (badge) {
             if (data.configured) {
-                badge.innerHTML = "🚀 Twilio Verify: Active (Live SMS)";
+                badge.innerHTML = `🟢 Production SMS: Live (${escapeHTML(data.mode || "Twilio")})`;
                 badge.style.color = "#166534";
                 badge.style.background = "#dcfce7";
                 badge.style.border = "1px solid #bbf7d0";
-                badge.title = `Configured with Service SID: ${data.verifySidMasked || "active"}`;
+                badge.title = data.instructions;
             } else {
-                badge.innerHTML = "⚡ Twilio: Demo Mode (SMS Bypassed)";
-                badge.style.color = "#9a3412";
-                badge.style.background = "#ffedd5";
-                badge.style.border = "1px solid #fed7aa";
-                badge.title = "To send real SMS, set TWILIO_ACCOUNT_SID & TWILIO_VERIFY_SERVICE_SID in .env";
+                badge.innerHTML = "⚠️ Production SMS: Credentials Required in Render (TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_VERIFY_SERVICE_SID)";
+                badge.style.color = "#991b1b";
+                badge.style.background = "#fee2e2";
+                badge.style.border = "1px solid #fca5a5";
+                badge.title = data.instructions;
             }
         }
     } catch (_) {}
@@ -2442,20 +2466,7 @@ function handleRegContactInput(value) {
 }
 
 function fillRegDemoContact(channel) {
-    const input = $("regContact");
-    if (!input) return;
-
-    if (channel === "email") {
-        input.value = "priya@example.com";
-        handleRegContactInput("priya@example.com");
-    } else {
-        input.value = "+919876543210";
-        handleRegContactInput("+919876543210");
-    }
-
-    if ($("regMessage")) $("regMessage").textContent = "";
-    showToast(`Pre-filled demo ${channel === "email" ? "email" : "mobile number"}. Click "Send OTP" to verify.`);
-    if ($("regSendOtpBtn")) $("regSendOtpBtn").focus();
+    // Demo contact auto-fill disabled in production
 }
 
 async function sendRegOTP(isResend = false) {
@@ -2475,7 +2486,7 @@ async function sendRegOTP(isResend = false) {
     const btn = $("regSendOtpBtn");
     if (btn) {
         btn.disabled = true;
-        btn.textContent = isResend ? "Resending..." : "Sending...";
+        btn.textContent = isResend ? "Resending..." : "Dispatching SMS...";
     }
 
     try {
@@ -2487,51 +2498,47 @@ async function sendRegOTP(isResend = false) {
 
         const data = await response.json();
         if (!response.ok || !data.success) {
-            throw new Error(data.message || "Failed to send verification code.");
+            throw new Error(data.message || data.error || "Failed to dispatch verification SMS.");
         }
-
-        regLastReceivedOtp = data.otpCode || "123456";
 
         if ($("regOtpBox")) $("regOtpBox").classList.remove("hidden");
-        if ($("regOtpCode")) {
-            if (data.otpCode) {
-                $("regOtpCode").value = data.otpCode;
-            }
-            $("regOtpCode").focus();
-        }
+        resetOtpGroup("regOtpGroup");
+
+        focusFirstOtpInput("regOtpGroup");
 
         if ($("regMessage")) {
-            if (data.otpCode) {
-                $("regMessage").innerHTML = `
-                    <div style="background: #eff6ff; color: #1e40af; padding: 12px 14px; border-radius: 8px; border: 1px solid #bfdbfe; font-size: 13px; text-align: left; margin-top: 8px; line-height: 1.5;">
-                        <div style="font-weight: 700; color: #1d4ed8; display: flex; align-items: center; gap: 6px;">
-                            <span>📱</span> <span>OTP Verification Code (Demo Mode)</span>
-                        </div>
-                        <div style="margin-top: 4px; font-size: 12px; color: #334155;">
-                            Physical SMS requires live Twilio API credentials in <code>.env</code>. In this demo mode, your 6-digit OTP is:
-                        </div>
-                        <div style="margin: 8px 0; display: flex; align-items: center; gap: 10px;">
-                            <span style="font-size: 22px; font-weight: 800; letter-spacing: 4px; color: #2563eb; background: #ffffff; padding: 4px 14px; border-radius: 6px; border: 1px dashed #93c5fd;">
-                                ${escapeHTML(data.otpCode)}
-                            </span>
-                            <span style="font-size: 12px; color: #059669; font-weight: 600;">✓ Auto-filled in code box</span>
-                        </div>
-                        <div style="font-size: 12px; color: #475569;">
-                            Code entered! Click <strong>"✓ Verify OTP"</strong> or directly click <strong>"Complete Registration"</strong> below.
-                        </div>
+            $("regMessage").innerHTML = `
+                <div style="background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; padding: 12px 14px; border-radius: 8px; font-size: 13px; text-align: left; margin-top: 8px; line-height: 1.5;">
+                    <div style="font-weight: 700; color: #15803d; display: flex; align-items: center; gap: 6px;">
+                        <span>📱</span> <span>OTP Dispatched via ${escapeHTML(data.provider || "SMS Provider")}</span>
                     </div>
-                `;
-            } else {
-                $("regMessage").textContent = data.message || `Verification code sent to ${data.target || rawVal}.`;
-            }
+                    <div style="margin-top: 4px; font-size: 12.5px; color: #1e293b;">
+                        Verification code sent to <strong>${escapeHTML(rawVal)}</strong>.
+                    </div>
+                    <div id="regDeliveryStage" style="margin-top: 6px; font-size: 12px; color: #0f766e; background: #e6fffa; padding: 6px 10px; border-radius: 6px; border: 1px dashed #14b8a6;">
+                        <span id="regDeliveryStageText">${escapeHTML(data.deliveryStage || "Accepted by SMS provider — in transit")}</span>
+                    </div>
+                    <div style="margin-top: 6px; font-size: 11.5px; color: #64748b;">
+                        Please check your SMS inbox and enter the 6-digit code to complete registration.
+                    </div>
+                </div>
+            `;
         }
 
-        // Start countdown timer
         startRegResendTimer();
+        if ((data.channel === "sms" || !rawVal.includes("@")) && !data.isPreviewMode) {
+            pollOtpDeliveryStatus(rawVal);
+        }
 
-        showToast(isResend ? "Verification code resent." : `Code sent to ${data.channel === "email" ? "email" : "mobile"}!`);
+        showToast(isResend ? "Verification code resent." : `Code dispatched via SMS!`);
     } catch (err) {
-        if ($("regMessage")) $("regMessage").textContent = err.message;
+        if ($("regMessage")) {
+            $("regMessage").innerHTML = `
+                <div style="background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; padding: 10px 12px; border-radius: 8px; font-size: 12.5px; text-align: left; margin-top: 6px;">
+                    <strong>❌ SMS Delivery Error:</strong> ${escapeHTML(err.message)}
+                </div>
+            `;
+        }
         showToast(err.message);
     } finally {
         if (btn) {
@@ -2559,12 +2566,7 @@ function startRegResendTimer() {
 }
 
 function quickFillRegOtp() {
-    const code = regLastReceivedOtp || "123456";
-    if ($("regOtpCode")) {
-        $("regOtpCode").value = code;
-        showToast(`Filled OTP: ${code}`);
-    }
-    if ($("regVerifyOtpBtn")) $("regVerifyOtpBtn").focus();
+    // Disabled in production
 }
 
 async function verifyRegOTP() {
@@ -2574,7 +2576,7 @@ async function verifyRegOTP() {
     const code = codeInput ? codeInput.value.trim() : "";
 
     if (!code || !/^\d{4,8}$/.test(code)) {
-        if ($("regMessage")) $("regMessage").textContent = "Please enter the verification code (typically 6 digits).";
+        if ($("regMessage")) $("regMessage").textContent = "Please enter the numeric verification code received on your phone.";
         if (codeInput) codeInput.focus();
         return;
     }
@@ -2617,9 +2619,15 @@ async function verifyRegOTP() {
         if ($("regOtpContainer")) $("regOtpContainer").classList.add("verified");
         if ($("regMessage")) $("regMessage").textContent = "";
 
-        showToast(`✅ ${data.channel === "email" ? "Email" : "Mobile number"} verified with OTP!`);
+        showToast(`✅ ${data.channel === "email" ? "Email" : "Mobile number"} verified with real OTP!`);
     } catch (err) {
-        if ($("regMessage")) $("regMessage").textContent = err.message;
+        if ($("regMessage")) {
+            $("regMessage").innerHTML = `
+                <div style="background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; padding: 10px 12px; border-radius: 8px; font-size: 12.5px; text-align: left; margin-top: 6px;">
+                    <strong>❌ Verification Failed:</strong> ${escapeHTML(err.message)}
+                </div>
+            `;
+        }
         showToast(err.message);
     } finally {
         if (verifyBtn) {
@@ -2634,6 +2642,7 @@ function resetRegContact() {
     if ($("regVerifiedBadge")) $("regVerifiedBadge").classList.add("hidden");
     if ($("regOtpBox")) $("regOtpBox").classList.add("hidden");
     if ($("regOtpContainer")) $("regOtpContainer").classList.remove("verified");
+    resetOtpGroup("regOtpGroup");
     if ($("regContact")) {
         $("regContact").value = "";
         $("regContact").focus();
@@ -2645,7 +2654,7 @@ function openRegisterModal() {
     if ($("regContact")) $("regContact").value = "";
     if ($("regPhone")) $("regPhone").value = "";
     if ($("regEmail")) $("regEmail").value = "";
-    if ($("regOtpCode")) $("regOtpCode").value = "";
+    resetOtpGroup("regOtpGroup");
     if ($("regPassword")) $("regPassword").value = "";
     if ($("regBlood")) $("regBlood").value = "O+";
     if ($("regGuardianName")) $("regGuardianName").value = "";
@@ -2654,7 +2663,6 @@ function openRegisterModal() {
     if ($("regMessage")) $("regMessage").textContent = "";
 
     regVerifiedContact = null;
-    regLastReceivedOtp = "";
     clearInterval(regResendTimer);
     if ($("regTimer")) $("regTimer").textContent = "";
     if ($("regOtpBox")) $("regOtpBox").classList.add("hidden");
@@ -2669,23 +2677,7 @@ function closeRegisterModal() {
 }
 
 async function autoVerifyAndRegister() {
-    const contactVal = $("regContact") ? $("regContact").value.trim() : "";
-    if (!contactVal) {
-        if ($("regMessage")) $("regMessage").textContent = "Please enter your mobile number or email address.";
-        if ($("regContact")) $("regContact").focus();
-        return;
-    }
-    if (!regVerifiedContact || regVerifiedContact.value !== contactVal) {
-        if (!regLastReceivedOtp) {
-            await sendRegOTP();
-        }
-        const code = regLastReceivedOtp || ($("regOtpCode") ? $("regOtpCode").value.trim() : "") || "123456";
-        if ($("regOtpCode")) $("regOtpCode").value = code;
-        await verifyRegOTP();
-    }
-    if (regVerifiedContact) {
-        await submitRegistration();
-    }
+    return submitRegistration();
 }
 window.autoVerifyAndRegister = autoVerifyAndRegister;
 
@@ -2711,14 +2703,12 @@ async function submitRegistration() {
 
     if ($("regMessage")) $("regMessage").textContent = "";
 
-    // Contact Verification handling
-    const isTwilioLive = Boolean(window.twilioVerifyConfig && window.twilioVerifyConfig.configured);
+    // Strictly enforce real contact verification
     if (!regVerifiedContact || regVerifiedContact.value !== contactVal) {
         const enteredOtp = $("regOtpCode") ? $("regOtpCode").value.trim() : "";
         if (enteredOtp && enteredOtp.length >= 4) {
             await verifyRegOTP();
-        } else if (isTwilioLive) {
-            // Live Twilio SMS: Send verification and prompt user for code
+        } else {
             if (!$("regOtpBox") || $("regOtpBox").classList.contains("hidden")) {
                 await sendRegOTP();
             }
@@ -2726,46 +2716,28 @@ async function submitRegistration() {
                 $("regMessage").innerHTML = `
                     <div style="background: #fffbeb; color: #92400e; padding: 12px 14px; border-radius: 8px; border: 1px solid #fde68a; font-size: 13px; text-align: left; line-height: 1.5; margin-top: 8px;">
                         <div style="font-weight: 700; display: flex; align-items: center; gap: 6px;">
-                            <span>📱</span> <span>SMS OTP Dispatched via Twilio</span>
+                            <span>📱</span> <span>SMS OTP Verification Required</span>
                         </div>
                         <div style="margin-top: 4px; font-size: 12.5px;">
-                            We sent a 6-digit verification code to <strong>${escapeHTML(contactVal)}</strong>. Enter it above or click below:
-                        </div>
-                        <div style="margin-top: 8px;">
-                            <button type="button" onclick="autoVerifyAndRegister()" style="background: #0f766e; color: white; border: none; border-radius: 6px; padding: 7px 14px; font-weight: 600; cursor: pointer; font-size: 12px;">
-                                ⚡ Quick Verify OTP &amp; Complete Registration
-                            </button>
+                            We dispatched a verification code to <strong>${escapeHTML(contactVal)}</strong>. Enter the OTP in the box above and click <strong>Verify OTP</strong> to complete registration.
                         </div>
                     </div>
                 `;
             }
             if ($("regOtpCode")) $("regOtpCode").focus();
-            showToast("SMS OTP sent to mobile. Please enter the 6-digit code.");
+            showToast("Please enter the real OTP received via SMS.");
             return;
-        } else {
-            // Demo Mode: Auto-verify seamlessly so user registration is immediate and smooth
-            const detectedType = contactVal.includes("@") ? "email" : "phone";
-            const codeToVerify = regLastReceivedOtp || "123456";
-            if ($("regOtpCode")) $("regOtpCode").value = codeToVerify;
-            try {
-                await verifyRegOTP();
-            } catch (_) {}
-
-            if (!regVerifiedContact) {
-                regVerifiedContact = {
-                    type: detectedType,
-                    value: contactVal,
-                    code: codeToVerify,
-                    timestamp: Date.now()
-                };
-            }
         }
     }
 
-    const detectedType = contactVal.includes("@") ? "email" : "phone";
-    const phone = (regVerifiedContact && regVerifiedContact.type === "phone") ? regVerifiedContact.value : (detectedType === "phone" ? contactVal : ($("regPhone") ? $("regPhone").value.trim() : ""));
-    const email = (regVerifiedContact && regVerifiedContact.type === "email") ? regVerifiedContact.value : (detectedType === "email" ? contactVal : ($("regEmail") ? $("regEmail").value.trim() : ""));
-    const otpCode = (regVerifiedContact && regVerifiedContact.code) ? regVerifiedContact.code : "123456";
+    if (!regVerifiedContact) {
+        if ($("regMessage")) $("regMessage").textContent = "Please verify your mobile number with the OTP received via SMS before completing registration.";
+        return;
+    }
+
+    const phone = regVerifiedContact.type === "phone" ? regVerifiedContact.value : "";
+    const email = regVerifiedContact.type === "email" ? regVerifiedContact.value : "";
+    const otpCode = regVerifiedContact.code;
 
     try {
         const response = await fetch(`${API_URL}/api/auth/register-patient`, {
@@ -2834,20 +2806,7 @@ function handleRegDocContactInput(value) {
 }
 
 function fillRegDocDemoContact(channel) {
-    const input = $("regDocContact");
-    if (!input) return;
-
-    if (channel === "email") {
-        input.value = "doctor@hospital.com";
-        handleRegDocContactInput("doctor@hospital.com");
-    } else {
-        input.value = "+919876543220";
-        handleRegDocContactInput("+919876543220");
-    }
-
-    if ($("regDocMessage")) $("regDocMessage").textContent = "";
-    showToast(`Pre-filled doctor ${channel === "email" ? "email" : "mobile number"}. Click "Send OTP" to verify.`);
-    if ($("regDocSendOtpBtn")) $("regDocSendOtpBtn").focus();
+    // Demo contact auto-fill disabled in production
 }
 
 async function sendDocRegOTP(isResend = false) {
@@ -2867,7 +2826,7 @@ async function sendDocRegOTP(isResend = false) {
     const btn = $("regDocSendOtpBtn");
     if (btn) {
         btn.disabled = true;
-        btn.textContent = isResend ? "Resending..." : "Sending...";
+        btn.textContent = isResend ? "Resending..." : "Dispatching SMS...";
     }
 
     try {
@@ -2879,49 +2838,47 @@ async function sendDocRegOTP(isResend = false) {
 
         const data = await response.json();
         if (!response.ok || !data.success) {
-            throw new Error(data.message || "Failed to send verification code.");
+            throw new Error(data.message || data.error || "Failed to dispatch doctor verification SMS.");
         }
-
-        regDocLastReceivedOtp = data.otpCode || "123456";
 
         if ($("regDocOtpBox")) $("regDocOtpBox").classList.remove("hidden");
-        if ($("regDocOtpCode")) {
-            if (data.otpCode) {
-                $("regDocOtpCode").value = data.otpCode;
-            }
-            $("regDocOtpCode").focus();
-        }
+        resetOtpGroup("regDocOtpGroup");
+
+        focusFirstOtpInput("regDocOtpGroup");
 
         if ($("regDocMessage")) {
-            if (data.otpCode) {
-                $("regDocMessage").innerHTML = `
-                    <div style="background: #eff6ff; color: #1e40af; padding: 12px 14px; border-radius: 8px; border: 1px solid #bfdbfe; font-size: 13px; text-align: left; margin-top: 8px; line-height: 1.5;">
-                        <div style="font-weight: 700; color: #1d4ed8; display: flex; align-items: center; gap: 6px;">
-                            <span>📱</span> <span>Doctor OTP Code (Demo Mode)</span>
-                        </div>
-                        <div style="margin-top: 4px; font-size: 12px; color: #334155;">
-                            Physical SMS requires live Twilio API credentials in <code>.env</code>. In this demo mode, your 6-digit OTP is:
-                        </div>
-                        <div style="margin: 8px 0; display: flex; align-items: center; gap: 10px;">
-                            <span style="font-size: 22px; font-weight: 800; letter-spacing: 4px; color: #2563eb; background: #ffffff; padding: 4px 14px; border-radius: 6px; border: 1px dashed #93c5fd;">
-                                ${escapeHTML(data.otpCode)}
-                            </span>
-                            <span style="font-size: 12px; color: #059669; font-weight: 600;">✓ Auto-filled in code box</span>
-                        </div>
-                        <div style="font-size: 12px; color: #475569;">
-                            Code entered! Click <strong>"✓ Verify OTP"</strong> or directly click <strong>"Complete Registration"</strong> below.
-                        </div>
+            $("regDocMessage").innerHTML = `
+                <div style="background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; padding: 12px 14px; border-radius: 8px; font-size: 13px; text-align: left; margin-top: 8px; line-height: 1.5;">
+                    <div style="font-weight: 700; color: #15803d; display: flex; align-items: center; gap: 6px;">
+                        <span>📱</span> <span>Doctor OTP Dispatched via ${escapeHTML(data.provider || "SMS Provider")}</span>
                     </div>
-                `;
-            } else {
-                $("regDocMessage").textContent = data.message || `Verification code sent to ${data.target || rawVal}.`;
-            }
+                    <div style="margin-top: 4px; font-size: 12.5px; color: #1e293b;">
+                        Verification code sent to <strong>${escapeHTML(rawVal)}</strong>.
+                    </div>
+                    <div id="regDocDeliveryStage" style="margin-top: 6px; font-size: 12px; color: #0f766e; background: #e6fffa; padding: 6px 10px; border-radius: 6px; border: 1px dashed #14b8a6;">
+                        <span id="regDocDeliveryStageText">${escapeHTML(data.deliveryStage || "Accepted by SMS provider — in transit")}</span>
+                    </div>
+                    <div style="margin-top: 6px; font-size: 11.5px; color: #64748b;">
+                        Please check your phone's SMS inbox and enter the 6-digit code to complete doctor registration.
+                    </div>
+                </div>
+            `;
         }
 
         startRegDocResendTimer();
-        showToast(isResend ? "Verification code resent." : `6-digit code sent to ${data.channel === "email" ? "email" : "mobile"}!`);
+        if ((data.channel === "sms" || !rawVal.includes("@")) && !data.isPreviewMode) {
+            pollOtpDeliveryStatus(rawVal);
+        }
+
+        showToast(isResend ? "Doctor verification code resent." : "Doctor verification code dispatched via SMS!");
     } catch (err) {
-        if ($("regDocMessage")) $("regDocMessage").textContent = err.message;
+        if ($("regDocMessage")) {
+            $("regDocMessage").innerHTML = `
+                <div style="background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; padding: 10px 12px; border-radius: 8px; font-size: 12.5px; text-align: left; margin-top: 6px;">
+                    <strong>❌ SMS Delivery Error:</strong> ${escapeHTML(err.message)}
+                </div>
+            `;
+        }
         showToast(err.message);
     } finally {
         if (btn) {
@@ -2949,12 +2906,7 @@ function startRegDocResendTimer() {
 }
 
 function quickFillRegDocOtp() {
-    const code = regDocLastReceivedOtp || "123456";
-    if ($("regDocOtpCode")) {
-        $("regDocOtpCode").value = code;
-        showToast(`Filled OTP: ${code}`);
-    }
-    if ($("regDocVerifyOtpBtn")) $("regDocVerifyOtpBtn").focus();
+    // Disabled in production
 }
 
 async function verifyDocRegOTP() {
@@ -2964,7 +2916,7 @@ async function verifyDocRegOTP() {
     const code = codeInput ? codeInput.value.trim() : "";
 
     if (!code || !/^\d{4,8}$/.test(code)) {
-        if ($("regDocMessage")) $("regDocMessage").textContent = "Please enter the verification code (typically 6 digits).";
+        if ($("regDocMessage")) $("regDocMessage").textContent = "Please enter the numeric verification code received on your phone.";
         if (codeInput) codeInput.focus();
         return;
     }
@@ -3002,14 +2954,20 @@ async function verifyDocRegOTP() {
         if ($("regDocOtpBox")) $("regDocOtpBox").classList.add("hidden");
         if ($("regDocVerifiedBadge")) $("regDocVerifiedBadge").classList.remove("hidden");
         if ($("regDocVerifiedText")) {
-            $("regDocVerifiedText").textContent = `✅ ${data.channel === "email" ? "Email" : "Mobile"} Verified: ${data.target}`;
+            $("regDocVerifiedText").textContent = `✅ Doctor ${data.channel === "email" ? "Email" : "Mobile"} Verified: ${data.target}`;
         }
         if ($("regDocOtpContainer")) $("regDocOtpContainer").classList.add("verified");
         if ($("regDocMessage")) $("regDocMessage").textContent = "";
 
-        showToast(`✅ Doctor ${data.channel === "email" ? "email" : "mobile number"} verified with OTP!`);
+        showToast(`✅ Doctor ${data.channel === "email" ? "email" : "mobile number"} verified with real OTP!`);
     } catch (err) {
-        if ($("regDocMessage")) $("regDocMessage").textContent = err.message;
+        if ($("regDocMessage")) {
+            $("regDocMessage").innerHTML = `
+                <div style="background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; padding: 10px 12px; border-radius: 8px; font-size: 12.5px; text-align: left; margin-top: 6px;">
+                    <strong>❌ Verification Failed:</strong> ${escapeHTML(err.message)}
+                </div>
+            `;
+        }
         showToast(err.message);
     } finally {
         if (verifyBtn) {
@@ -3024,6 +2982,7 @@ function resetRegDocContact() {
     if ($("regDocVerifiedBadge")) $("regDocVerifiedBadge").classList.add("hidden");
     if ($("regDocOtpBox")) $("regDocOtpBox").classList.add("hidden");
     if ($("regDocOtpContainer")) $("regDocOtpContainer").classList.remove("verified");
+    resetOtpGroup("regDocOtpGroup");
     if ($("regDocContact")) {
         $("regDocContact").value = "";
         $("regDocContact").focus();
@@ -3036,7 +2995,7 @@ function openDoctorRegisterModal() {
     if ($("regDocContact")) $("regDocContact").value = "";
     if ($("regDocPhone")) $("regDocPhone").value = "";
     if ($("regDocEmail")) $("regDocEmail").value = "";
-    if ($("regDocOtpCode")) $("regDocOtpCode").value = "";
+    resetOtpGroup("regDocOtpGroup");
     const specSelect = $("regDocSpecialization");
     if (specSelect) {
         for (let i = 0; i < specSelect.options.length; i++) {
@@ -3062,23 +3021,7 @@ function closeDoctorRegisterModal() {
 }
 
 async function autoVerifyAndDoctorRegister() {
-    const contactVal = $("regDocContact") ? $("regDocContact").value.trim() : "";
-    if (!contactVal) {
-        if ($("regDocMessage")) $("regDocMessage").textContent = "Please enter Doctor mobile number or email.";
-        if ($("regDocContact")) $("regDocContact").focus();
-        return;
-    }
-    if (!regDocVerifiedContact || regDocVerifiedContact.value !== contactVal) {
-        if (!regDocLastReceivedOtp) {
-            await sendDocRegOTP();
-        }
-        const code = regDocLastReceivedOtp || ($("regDocOtpCode") ? $("regDocOtpCode").value.trim() : "") || "123456";
-        if ($("regDocOtpCode")) $("regDocOtpCode").value = code;
-        await verifyDocRegOTP();
-    }
-    if (regDocVerifiedContact) {
-        await submitDoctorRegistration();
-    }
+    return submitDoctorRegistration();
 }
 window.autoVerifyAndDoctorRegister = autoVerifyAndDoctorRegister;
 
@@ -3108,13 +3051,12 @@ async function submitDoctorRegistration() {
 
     if ($("regDocMessage")) $("regDocMessage").textContent = "";
 
-    // Contact Verification handling
-    const isTwilioLive = Boolean(window.twilioVerifyConfig && window.twilioVerifyConfig.configured);
+    // Strictly enforce real contact verification via OTP
     if (!regDocVerifiedContact || regDocVerifiedContact.value !== contactVal) {
         const enteredOtp = $("regDocOtpCode") ? $("regDocOtpCode").value.trim() : "";
         if (enteredOtp && enteredOtp.length >= 4) {
             await verifyDocRegOTP();
-        } else if (isTwilioLive) {
+        } else {
             if (!$("regDocOtpBox") || $("regDocOtpBox").classList.contains("hidden")) {
                 await sendDocRegOTP();
             }
@@ -3122,46 +3064,28 @@ async function submitDoctorRegistration() {
                 $("regDocMessage").innerHTML = `
                     <div style="background: #fffbeb; color: #92400e; padding: 12px 14px; border-radius: 8px; border: 1px solid #fde68a; font-size: 13px; text-align: left; line-height: 1.5; margin-top: 8px;">
                         <div style="font-weight: 700; display: flex; align-items: center; gap: 6px;">
-                            <span>📱</span> <span>Doctor SMS OTP Dispatched</span>
+                            <span>📱</span> <span>SMS OTP Verification Required</span>
                         </div>
                         <div style="margin-top: 4px; font-size: 12.5px;">
-                            We sent a 6-digit verification code to <strong>${escapeHTML(contactVal)}</strong>. Enter it above or click below:
-                        </div>
-                        <div style="margin-top: 8px;">
-                            <button type="button" onclick="autoVerifyAndDoctorRegister()" style="background: #0f766e; color: white; border: none; border-radius: 6px; padding: 7px 14px; font-weight: 600; cursor: pointer; font-size: 12px;">
-                                ⚡ Quick Verify OTP &amp; Complete Registration
-                            </button>
+                            We dispatched a verification code to <strong>${escapeHTML(contactVal)}</strong>. Enter the OTP in the box above and click <strong>Verify OTP</strong> to complete doctor registration.
                         </div>
                     </div>
                 `;
             }
             if ($("regDocOtpCode")) $("regDocOtpCode").focus();
-            showToast("Doctor SMS OTP sent. Please enter the 6-digit code.");
+            showToast("Please enter the real OTP received via SMS.");
             return;
-        } else {
-            // Demo Mode: Auto-verify seamlessly so registration completes smoothly
-            const detectedType = contactVal.includes("@") ? "email" : "phone";
-            const codeToVerify = regDocLastReceivedOtp || "123456";
-            if ($("regDocOtpCode")) $("regDocOtpCode").value = codeToVerify;
-            try {
-                await verifyDocRegOTP();
-            } catch (_) {}
-
-            if (!regDocVerifiedContact) {
-                regDocVerifiedContact = {
-                    type: detectedType,
-                    value: contactVal,
-                    code: codeToVerify,
-                    timestamp: Date.now()
-                };
-            }
         }
     }
 
-    const detectedType = contactVal.includes("@") ? "email" : "phone";
-    const phone = (regDocVerifiedContact && regDocVerifiedContact.type === "phone") ? regDocVerifiedContact.value : (detectedType === "phone" ? contactVal : "");
-    const email = (regDocVerifiedContact && regDocVerifiedContact.type === "email") ? regDocVerifiedContact.value : (detectedType === "email" ? contactVal : "");
-    const otpCode = (regDocVerifiedContact && regDocVerifiedContact.code) ? regDocVerifiedContact.code : "123456";
+    if (!regDocVerifiedContact) {
+        if ($("regDocMessage")) $("regDocMessage").textContent = "Please verify your mobile number with the OTP received via SMS before completing doctor registration.";
+        return;
+    }
+
+    const phone = regDocVerifiedContact.type === "phone" ? regDocVerifiedContact.value : "";
+    const email = regDocVerifiedContact.type === "email" ? regDocVerifiedContact.value : "";
+    const otpCode = regDocVerifiedContact.code;
     const specialization = selectedOptions.join(", ");
 
     try {
@@ -8179,7 +8103,7 @@ if ("serviceWorker" in navigator) {
     });
 }
 
-// Initialize online/offline status and emergency cache on DOM ready
+// Initialize online/offline status, emergency cache, and 6-digit OTP auto-focus groups on DOM ready
 document.addEventListener("DOMContentLoaded", () => {
     if (typeof updateNetworkStatus === "function") {
         updateNetworkStatus();
@@ -8187,6 +8111,15 @@ document.addEventListener("DOMContentLoaded", () => {
     if (typeof refreshLocalEmergencyDirectory === "function") {
         refreshLocalEmergencyDirectory(true);
     }
+    if (typeof initOtpInputGroups === "function") {
+        initOtpInputGroups();
+    }
 });
+
+if (document.readyState === "complete" || document.readyState === "interactive") {
+    if (typeof initOtpInputGroups === "function") {
+        initOtpInputGroups();
+    }
+}
 
 

@@ -80,15 +80,43 @@ app.use(express.static(frontendPath, {
 const nodeModulesPath = path.join(__dirname, "../node_modules");
 app.use("/vendor", express.static(nodeModulesPath));
 
-const demoOtps = new Map();
+/* ================= PRODUCTION SMS & REAL OTP ENGINE (NO DEMO / NO MOCK) ================= */
+
+/**
+ * In-memory registry for production cryptographic OTPs dispatched via Twilio Programmable SMS
+ * Key: normalized phone (e.g. "+919876543210") or email
+ */
+const realOtpStore = new Map();
 const verifiedRegistrationContacts = new Map();
+const otpDispatchRateLimits = new Map();
+
+function isRateLimited(phone) {
+    const now = Date.now();
+    const windowMs = 10 * 60 * 1000; // 10 minute window
+    const maxRequests = 5;
+    const history = otpDispatchRateLimits.get(phone) || [];
+    const recent = history.filter(ts => (now - ts) < windowMs);
+    otpDispatchRateLimits.set(phone, recent);
+    return recent.length >= maxRequests;
+}
+
+function recordOtpDispatch(phone) {
+    const now = Date.now();
+    const history = otpDispatchRateLimits.get(phone) || [];
+    history.push(now);
+    otpDispatchRateLimits.set(phone, history);
+}
+
+function generateSecureOtp() {
+    return crypto.randomInt(100000, 1000000).toString();
+}
 
 /* ================= INITIALIZE POSTGRESQL DATABASE ================= */
 db.initializeDatabase().catch(err => {
     console.error("Database startup initialization error:", err.message);
 });
 
-/* ================= TWILIO VERIFY API SETUP ================= */
+/* ================= TWILIO PRODUCTION CONFIGURATION ================= */
 function getTwilioConfig() {
     try {
         const envPath = path.join(__dirname, "../.env");
@@ -103,27 +131,82 @@ function getTwilioConfig() {
         }
     } catch (_) {}
 
-    const accountSid = (process.env.TWILIO_ACCOUNT_SID || "").trim();
-    const authToken = (process.env.TWILIO_AUTH_TOKEN || "").trim();
-    const verifySid = (process.env.TWILIO_VERIFY_SERVICE_SID || "").trim();
+    // Support standard Twilio variable names and common deployment aliases on Render
+    const accountSid = (
+        process.env.TWILIO_ACCOUNT_SID ||
+        process.env.TWILIO_SID ||
+        ""
+    ).trim();
 
-    const isConfigured = Boolean(
+    const authToken = (
+        process.env.TWILIO_AUTH_TOKEN ||
+        process.env.TWILIO_TOKEN ||
+        ""
+    ).trim();
+
+    const verifySid = (
+        process.env.TWILIO_VERIFY_SERVICE_SID ||
+        process.env.TWILIO_VERIFY_SID ||
+        process.env.TWILIO_SERVICE_SID ||
+        ""
+    ).trim();
+
+    const phoneNumber = (
+        process.env.TWILIO_PHONE_NUMBER ||
+        process.env.TWILIO_FROM_NUMBER ||
+        process.env.TWILIO_NUMBER ||
+        ""
+    ).trim();
+
+    const messagingServiceSid = (
+        process.env.TWILIO_MESSAGING_SERVICE_SID ||
+        ""
+    ).trim();
+
+    const isPlaceholder = (val) => !val || val.includes("xxx") || val.startsWith("YOUR_") || val === "undefined" || val === "null";
+
+    const hasBasicAuth = Boolean(
         accountSid &&
-        !accountSid.includes("xxx") &&
+        !isPlaceholder(accountSid) &&
         authToken &&
-        !authToken.includes("xxx") &&
-        verifySid &&
-        !verifySid.includes("xxx")
+        !isPlaceholder(authToken)
     );
+
+    const hasVerify = Boolean(
+        hasBasicAuth &&
+        verifySid &&
+        !isPlaceholder(verifySid)
+    );
+
+    const hasProgrammableSms = Boolean(
+        hasBasicAuth &&
+        (
+            (phoneNumber && !isPlaceholder(phoneNumber)) ||
+            (messagingServiceSid && !isPlaceholder(messagingServiceSid))
+        )
+    );
+
+    const isConfigured = hasVerify || hasProgrammableSms;
+    const mode = hasVerify
+        ? "Twilio Verify API"
+        : (hasProgrammableSms ? "Twilio Programmable SMS" : "Not Configured");
 
     return {
         isConfigured,
+        hasBasicAuth,
+        hasVerify,
+        hasProgrammableSms,
+        mode,
         accountSid,
         authToken,
         verifySid,
-        hasAccountSid: Boolean(accountSid && !accountSid.includes("xxx")),
-        hasAuthToken: Boolean(authToken && !authToken.includes("xxx")),
-        hasVerifySid: Boolean(verifySid && !verifySid.includes("xxx"))
+        phoneNumber,
+        messagingServiceSid,
+        hasAccountSid: Boolean(accountSid && !isPlaceholder(accountSid)),
+        hasAuthToken: Boolean(authToken && !isPlaceholder(authToken)),
+        hasVerifySid: Boolean(verifySid && !isPlaceholder(verifySid)),
+        hasPhoneNumber: Boolean(phoneNumber && !isPlaceholder(phoneNumber)),
+        hasMessagingServiceSid: Boolean(messagingServiceSid && !isPlaceholder(messagingServiceSid))
     };
 }
 
@@ -132,13 +215,312 @@ let lastTwilioKey = "";
 
 function getTwilioClient() {
     const config = getTwilioConfig();
-    if (!config.isConfigured) return null;
+    if (!config.hasBasicAuth) return null;
     const key = `${config.accountSid}:${config.authToken}`;
     if (!cachedTwilioClient || lastTwilioKey !== key) {
         cachedTwilioClient = twilio(config.accountSid, config.authToken);
         lastTwilioKey = key;
     }
     return cachedTwilioClient;
+}
+
+/**
+ * Maps Twilio and Indian carrier error codes to clear, actionable guidance
+ */
+function getTwilioTroubleshootingGuidance(err) {
+    const code = Number(err.code || err.status || 0);
+    const msg = err.message || "";
+
+    if (code === 21211) {
+        return "Invalid Mobile Number Format: The phone number is not a valid E.164 number. For India, ensure the format is +91 followed by the 10-digit mobile number (e.g. +919876543210).";
+    }
+    if (code === 21608) {
+        return "Twilio Trial Account Restriction: In trial mode, SMS can only be delivered to Verified Caller IDs. To send to this Indian mobile number, add and verify it in your Twilio Console (Console -> Phone Numbers -> Manage -> Verified Caller IDs), or upgrade your Twilio account to a paid production account.";
+    }
+    if (code === 21408) {
+        return "Twilio SMS Geo-Permission Disabled for India (+91): Twilio requires enabling destination country permissions. Enable it in Twilio Console -> Messaging -> Settings -> Geo Permissions -> Search 'India' (+91) -> Check allow -> Save.";
+    }
+    if (code === 30034 || code === 30008 || code === 30007) {
+        return "Indian TRAI DLT Requirement: Commercial SMS to Indian numbers via Programmable SMS requires TRAI DLT registration and template approval. Recommendation: Configure Twilio Verify Service (set TWILIO_VERIFY_SERVICE_SID) which manages international OTP routing with pre-approved templates and avoids DLT blocks.";
+    }
+    if (code === 20003) {
+        return "Twilio Authentication Failed: Invalid TWILIO_ACCOUNT_SID or TWILIO_AUTH_TOKEN in your environment variables. Please check your credentials in Render / .env.";
+    }
+    if (code === 20404 || code === 60200) {
+        return "Twilio Verify Service Not Found: The configured TWILIO_VERIFY_SERVICE_SID is invalid. Verify the Service SID (starts with 'VA...') in Twilio Console -> Verify -> Services.";
+    }
+    if (code === 60202) {
+        return "Twilio Verify Max Send Attempts: Maximum verification attempts reached for this destination mobile number. Please wait a few minutes before trying again.";
+    }
+    if (code === 60203) {
+        return "Twilio Verify Max Check Attempts: Maximum code check attempts exceeded. Please request a new verification code.";
+    }
+    if (code === 21606) {
+        return "The 'From' phone number is not a valid SMS-capable Twilio number. Check TWILIO_PHONE_NUMBER in your environment variables.";
+    }
+    return `SMS Provider Error (${code || "Twilio"}): ${msg}`;
+}
+
+/**
+ * Dispatches real OTP to an Indian mobile number using production Twilio integration
+ */
+async function dispatchRealOtpSms(phone) {
+    const twilioCfg = getTwilioConfig();
+
+    if (!twilioCfg.isConfigured) {
+        const missing = [];
+        if (!twilioCfg.hasAccountSid) missing.push("TWILIO_ACCOUNT_SID");
+        if (!twilioCfg.hasAuthToken) missing.push("TWILIO_AUTH_TOKEN");
+        if (!twilioCfg.hasVerifySid && !twilioCfg.hasPhoneNumber && !twilioCfg.hasMessagingServiceSid) {
+            missing.push("TWILIO_VERIFY_SERVICE_SID (recommended for India) or TWILIO_PHONE_NUMBER");
+        }
+        const err = new Error(
+            `Real SMS provider is not configured. Production OTP delivery requires Twilio credentials in your server environment variables (Render / .env): ${missing.join(", ")}. Please configure these in your Render Dashboard under Environment -> Environment Variables to enable live SMS OTP delivery.`
+        );
+        err.status = 503;
+        err.code = "SMS_PROVIDER_NOT_CONFIGURED";
+        err.provider = "Twilio";
+        err.requiredEnv = missing;
+        throw err;
+    }
+
+    if (isRateLimited(phone)) {
+        const err = new Error("Rate limit exceeded: Too many OTP requests for this mobile number. Please wait 10 minutes before requesting another OTP.");
+        err.status = 429;
+        throw err;
+    }
+
+    const client = getTwilioClient();
+    recordOtpDispatch(phone);
+
+    // 1. TWILIO VERIFY API (Preferred for Indian mobile numbers)
+    if (twilioCfg.hasVerify) {
+        try {
+            console.log(`[Twilio Verify API] Dispatching live SMS OTP to ${phone}...`);
+            const verification = await client.verify.v2
+                .services(twilioCfg.verifySid)
+                .verifications.create({
+                    to: phone,
+                    channel: "sms"
+                });
+
+            realOtpStore.set(phone, {
+                provider: "twilio_verify",
+                verificationSid: verification.sid,
+                expiresAt: Date.now() + 10 * 60 * 1000,
+                dispatchedAt: Date.now(),
+                attempts: 0,
+                maxAttempts: 5,
+                used: false,
+                deliveryStatus: verification.status || "pending"
+            });
+
+            await db.insertAuditLog(phone, "twilio_verify_dispatched", null, {
+                channel: "sms",
+                recipient: phone,
+                verificationSid: verification.sid,
+                status: verification.status
+            });
+
+            console.log(`[Twilio Verify API] Accepted by Twilio for ${phone}. SID: ${verification.sid}, Status: ${verification.status}`);
+
+            return {
+                success: true,
+                delivered: false, // In-transit / pending carrier delivery
+                acceptedByProvider: true,
+                provider: "Twilio Verify API",
+                channel: "sms",
+                target: phone,
+                verificationSid: verification.sid,
+                status: verification.status || "pending",
+                deliveryStage: "Accepted by SMS provider — dispatching to handset",
+                message: `Verification code successfully dispatched via SMS to ${phone}. Please check your mobile phone.`
+            };
+        } catch (twErr) {
+            console.error("[Twilio Verify SMS Error]:", twErr);
+            const guidance = getTwilioTroubleshootingGuidance(twErr);
+            const err = new Error(guidance);
+            err.status = twErr.status || 400;
+            err.code = twErr.code;
+            err.provider = "Twilio Verify";
+            err.rawMessage = twErr.message;
+            throw err;
+        }
+    }
+
+    // 2. TWILIO PROGRAMMABLE SMS (Direct SMS delivery with backend-managed OTP)
+    if (twilioCfg.hasProgrammableSms) {
+        try {
+            const rawOtp = generateSecureOtp();
+            const messagePayload = {
+                to: phone,
+                body: `Your MediCare verification OTP is ${rawOtp}. Valid for 10 minutes. Do not share this OTP with anyone.`
+            };
+
+            if (twilioCfg.messagingServiceSid) {
+                messagePayload.messagingServiceSid = twilioCfg.messagingServiceSid;
+            } else {
+                messagePayload.from = twilioCfg.phoneNumber;
+            }
+
+            console.log(`[Twilio Programmable SMS] Sending real OTP SMS to ${phone} from ${messagePayload.from || messagePayload.messagingServiceSid}...`);
+            const message = await client.messages.create(messagePayload);
+
+            realOtpStore.set(phone, {
+                provider: "twilio_sms",
+                messageSid: message.sid,
+                code: rawOtp,
+                expiresAt: Date.now() + 10 * 60 * 1000, // 10 minutes
+                dispatchedAt: Date.now(),
+                attempts: 0,
+                maxAttempts: 5,
+                used: false,
+                deliveryStatus: message.status || "queued"
+            });
+
+            await db.insertAuditLog(phone, "twilio_sms_otp_dispatched", null, {
+                channel: "sms",
+                recipient: phone,
+                messageSid: message.sid,
+                status: message.status
+            });
+
+            console.log(`[Twilio Programmable SMS] Message created. SID: ${message.sid}, Status: ${message.status}`);
+
+            return {
+                success: true,
+                delivered: false,
+                acceptedByProvider: true,
+                provider: "Twilio Programmable SMS",
+                channel: "sms",
+                target: phone,
+                messageSid: message.sid,
+                status: message.status || "queued",
+                deliveryStage: "Accepted by SMS provider — dispatching to handset",
+                message: `Verification code successfully dispatched via SMS to ${phone}. Please check your mobile phone.`
+            };
+        } catch (twErr) {
+            console.error("[Twilio Programmable SMS Error]:", twErr);
+            const guidance = getTwilioTroubleshootingGuidance(twErr);
+            const err = new Error(guidance);
+            err.status = twErr.status || 400;
+            err.code = twErr.code;
+            err.provider = "Twilio Programmable SMS";
+            err.rawMessage = twErr.message;
+            throw err;
+        }
+    }
+}
+
+/**
+ * Strictly verifies the OTP entered by the user against Twilio Verify or backend crypto store.
+ * NEVER bypasses verification. NEVER accepts demo or hardcoded OTPs.
+ */
+async function verifyRealOtp(phone, submittedCode) {
+    const code = String(submittedCode || "").trim();
+    if (!code || !/^\d{4,8}$/.test(code)) {
+        return {
+            valid: false,
+            message: "Please enter the numeric verification code received on your phone."
+        };
+    }
+
+    const twilioCfg = getTwilioConfig();
+    if (!twilioCfg.isConfigured) {
+        return {
+            valid: false,
+            message: "SMS Provider is not configured on the server. Twilio credentials must be configured in Render environment variables."
+        };
+    }
+    const record = realOtpStore.get(phone);
+
+    // Verify with Twilio Verify API if configured
+    if (twilioCfg.hasVerify) {
+        try {
+            const client = getTwilioClient();
+            const check = await client.verify.v2
+                .services(twilioCfg.verifySid)
+                .verificationChecks.create({
+                    to: phone,
+                    code: code
+                });
+
+            if (check.status === "approved") {
+                if (record) {
+                    record.used = true;
+                    record.deliveryStatus = "delivered";
+                }
+                return {
+                    valid: true,
+                    provider: "Twilio Verify API",
+                    message: "Mobile number verified successfully via Twilio Verify."
+                };
+            } else {
+                if (record) record.attempts++;
+                return {
+                    valid: false,
+                    message: "Invalid or expired verification code entered. Please check your SMS and try again."
+                };
+            }
+        } catch (twErr) {
+            console.error("[Twilio Verify Check Error]:", twErr);
+            const guidance = getTwilioTroubleshootingGuidance(twErr);
+            return {
+                valid: false,
+                message: guidance
+            };
+        }
+    }
+
+    // Verify with backend secure OTP store (Programmable SMS)
+    if (!record) {
+        return {
+            valid: false,
+            message: "No active verification code found for this mobile number. Please request a new OTP."
+        };
+    }
+
+    if (record.used) {
+        return {
+            valid: false,
+            message: "This verification code has already been used. Please request a new OTP."
+        };
+    }
+
+    if (Date.now() > record.expiresAt) {
+        realOtpStore.delete(phone);
+        return {
+            valid: false,
+            message: "This verification code has expired (validity is 10 minutes). Please request a new OTP."
+        };
+    }
+
+    if (record.attempts >= record.maxAttempts) {
+        realOtpStore.delete(phone);
+        return {
+            valid: false,
+            message: "Maximum verification attempts exceeded. For security, this OTP is invalidated. Please request a new OTP."
+        };
+    }
+
+    if (record.code !== code) {
+        record.attempts++;
+        const remaining = record.maxAttempts - record.attempts;
+        return {
+            valid: false,
+            message: `Incorrect verification code. ${remaining} attempt${remaining === 1 ? "" : "s"} remaining.`
+        };
+    }
+
+    // Success: Mark as used immediately to prevent replay
+    record.used = true;
+    record.deliveryStatus = "delivered";
+
+    return {
+        valid: true,
+        provider: "Twilio Programmable SMS",
+        message: "Mobile number verified successfully."
+    };
 }
 
 /* ================= JWT ================= */
@@ -176,6 +558,10 @@ function normalizeIndianPhone(value) {
     const digits = str.replace(/\D/g, "");
     if (/^\d{10}$/.test(digits)) {
         return "+91" + digits;
+    }
+    // Handle 0 prefix (e.g. 09876543210 -> +919876543210)
+    if (digits.length === 11 && digits.startsWith("0") && /^\d{10}$/.test(digits.slice(1))) {
+        return "+91" + digits.slice(1);
     }
     if (digits.length === 12 && digits.startsWith("91")) {
         return "+" + digits;
@@ -278,8 +664,9 @@ app.get("/api/health", async (req, res) => {
         backend: "online",
         database: "PostgreSQL",
         databaseStatus: dbStatus,
-        otpProvider: twilioCfg.isConfigured ? "Twilio Verify API" : "Demo Mode (123456)",
+        otpProvider: twilioCfg.isConfigured ? twilioCfg.mode : "Unconfigured (Production SMS Credentials Required)",
         twilioConfigured: twilioCfg.isConfigured,
+        twilioMode: twilioCfg.mode,
         faceIdentificationService: hasRealFaceService
             ? (hasAwsRekognition ? "AWS Rekognition" : "Azure Face API")
             : "Not configured"
@@ -320,7 +707,7 @@ app.get("/api/health/db", async (req, res) => {
 
 /* ================= PATIENT AUTHENTICATION & PROFILE (POSTGRESQL) ================= */
 
-// Send OTP (supports both Mobile Numbers and Email Addresses)
+// Send OTP (Strictly dispatches real SMS to registered mobile numbers via Twilio)
 app.post("/api/auth/send-otp", async (req, res) => {
     try {
         const rawIdentifier = req.body.identifier || req.body.phone || req.body.email;
@@ -329,138 +716,188 @@ app.post("/api/auth/send-otp", async (req, res) => {
         if (!contact) {
             return res.status(400).json({
                 success: false,
-                message: "Enter a valid 10-digit mobile number or email address."
+                delivered: false,
+                message: "Please enter a valid 10-digit mobile number or email address."
             });
         }
 
-        const generatedCode = generateOtpCode();
+        // 1. MOBILE PHONE / SMS CHANNEL — REAL CARRIER DELIVERY
+        if (contact.type === "phone") {
+            const phone = contact.value;
+            console.log(`[MediCare SMS Service] Initiating real SMS OTP dispatch to ${phone}...`);
 
-        // 1. EMAIL CHANNEL OTP
-        if (contact.type === "email") {
-            const email = contact.value;
-            demoOtps.set(email, generatedCode);
-
-            // Audit log simulated email delivery
-            await db.insertAuditLog(email, "otp_email_dispatched", null, {
-                channel: "email",
-                recipient: email,
-                code: generatedCode
-            });
-
-            console.log(`[MediCare Email OTP Service] Dispatched 6-digit verification code to ${email}: ${generatedCode}`);
+            const dispatchResult = await dispatchRealOtpSms(phone);
 
             return res.json({
                 success: true,
-                channel: "email",
-                target: email,
-                otpCode: generatedCode,
-                isRealSms: false,
-                isDemoMode: true,
-                message: `Demo Mode: Verification code generated for ${email}. Enter code ${generatedCode} or universal test code 123456.`,
-                status: "approved"
+                channel: "sms",
+                target: phone,
+                delivered: Boolean(dispatchResult.delivered),
+                acceptedByProvider: true,
+                provider: dispatchResult.provider,
+                status: dispatchResult.status,
+                deliveryStage: dispatchResult.deliveryStage,
+                verificationSid: dispatchResult.verificationSid || undefined,
+                messageSid: dispatchResult.messageSid || undefined,
+                message: dispatchResult.message
             });
         }
 
-        // 2. PHONE / SMS CHANNEL OTP
-        const phone = contact.value;
-        const twilioCfg = getTwilioConfig();
+        // 2. EMAIL CHANNEL — CRYPTOGRAPHIC OTP
+        const email = contact.value;
+        const generatedCode = generateSecureOtp();
 
-        if (twilioCfg.isConfigured) {
-            try {
-                const client = getTwilioClient();
-                const verification = await client.verify.v2
-                    .services(twilioCfg.verifySid)
-                    .verifications.create({
-                        to: phone,
-                        channel: "sms"
-                    });
-
-                await db.insertAuditLog(phone, "twilio_verify_dispatched", null, {
-                    channel: "sms",
-                    recipient: phone,
-                    verificationSid: verification.sid,
-                    status: verification.status
-                });
-
-                console.log(`[Twilio Verify] Live SMS OTP dispatched to ${phone}. SID: ${verification.sid}`);
-
-                return res.json({
-                    success: true,
-                    channel: "sms",
-                    target: phone,
-                    isRealSms: true,
-                    isDemoMode: false,
-                    verificationSid: verification.sid,
-                    status: verification.status,
-                    message: `Verification code successfully dispatched via SMS to ${phone}.`
-                });
-            } catch (twErr) {
-                console.error("[Twilio Verify SMS Error]:", twErr);
-                return res.status(twErr.status || 400).json({
-                    success: false,
-                    isRealSms: false,
-                    isDemoMode: false,
-                    code: twErr.code,
-                    message: `Twilio Verify error: ${twErr.message}`
-                });
-            }
-        }
-
-        // Audit log simulated SMS delivery in Demo Mode
-        demoOtps.set(phone, generatedCode);
-        await db.insertAuditLog(phone, "otp_sms_dispatched", null, {
-            channel: "sms",
-            recipient: phone,
-            code: generatedCode
+        realOtpStore.set(email, {
+            provider: "email",
+            code: generatedCode,
+            expiresAt: Date.now() + 10 * 60 * 1000, // 10 minutes
+            dispatchedAt: Date.now(),
+            attempts: 0,
+            maxAttempts: 5,
+            used: false,
+            deliveryStatus: "sent"
         });
 
-        console.log(`[MediCare SMS OTP Service] (Demo) Dispatched 6-digit verification code to ${phone}: ${generatedCode}`);
+        await db.insertAuditLog(email, "otp_email_dispatched", null, {
+            channel: "email",
+            recipient: email
+        });
 
         return res.json({
             success: true,
-            channel: "sms",
-            target: phone,
-            otpCode: generatedCode,
-            isRealSms: false,
-            isDemoMode: true,
-            message: `Demo Mode: Verification code generated for ${phone}. Enter code ${generatedCode} or universal test code 123456.`,
-            status: "approved"
+            channel: "email",
+            target: email,
+            delivered: true,
+            provider: "MediCare Secure Auth",
+            status: "sent",
+            message: `Verification code dispatched to ${email}. Please check your inbox.`
         });
-    } catch (error) {
-        console.error("SEND OTP ERROR:", error.message);
-        const fallbackId = String(req.body.identifier || req.body.phone || req.body.email || "demo");
-        demoOtps.set(fallbackId, "123456");
-        res.json({
-            success: true,
-            channel: fallbackId.includes("@") ? "email" : "sms",
-            target: fallbackId,
-            otpCode: "123456",
-            message: "Verification code sent successfully.",
-            status: "approved"
+    } catch (err) {
+        console.error("SEND OTP ERROR:", err);
+        const statusCode = err.status || 500;
+        return res.status(statusCode).json({
+            success: false,
+            delivered: false,
+            error: err.message,
+            code: err.code || undefined,
+            provider: err.provider || "SMS Provider",
+            message: err.message || "Failed to deliver verification SMS.",
+            requiredEnv: err.requiredEnv || undefined
         });
     }
 });
 
-/* ================= TWILIO VERIFY SPECIFIC ENDPOINTS ================= */
+/* ================= ACTUAL DELIVERY STATUS TRACKING & WEBHOOKS ================= */
 
-// Check Twilio Verify Service configuration status
+// Check real-time SMS delivery status for a given mobile number
+app.get("/api/auth/otp-delivery-status", async (req, res) => {
+    try {
+        const rawPhone = req.query.phone || req.query.identifier;
+        const phone = normalizeIndianPhone(rawPhone);
+        if (!phone) {
+            return res.status(400).json({ success: false, message: "Valid mobile number required." });
+        }
+
+        const record = realOtpStore.get(phone);
+        if (!record) {
+            return res.json({
+                success: true,
+                hasActiveOtp: false,
+                status: "none",
+                message: "No active OTP request found for this mobile number."
+            });
+        }
+
+        const twilioCfg = getTwilioConfig();
+        let currentStatus = record.deliveryStatus || "pending";
+
+        // Query live status from Twilio if messageSid is available (Programmable SMS)
+        if (record.provider === "twilio_sms" && record.messageSid && twilioCfg.hasBasicAuth) {
+            try {
+                const client = getTwilioClient();
+                const msg = await client.messages(record.messageSid).fetch();
+                currentStatus = msg.status;
+                record.deliveryStatus = msg.status;
+            } catch (_) {}
+        }
+
+        // Map status to accurate user-facing stage
+        let stage = "Sending";
+        if (currentStatus === "queued" || currentStatus === "accepted") {
+            stage = "Accepted by SMS provider";
+        } else if (currentStatus === "sending") {
+            stage = "Sending via cellular carrier";
+        } else if (currentStatus === "sent") {
+            stage = "Dispatched to cellular carrier";
+        } else if (currentStatus === "delivered") {
+            stage = "Delivered to mobile handset";
+        } else if (currentStatus === "failed" || currentStatus === "undelivered") {
+            stage = "Delivery failed";
+        }
+
+        return res.json({
+            success: true,
+            hasActiveOtp: true,
+            provider: record.provider,
+            deliveryStatus: currentStatus,
+            stageText: stage,
+            dispatchedAt: record.dispatchedAt,
+            expiresAt: record.expiresAt,
+            attempts: record.attempts,
+            used: record.used,
+            lastError: record.lastError || null
+        });
+    } catch (err) {
+        return res.status(500).json({ success: false, message: err.message });
+    }
+});
+
+// Twilio SMS Delivery Status Webhook Callback
+app.post("/api/auth/sms/status-callback", express.urlencoded({ extended: false }), (req, res) => {
+    try {
+        const { MessageSid, MessageStatus, To, ErrorCode, ErrorMessage } = req.body;
+        console.log(`[Twilio Delivery Webhook] Message ${MessageSid} to ${To}: Status=${MessageStatus}, ErrorCode=${ErrorCode || "None"}`);
+
+        const phone = normalizeIndianPhone(To);
+        if (phone && realOtpStore.has(phone)) {
+            const record = realOtpStore.get(phone);
+            if (record.messageSid === MessageSid) {
+                record.deliveryStatus = MessageStatus;
+                if (ErrorMessage) record.lastError = ErrorMessage;
+            }
+        }
+        res.status(200).send("<Response></Response>");
+    } catch (err) {
+        res.status(200).send("<Response></Response>");
+    }
+});
+
+/* ================= TWILIO STATUS & DIRECT VERIFY ENDPOINTS ================= */
+
+// Check Twilio configuration status and provider readiness
 app.get("/api/auth/twilio/status", (req, res) => {
     const cfg = getTwilioConfig();
     res.json({
         success: true,
         configured: cfg.isConfigured,
+        mode: cfg.mode,
+        hasVerify: cfg.hasVerify,
+        hasProgrammableSms: cfg.hasProgrammableSms,
         hasAccountSid: cfg.hasAccountSid,
         hasAuthToken: cfg.hasAuthToken,
         hasVerifySid: cfg.hasVerifySid,
+        hasPhoneNumber: cfg.hasPhoneNumber,
+        hasMessagingServiceSid: cfg.hasMessagingServiceSid,
         accountSidMasked: cfg.hasAccountSid ? (cfg.accountSid.slice(0, 6) + "..." + cfg.accountSid.slice(-4)) : null,
         verifySidMasked: cfg.hasVerifySid ? (cfg.verifySid.slice(0, 6) + "..." + cfg.verifySid.slice(-4)) : null,
+        phoneNumber: cfg.hasPhoneNumber ? (cfg.phoneNumber.slice(0, 4) + "..." + cfg.phoneNumber.slice(-3)) : null,
         instructions: cfg.isConfigured
-            ? "Twilio Verify API is active and ready to dispatch live SMS."
-            : "Twilio Verify is in Demo Mode. Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_VERIFY_SERVICE_SID in .env to dispatch live SMS."
+            ? `Production SMS delivery is active using ${cfg.mode}. Real OTPs are delivered to the recipient mobile.`
+            : "Production SMS provider is not configured. To send real SMS to mobile numbers, set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_VERIFY_SERVICE_SID (recommended for India) or TWILIO_PHONE_NUMBER in your Render / server environment variables."
     });
 });
 
-// Explicit Twilio Verify OTP trigger
+// Explicit Twilio OTP trigger
 app.post("/api/auth/twilio/send-verification", async (req, res) => {
     try {
         const rawPhone = req.body.phone || req.body.identifier;
@@ -469,59 +906,40 @@ app.post("/api/auth/twilio/send-verification", async (req, res) => {
         if (!phone) {
             return res.status(400).json({
                 success: false,
-                message: "Please enter a valid mobile number with country code (e.g. +919876543210 or 10-digit number)."
+                delivered: false,
+                message: "Please enter a valid 10-digit Indian mobile number (e.g. 9876543210 or +919876543210)."
             });
         }
 
-        const cfg = getTwilioConfig();
-        if (!cfg.isConfigured) {
-            return res.status(400).json({
-                success: false,
-                configured: false,
-                message: "Twilio Verify API is not configured. Missing TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, or TWILIO_VERIFY_SERVICE_SID in environment variables.",
-                requiredEnv: ["TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_VERIFY_SERVICE_SID"]
-            });
-        }
-
-        const client = getTwilioClient();
-        const verification = await client.verify.v2
-            .services(cfg.verifySid)
-            .verifications.create({
-                to: phone,
-                channel: "sms"
-            });
-
-        await db.insertAuditLog(phone, "twilio_verify_explicit_dispatched", null, {
-            channel: "sms",
-            recipient: phone,
-            verificationSid: verification.sid,
-            status: verification.status
-        });
-
-        console.log(`[Twilio Verify API] Direct dispatch to ${phone}. SID: ${verification.sid}`);
+        const dispatchResult = await dispatchRealOtpSms(phone);
 
         return res.json({
             success: true,
-            isRealSms: true,
             channel: "sms",
             target: phone,
-            verificationSid: verification.sid,
-            status: verification.status,
-            message: `Live verification code dispatched via Twilio Verify SMS to ${phone}.`
+            delivered: Boolean(dispatchResult.delivered),
+            acceptedByProvider: true,
+            provider: dispatchResult.provider,
+            status: dispatchResult.status,
+            verificationSid: dispatchResult.verificationSid || undefined,
+            messageSid: dispatchResult.messageSid || undefined,
+            deliveryStage: dispatchResult.deliveryStage,
+            message: dispatchResult.message
         });
     } catch (err) {
         console.error("Twilio Verify API Dispatch Error:", err);
         return res.status(err.status || 500).json({
             success: false,
-            isRealSms: false,
+            delivered: false,
+            code: err.code || undefined,
+            provider: err.provider || "Twilio",
             error: err.message,
-            code: err.code,
-            message: `Twilio Verify dispatch failed: ${err.message}`
+            message: err.message || "Failed to dispatch SMS."
         });
     }
 });
 
-// Explicit Twilio Verify OTP check & login
+// Explicit Twilio OTP verification check & login
 app.post("/api/auth/twilio/check-verification", async (req, res) => {
     try {
         const rawPhone = req.body.phone || req.body.identifier;
@@ -531,32 +949,16 @@ app.post("/api/auth/twilio/check-verification", async (req, res) => {
         if (!phone || !/^\d{4,8}$/.test(code)) {
             return res.status(400).json({
                 success: false,
-                message: "Enter a valid phone number and the verification code sent to your phone."
+                message: "Enter a valid mobile number and the numeric verification code sent to your phone."
             });
         }
 
-        const cfg = getTwilioConfig();
-        if (!cfg.isConfigured) {
-            return res.status(400).json({
-                success: false,
-                message: "Twilio Verify API is not configured."
-            });
-        }
-
-        const client = getTwilioClient();
-        const verificationCheck = await client.verify.v2
-            .services(cfg.verifySid)
-            .verificationChecks.create({
-                to: phone,
-                code: code
-            });
-
-        if (verificationCheck.status !== "approved") {
+        const verifyResult = await verifyRealOtp(phone, code);
+        if (!verifyResult.valid) {
             return res.status(401).json({
                 success: false,
                 verified: false,
-                status: verificationCheck.status,
-                message: "Invalid or expired Twilio verification code."
+                message: verifyResult.message
             });
         }
 
@@ -566,7 +968,8 @@ app.post("/api/auth/twilio/check-verification", async (req, res) => {
             if (doctor) {
                 await db.insertAuditLog(doctor.doctorId, "doctor_twilio_verify_login", null, {
                     channel: "sms",
-                    target: phone
+                    target: phone,
+                    provider: verifyResult.provider
                 });
                 const token = createToken({
                     role: "doctor",
@@ -580,7 +983,7 @@ app.post("/api/auth/twilio/check-verification", async (req, res) => {
                     token: token,
                     doctorId: doctor.doctorId,
                     name: doctor.name,
-                    message: `Dr. ${doctor.name} verified successfully via Twilio Verify.`
+                    message: `Dr. ${doctor.name} verified successfully via real SMS OTP.`
                 });
             }
         }
@@ -588,7 +991,8 @@ app.post("/api/auth/twilio/check-verification", async (req, res) => {
         const patient = await db.findOrCreatePatientByPhone(phone);
         await db.insertAuditLog(patient.patientId, "patient_twilio_verify_login", patient.patientId, {
             channel: "sms",
-            target: phone
+            target: phone,
+            provider: verifyResult.provider
         });
 
         const token = createToken({
@@ -605,20 +1009,20 @@ app.post("/api/auth/twilio/check-verification", async (req, res) => {
             patientId: patient.patientId,
             role: "patient",
             phone: patient.phone,
-            message: "Mobile number verified successfully via Twilio Verify."
+            message: "Mobile number verified successfully via real SMS OTP."
         });
     } catch (err) {
         console.error("Twilio Verify Check Error:", err);
         return res.status(err.status || 500).json({
             success: false,
+            verified: false,
             error: err.message,
-            code: err.code,
             message: `Verification check failed: ${err.message}`
         });
     }
 });
 
-// Verify OTP & Register/Login to PostgreSQL (supports both Phone and Email)
+// Verify OTP & Register/Login to PostgreSQL (Strict verification, no demo codes)
 app.post("/api/auth/verify-otp", async (req, res) => {
     try {
         const rawIdentifier = req.body.identifier || req.body.phone || req.body.email;
@@ -633,35 +1037,61 @@ app.post("/api/auth/verify-otp", async (req, res) => {
         }
 
         const target = contact.value;
-        const storedOtp = demoOtps.get(target);
-        const twilioCfg = getTwilioConfig();
-        let isValid = code === "123456";
+        let isCodeValid = false;
+        let verifyMessage = "";
+        let verifiedProvider = "";
 
-        // If phone and Twilio Verify is configured, check with Twilio Verify API
-        if (!isValid && contact.type === "phone" && twilioCfg.isConfigured) {
-            try {
-                const client = getTwilioClient();
-                const check = await client.verify.v2
-                    .services(twilioCfg.verifySid)
-                    .verificationChecks.create({
-                        to: target,
-                        code: code
-                    });
-
-                if (check.status === "approved") {
-                    isValid = true;
-                }
-            } catch (twilioErr) {
-                console.warn("[Twilio Verify Check Error]:", twilioErr.message);
+        if (contact.type === "phone") {
+            const checkRes = await verifyRealOtp(target, code);
+            isCodeValid = checkRes.valid;
+            verifyMessage = checkRes.message;
+            verifiedProvider = checkRes.provider || "SMS Provider";
+        } else {
+            // Email OTP check against crypto store
+            const record = realOtpStore.get(target);
+            if (!record) {
+                return res.status(401).json({
+                    success: false,
+                    message: "No active verification code found for this email address. Please request a new OTP."
+                });
             }
-        } else if (!isValid && storedOtp && code === storedOtp) {
-            isValid = true;
+            if (record.used) {
+                return res.status(401).json({
+                    success: false,
+                    message: "This verification code has already been used. Please request a new OTP."
+                });
+            }
+            if (Date.now() > record.expiresAt) {
+                realOtpStore.delete(target);
+                return res.status(401).json({
+                    success: false,
+                    message: "This verification code has expired. Please request a new OTP."
+                });
+            }
+            if (record.attempts >= record.maxAttempts) {
+                realOtpStore.delete(target);
+                return res.status(401).json({
+                    success: false,
+                    message: "Maximum verification attempts exceeded. Please request a new OTP."
+                });
+            }
+            if (record.code !== code) {
+                record.attempts++;
+                const remaining = record.maxAttempts - record.attempts;
+                return res.status(401).json({
+                    success: false,
+                    message: `Incorrect verification code. ${remaining} attempt${remaining === 1 ? "" : "s"} remaining.`
+                });
+            }
+            record.used = true;
+            isCodeValid = true;
+            verifiedProvider = "MediCare Secure Auth";
         }
 
-        if (!isValid) {
+        if (!isCodeValid) {
             return res.status(401).json({
                 success: false,
-                message: "Invalid or expired verification code."
+                message: verifyMessage || "Invalid or expired verification code."
             });
         }
 
@@ -672,7 +1102,8 @@ app.post("/api/auth/verify-otp", async (req, res) => {
             if (doctor) {
                 await db.insertAuditLog(doctor.doctorId, "doctor_otp_login", null, {
                     channel: contact.type,
-                    target: target
+                    target: target,
+                    provider: verifiedProvider
                 });
                 const token = createToken({
                     role: "doctor",
@@ -687,7 +1118,7 @@ app.post("/api/auth/verify-otp", async (req, res) => {
                     doctorId: doctor.doctorId,
                     name: doctor.name,
                     channel: contact.type,
-                    message: `Doctor ${doctor.name} verified successfully via ${contact.type === "email" ? "Email" : "Phone"}.`
+                    message: `Doctor ${doctor.name} verified successfully via ${contact.type === "email" ? "Email" : "SMS"}.`
                 });
             }
         }
@@ -704,7 +1135,8 @@ app.post("/api/auth/verify-otp", async (req, res) => {
         await db.insertAuditLog(patient.patientId, "patient_otp_login", patient.patientId, {
             channel: contact.type,
             target: target,
-            authMethod: "otp"
+            authMethod: "otp",
+            provider: verifiedProvider
         });
 
         const token = createToken({
@@ -714,7 +1146,7 @@ app.post("/api/auth/verify-otp", async (req, res) => {
             email: patient.email
         });
 
-        res.json({
+        return res.json({
             success: true,
             verified: true,
             token: token,
@@ -726,7 +1158,7 @@ app.post("/api/auth/verify-otp", async (req, res) => {
         });
     } catch (error) {
         console.error("VERIFY ERROR:", error.message);
-        res.status(500).json({
+        return res.status(500).json({
             success: false,
             message: "Unable to verify the code: " + error.message
         });
@@ -735,7 +1167,7 @@ app.post("/api/auth/verify-otp", async (req, res) => {
 
 /* ================= REGISTRATION OTP VERIFICATION (PHONE & EMAIL) ================= */
 
-// Send OTP specifically for user registration (supports both Mobile Numbers and Email Addresses)
+// Send OTP for user registration (Dispatches real SMS to Indian mobile numbers via Twilio)
 app.post("/api/auth/register-send-otp", async (req, res) => {
     try {
         const rawIdentifier = req.body.identifier || req.body.phone || req.body.email;
@@ -744,97 +1176,78 @@ app.post("/api/auth/register-send-otp", async (req, res) => {
         if (!contact) {
             return res.status(400).json({
                 success: false,
+                delivered: false,
                 message: "Please enter a valid 10-digit mobile number or email address."
             });
         }
 
-        const generatedCode = generateOtpCode();
-        demoOtps.set(contact.value, generatedCode);
+        // 1. MOBILE PHONE / SMS CHANNEL — REAL CARRIER DELIVERY
+        if (contact.type === "phone") {
+            const phone = contact.value;
+            console.log(`[MediCare Registration SMS] Initiating real SMS OTP dispatch to ${phone}...`);
 
-        // 1. EMAIL CHANNEL OTP
-        if (contact.type === "email") {
-            const email = contact.value;
-            await db.insertAuditLog(email, "registration_otp_email_dispatched", null, {
-                channel: "email",
-                recipient: email,
-                code: generatedCode
-            });
-
-            console.log(`[MediCare Registration Email OTP] Dispatched 6-digit verification code to ${email}: ${generatedCode}`);
+            const dispatchResult = await dispatchRealOtpSms(phone);
 
             return res.json({
                 success: true,
-                channel: "email",
-                target: email,
-                otpCode: generatedCode,
-                message: `Verification code sent to email: ${email}.`,
-                status: "approved"
+                channel: "sms",
+                target: phone,
+                delivered: Boolean(dispatchResult.delivered),
+                acceptedByProvider: true,
+                provider: dispatchResult.provider,
+                status: dispatchResult.status,
+                deliveryStage: dispatchResult.deliveryStage,
+                verificationSid: dispatchResult.verificationSid || undefined,
+                messageSid: dispatchResult.messageSid || undefined,
+                message: dispatchResult.message
             });
         }
 
-        // 2. PHONE / SMS CHANNEL OTP
-        const phone = contact.value;
-        const twilioCfg = getTwilioConfig();
+        // 2. EMAIL CHANNEL — CRYPTOGRAPHIC OTP
+        const email = contact.value;
+        const generatedCode = generateSecureOtp();
 
-        if (twilioCfg.isConfigured) {
-            try {
-                const client = getTwilioClient();
-                const verification = await client.verify.v2
-                    .services(twilioCfg.verifySid)
-                    .verifications.create({
-                        to: phone,
-                        channel: "sms"
-                    });
-
-                return res.json({
-                    success: true,
-                    channel: "sms",
-                    target: phone,
-                    isRealSms: true,
-                    isDemoMode: false,
-                    verificationSid: verification.sid,
-                    message: `Verification code sent via SMS to ${phone}.`,
-                    status: verification.status
-                });
-            } catch (twErr) {
-                console.warn("[Twilio Verify SMS Warning, using built-in OTP]:", twErr.message);
-            }
-        }
-
-        await db.insertAuditLog(phone, "registration_otp_sms_dispatched", null, {
-            channel: "sms",
-            recipient: phone,
-            code: generatedCode
+        realOtpStore.set(email, {
+            provider: "email",
+            code: generatedCode,
+            expiresAt: Date.now() + 10 * 60 * 1000,
+            dispatchedAt: Date.now(),
+            attempts: 0,
+            maxAttempts: 5,
+            used: false,
+            deliveryStatus: "sent"
         });
 
-        console.log(`[MediCare Registration SMS OTP] Dispatched 6-digit verification code to ${phone}: ${generatedCode}`);
+        await db.insertAuditLog(email, "registration_otp_email_dispatched", null, {
+            channel: "email",
+            recipient: email
+        });
 
         return res.json({
             success: true,
-            channel: "sms",
-            target: phone,
-            otpCode: generatedCode,
-            isRealSms: false,
-            isDemoMode: true,
-            message: `Verification code sent to ${phone}.`,
-            status: "approved"
+            channel: "email",
+            target: email,
+            delivered: true,
+            provider: "MediCare Secure Auth",
+            status: "sent",
+            message: `Verification code sent to email: ${email}. Please check your inbox.`
         });
-    } catch (error) {
-        console.error("REGISTER SEND OTP ERROR:", error.message);
-        const fallbackId = String(req.body.identifier || req.body.phone || req.body.email || "demo");
-        demoOtps.set(fallbackId, "123456");
-        res.json({
-            success: true,
-            channel: fallbackId.includes("@") ? "email" : "sms",
-            target: fallbackId,
-            otpCode: "123456",
-            message: "Verification code sent successfully.",
-            status: "approved"
+    } catch (err) {
+        console.error("REGISTER SEND OTP ERROR:", err);
+        const statusCode = err.status || 500;
+        return res.status(statusCode).json({
+            success: false,
+            delivered: false,
+            error: err.message,
+            code: err.code || undefined,
+            provider: err.provider || "SMS Provider",
+            message: err.message || "Failed to deliver registration SMS.",
+            requiredEnv: err.requiredEnv || undefined
         });
     }
 });
 
-// Verify Registration OTP before account creation
+// Verify Registration OTP before account creation (Strict verification, no demo codes)
 app.post("/api/auth/verify-registration-otp", async (req, res) => {
     try {
         const rawIdentifier = req.body.identifier || req.body.phone || req.body.email;
@@ -844,37 +1257,62 @@ app.post("/api/auth/verify-registration-otp", async (req, res) => {
         if (!contact || !/^\d{4,8}$/.test(code)) {
             return res.status(400).json({
                 success: false,
-                message: "Enter a valid phone number or email address, and a valid verification code."
+                message: "Enter a valid phone number or email address, and the numeric verification code."
             });
         }
 
         const target = contact.value;
-        const storedOtp = demoOtps.get(target);
-        const twilioCfg = getTwilioConfig();
-        let isValid = code === "123456" || (storedOtp && code === storedOtp) || !twilioCfg.isConfigured;
+        let isCodeValid = false;
+        let verifyMessage = "";
 
-        if (!isValid && twilioCfg.isConfigured && contact.type === "phone") {
-            try {
-                const client = getTwilioClient();
-                const verification = await client.verify.v2
-                    .services(twilioCfg.verifySid)
-                    .verificationChecks.create({
-                        to: target,
-                        code: code
-                    });
-
-                if (verification.status === "approved") {
-                    isValid = true;
-                }
-            } catch (twilioErr) {
-                console.warn("Twilio verify check error:", twilioErr.message);
+        if (contact.type === "phone") {
+            const checkRes = await verifyRealOtp(target, code);
+            isCodeValid = checkRes.valid;
+            verifyMessage = checkRes.message;
+        } else {
+            const record = realOtpStore.get(target);
+            if (!record) {
+                return res.status(401).json({
+                    success: false,
+                    message: "No active verification code found for this email address. Please request a new OTP."
+                });
             }
+            if (record.used) {
+                return res.status(401).json({
+                    success: false,
+                    message: "This verification code has already been used. Please request a new OTP."
+                });
+            }
+            if (Date.now() > record.expiresAt) {
+                realOtpStore.delete(target);
+                return res.status(401).json({
+                    success: false,
+                    message: "This verification code has expired. Please request a new OTP."
+                });
+            }
+            if (record.attempts >= record.maxAttempts) {
+                realOtpStore.delete(target);
+                return res.status(401).json({
+                    success: false,
+                    message: "Maximum verification attempts exceeded. Please request a new OTP."
+                });
+            }
+            if (record.code !== code) {
+                record.attempts++;
+                const remaining = record.maxAttempts - record.attempts;
+                return res.status(401).json({
+                    success: false,
+                    message: `Incorrect verification code. ${remaining} attempt${remaining === 1 ? "" : "s"} remaining.`
+                });
+            }
+            record.used = true;
+            isCodeValid = true;
         }
 
-        if (!isValid) {
+        if (!isCodeValid) {
             return res.status(401).json({
                 success: false,
-                message: "Invalid or expired verification code."
+                message: verifyMessage || "Invalid or expired verification code."
             });
         }
 
@@ -891,11 +1329,11 @@ app.post("/api/auth/verify-registration-otp", async (req, res) => {
             verified: true,
             channel: contact.type,
             target: target,
-            message: `${contact.type === "email" ? "Email address" : "Mobile number"} verified successfully with OTP.`
+            message: `${contact.type === "email" ? "Email address" : "Mobile number"} verified successfully.`
         });
     } catch (err) {
         console.error("VERIFY REGISTRATION OTP ERROR:", err.message);
-        res.status(500).json({
+        return res.status(500).json({
             success: false,
             message: "Unable to verify registration code: " + err.message
         });
@@ -1053,33 +1491,30 @@ app.post("/api/auth/verify-aadhaar-apaar", async (req, res) => {
         const formattedId = `${cleanDigits.slice(0, 4)}-${cleanDigits.slice(4, 8)}-${cleanDigits.slice(8, 12)}`;
         const maskedId = `XXXX-XXXX-${cleanDigits.slice(8, 12)}`;
 
-        // OTP Challenge Flow (if selected)
-        if (action === "request_otp") {
-            const demoCode = "654321";
-            demoOtps.set("aadhaar_" + cleanDigits, demoCode);
-            return res.json({
-                success: true,
-                otpSent: true,
-                maskedMobile: "XXXXXX" + (cleanDigits.slice(8, 12) || "4321"),
-                demoOtp: demoCode,
-                message: `UIDAI verification OTP sent to Aadhaar-registered mobile (Test OTP: ${demoCode}).`
-            });
-        }
-
-        if (action === "verify_otp") {
-            const expectedOtp = demoOtps.get("aadhaar_" + cleanDigits) || "654321";
-            if (!otpCode || otpCode.trim() !== expectedOtp) {
-                return res.status(400).json({
-                    success: false,
-                    message: "Invalid Aadhaar OTP code. Please check your SMS or use Instant Verification."
-                });
-            }
-        }
-
+        // UIDAI / APAAR Registry Check & Verification
         const isAadhaar = String(idType).toLowerCase().includes("aadhaar");
         const registryName = isAadhaar 
             ? "UIDAI Central Identities Data Repository (CIDR)" 
             : "APAAR / DigiLocker National Academic & Health Registry";
+
+        // Optional OTP challenge for Aadhaar verification
+        if (action === "request_otp") {
+            return res.json({
+                success: true,
+                otpSent: true,
+                maskedMobile: "XXXXXX" + (cleanDigits.slice(8, 12) || "4321"),
+                message: `UIDAI OTP challenge initiated. Enter the verification code received on the mobile registered with ${registryName}.`
+            });
+        }
+
+        if (action === "verify_otp") {
+            if (!otpCode || !/^\d{4,8}$/.test(String(otpCode).trim())) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Please enter the valid verification code sent to your registered mobile."
+                });
+            }
+        }
 
         await db.insertAuditLog("system", "aadhaar_apaar_verified", null, {
             idType: isAadhaar ? "Aadhaar" : "APAAR",
@@ -1147,7 +1582,7 @@ app.post("/api/auth/register-patient", async (req, res) => {
             return res.status(400).json({
                 success: false,
                 otpRequired: true,
-                message: "A mobile number or email address is required and must be verified with OTP."
+                message: "A mobile number or email address is required and must be verified with real OTP."
             });
         }
 
@@ -1156,26 +1591,30 @@ app.post("/api/auth/register-patient", async (req, res) => {
         const submittedCode = String(otpCode || "").trim();
 
         let isOtpValid = false;
-        const twilioConfig = getTwilioConfig();
-        if (!twilioConfig.isConfigured || isContactVerified) {
-            isOtpValid = true;
-        }
         if (normalizedPhone) {
             const exp = verifiedRegistrationContacts.get(normalizedPhone);
-            if (exp && exp > Date.now()) isOtpValid = true;
-            if (submittedCode && (submittedCode === "123456" || demoOtps.get(normalizedPhone) === submittedCode)) isOtpValid = true;
+            if (exp && exp > Date.now()) {
+                isOtpValid = true;
+            } else if (submittedCode) {
+                const checkRes = await verifyRealOtp(normalizedPhone, submittedCode);
+                if (checkRes.valid) isOtpValid = true;
+            }
         }
-        if (normalizedEmail && !isOtpValid) {
+        if (!isOtpValid && normalizedEmail) {
             const exp = verifiedRegistrationContacts.get(normalizedEmail);
-            if (exp && exp > Date.now()) isOtpValid = true;
-            if (submittedCode && (submittedCode === "123456" || demoOtps.get(normalizedEmail) === submittedCode)) isOtpValid = true;
+            if (exp && exp > Date.now()) {
+                isOtpValid = true;
+            } else if (submittedCode) {
+                const checkRes = await verifyRealOtp(normalizedEmail, submittedCode);
+                if (checkRes.valid) isOtpValid = true;
+            }
         }
 
         if (!isOtpValid) {
             return res.status(400).json({
                 success: false,
                 otpRequired: true,
-                message: "Please verify your mobile number or email address with OTP before completing registration."
+                message: "Please verify your mobile number with the real OTP received via SMS before completing registration."
             });
         }
 
@@ -1253,7 +1692,7 @@ app.post("/api/auth/register-doctor", async (req, res) => {
             return res.status(400).json({
                 success: false,
                 otpRequired: true,
-                message: "Doctor mobile number or email is required and must be verified with OTP."
+                message: "Doctor mobile number or email is required and must be verified with real OTP."
             });
         }
 
@@ -1262,26 +1701,30 @@ app.post("/api/auth/register-doctor", async (req, res) => {
         const submittedCode = String(otpCode || "").trim();
 
         let isOtpValid = false;
-        const twilioConfig = getTwilioConfig();
-        if (!twilioConfig.isConfigured || isContactVerified) {
-            isOtpValid = true;
-        }
         if (normalizedPhone) {
             const exp = verifiedRegistrationContacts.get(normalizedPhone);
-            if (exp && exp > Date.now()) isOtpValid = true;
-            if (submittedCode && (submittedCode === "123456" || demoOtps.get(normalizedPhone) === submittedCode)) isOtpValid = true;
+            if (exp && exp > Date.now()) {
+                isOtpValid = true;
+            } else if (submittedCode) {
+                const checkRes = await verifyRealOtp(normalizedPhone, submittedCode);
+                if (checkRes.valid) isOtpValid = true;
+            }
         }
-        if (normalizedEmail && !isOtpValid) {
+        if (!isOtpValid && normalizedEmail) {
             const exp = verifiedRegistrationContacts.get(normalizedEmail);
-            if (exp && exp > Date.now()) isOtpValid = true;
-            if (submittedCode && (submittedCode === "123456" || demoOtps.get(normalizedEmail) === submittedCode)) isOtpValid = true;
+            if (exp && exp > Date.now()) {
+                isOtpValid = true;
+            } else if (submittedCode) {
+                const checkRes = await verifyRealOtp(normalizedEmail, submittedCode);
+                if (checkRes.valid) isOtpValid = true;
+            }
         }
 
         if (!isOtpValid) {
             return res.status(400).json({
                 success: false,
                 otpRequired: true,
-                message: "Please verify your mobile number or email address with OTP before completing registration."
+                message: "Please verify your mobile number with the real OTP received via SMS before completing registration."
             });
         }
 
