@@ -1475,89 +1475,53 @@
             </div>
         </div>
 
-        <div class="helper-rescue-container" style="max-width: 860px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px;">
+        <div class="helper-rescue-container" style="max-width: 860px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px;">
 
-            <!-- ATTACHED RESCUE VITALS SUMMARY (Displays active event vitals) -->
-            <div id="attachedRescueVitalsCard" class="vitals-attached-card hidden">
-                <div class="vitals-attached-header">
-                    <div style="display: flex; align-items: center; gap: 8px;">
-                        <span class="vitals-header-pulse-icon">💓</span>
-                        <div>
-                            <h4 style="margin: 0; font-size: 16px; font-weight: 700; color: #0f172a; display: flex; align-items: center; gap: 6px;">
-                                Attached Rescue Vitals
-                            </h4>
-                            <div id="vitalsAttachedSubtitle" style="font-size: 11.5px; color: #64748b; margin-top: 2px;">
-                                Attached to Emergency Rescue Event • Logged just now
-                            </div>
-                        </div>
-                    </div>
-                    <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-                        <span id="vitalsTriageBadge" class="triage-badge triage-stable">🟢 STABLE</span>
-                        <button type="button" class="btn-small secondary" onclick="openQuickVitalsModal()" style="font-size: 11.5px; padding: 4px 10px; font-weight: 600;">
-                            ✏️ Update Vitals
-                        </button>
+            <!-- EMERGENCY PRIORITY CALL 112 BANNER (Always Visible & Prominent) -->
+            <div style="background: #fef2f2; border: 2px solid #ef4444; border-radius: 12px; padding: 14px 18px; display: flex; justify-content: space-between; align-items: center; gap: 14px; flex-wrap: wrap; box-shadow: 0 2px 8px rgba(239, 68, 68, 0.15);">
+                <div style="display: flex; align-items: center; gap: 12px; flex: 1; min-width: 260px;">
+                    <span style="font-size: 28px;">🚨</span>
+                    <div>
+                        <b style="font-size: 14px; color: #991b1b; display: block; text-transform: uppercase; letter-spacing: 0.5px;">Life-Threatening Emergency?</b>
+                        <span style="font-size: 12.5px; color: #7f1d1d; line-height: 1.4;">
+                            If victim is unresponsive or not breathing, <b>CALL 112 IMMEDIATELY</b>. Do not delay emergency medical care for facial scanning or document retrieval.
+                        </span>
                     </div>
                 </div>
-                <div class="vitals-metrics-grid">
-                    <div class="vital-metric-chip" id="chipPulseMetric">
-                        <span class="metric-icon">💓</span>
-                        <div class="metric-body">
-                            <span class="metric-label">Pulse / HR</span>
-                            <b id="attachedPulseVal" class="metric-value">-- bpm</b>
-                        </div>
-                        <span id="attachedPulseTag" class="metric-tag tag-normal">Normal</span>
-                    </div>
-                    <div class="vital-metric-chip" id="chipSpo2Metric">
-                        <span class="metric-icon">🫁</span>
-                        <div class="metric-body">
-                            <span class="metric-label">Oxygen SpO2</span>
-                            <b id="attachedSpo2Val" class="metric-value">--%</b>
-                        </div>
-                        <span id="attachedSpo2Tag" class="metric-tag tag-normal">Normal</span>
-                    </div>
-                    <div class="vital-metric-chip" id="chipBpMetric">
-                        <span class="metric-icon">🩸</span>
-                        <div class="metric-body">
-                            <span class="metric-label">Blood Pressure</span>
-                            <b id="attachedBpVal" class="metric-value">--/--</b>
-                        </div>
-                        <span class="metric-tag tag-neutral">mmHg</span>
-                    </div>
-                    <div class="vital-metric-chip" id="chipAvpuMetric">
-                        <span class="metric-icon">🧠</span>
-                        <div class="metric-body">
-                            <span class="metric-label">Consciousness</span>
-                            <b id="attachedAvpuVal" class="metric-value">Alert</b>
-                        </div>
-                        <span class="metric-tag tag-neutral">AVPU</span>
-                    </div>
-                </div>
-                <div id="attachedVitalsNotesRow" class="vitals-notes-preview hidden">
-                    <b>Triage Notes:</b> <span id="attachedVitalsNotesText">-</span>
-                </div>
+                <button
+                    type="button"
+                    class="btn-emergency"
+                    onclick="openEmergencyCallConfirmation('112', 'Emergency Services (112)')"
+                    style="background: #dc2626; color: white; padding: 10px 20px; font-weight: 800; font-size: 15px; border: none; border-radius: 8px; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; box-shadow: 0 4px 10px rgba(220, 38, 38, 0.35); white-space: nowrap;">
+                    🚨 Call 112 (India)
+                </button>
             </div>
 
-            <!-- CAMERA & CONTROLS CARD -->
-            <div class="camera-card" style="margin-bottom: 0;">
+            <!-- STREAMLINED CAMERA INTERFACE -->
+            <div class="camera-card" style="margin-bottom: 0; padding: 18px; border-radius: 14px; background: white; border: 1px solid #e2e8f0; box-shadow: 0 4px 16px rgba(0,0,0,0.04);">
 
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
                     <div>
-                        <h2 style="margin: 0; font-size: 19px; color: #0f172a; display: flex; align-items: center; gap: 8px;">
-                            📷 Emergency Live Camera
+                        <h2 style="margin: 0; font-size: 18px; color: #0f172a; display: flex; align-items: center; gap: 8px;">
+                            📷 Emergency Face Scanner
                         </h2>
                         <span id="cameraHardwareStatus" style="font-size: 12px; color: #64748b;">
-                            Offline/Online camera supported on compatible devices
+                            AI Biometric Matcher • Evaluated at strict 82% threshold
                         </span>
                     </div>
 
-                    <!-- Facing mode tag -->
-                    <span id="cameraFacingBadge" class="badge-tag" style="background: #f1f5f9; color: #334155; font-size: 11.5px; padding: 3px 8px; border-radius: 6px;">
-                        Camera: Rear (Environment)
-                    </span>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span id="cameraFacingBadge" class="badge-tag" style="background: #f1f5f9; color: #334155; font-size: 11px; padding: 3px 8px; border-radius: 6px; font-weight: 600;">
+                            Rear Camera
+                        </span>
+                        <span id="offlineSyncStatusBadge" class="badge-tag" style="background: #f0fdf4; color: #166534; font-size: 11px; padding: 3px 8px; border-radius: 6px; font-weight: 600;">
+                            🟢 Online / Database Synced
+                        </span>
+                    </div>
                 </div>
 
-                <!-- Camera Viewport / Preview Box (Req 1) -->
-                <div class="camera-wrapper" style="position: relative; width: 100%; max-width: 100%; min-height: 340px; background: #090d16; border-radius: 14px; overflow: hidden; display: flex; align-items: center; justify-content: center; box-shadow: inset 0 0 20px rgba(0,0,0,0.5);">
+                <!-- Camera Viewport / Preview Box -->
+                <div class="camera-wrapper" style="position: relative; width: 100%; max-width: 100%; min-height: 320px; background: #090d16; border-radius: 12px; overflow: hidden; display: flex; align-items: center; justify-content: center; box-shadow: inset 0 0 20px rgba(0,0,0,0.5);">
 
                     <!-- Live Camera Stream -->
                     <video
@@ -1566,20 +1530,11 @@
                         autoplay
                         playsinline
                         muted
-                        style="width: 100%; height: 100%; min-height: 340px; max-height: 440px; object-fit: cover;">
+                        style="width: 100%; height: 100%; min-height: 320px; max-height: 420px; object-fit: cover;">
                     </video>
 
                     <!-- Face Framing Guide Overlay -->
-                    <div
-                        id="faceGuide"
-                        class="face-guide hidden">
-                    </div>
-
-                    <!-- Live Motion / Activity Screening Overlay (Req 3) -->
-                    <div id="liveScreeningPill" class="hidden" style="position: absolute; top: 12px; left: 12px; z-index: 5; background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(4px); color: white; padding: 5px 10px; border-radius: 20px; font-size: 11.5px; display: flex; align-items: center; gap: 6px; border: 1px solid rgba(255,255,255,0.2);">
-                        <span id="screeningMotionDot" style="width: 8px; height: 8px; border-radius: 50%; background: #10b981;"></span>
-                        <span id="screeningMotionText">Motion Screening: Monitoring</span>
-                    </div>
+                    <div id="faceGuide" class="face-guide hidden"></div>
 
                     <!-- Initial Placeholder before camera start -->
                     <div
@@ -1587,20 +1542,23 @@
                         class="camera-placeholder"
                         style="padding: 40px 20px; text-align: center;">
 
-                        <div class="camera-placeholder-icon" style="font-size: 56px; margin-bottom: 10px;">
+                        <div class="camera-placeholder-icon" style="font-size: 52px; margin-bottom: 8px;">
                             📸
                         </div>
 
-                        <b style="font-size: 16px; color: #f1f5f9; display: block; margin-bottom: 6px;">Camera Inactive</b>
+                        <b style="font-size: 16px; color: #f1f5f9; display: block; margin-bottom: 6px;">Camera Standby</b>
 
                         <p style="font-size: 13px; color: #94a3b8; max-width: 380px; margin: 0 auto 16px; line-height: 1.5;">
-                            Click <b>Start Camera</b> below. Camera works on device locally without internet. Align the face inside the guide to capture and identify registered patients.
+                            Click <b>Start Camera</b> to scan the face of an accident victim. The system verifies their facial template against consented patient records and retrieves emergency medical history.
                         </p>
 
                         <div style="display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;">
                             <input type="file" id="helperPhotoFile" accept="image/*" style="display:none;" onchange="handleHelperPhotoUpload(event)">
-                            <button type="button" class="btn-small secondary" onclick="$('helperPhotoFile').click()" style="background: #1e293b; color: white;">
+                            <button type="button" class="btn-small secondary" onclick="$('helperPhotoFile').click()" style="background: #1e293b; color: white; padding: 8px 16px;">
                                 📁 Upload Photo
+                            </button>
+                            <button type="button" class="btn-small secondary" onclick="loadDemoPatientForIdentification()" style="background: #0f766e; color: white; padding: 8px 16px;">
+                                🧪 Test PAT1001 Scan
                             </button>
                         </div>
 
@@ -1611,96 +1569,21 @@
                         id="capturedImage"
                         class="captured-image hidden"
                         alt="Captured Person Face"
-                        style="width: 100%; height: 100%; min-height: 340px; max-height: 440px; object-fit: cover;">
+                        style="width: 100%; height: 100%; min-height: 320px; max-height: 420px; object-fit: cover;">
 
-                    <!-- Hidden canvas for capturing video frame & activity analysis -->
-                    <canvas
-                        id="captureCanvas"
-                        style="display: none;">
-                    </canvas>
-                    <canvas
-                        id="motionScreeningCanvas"
-                        width="32"
-                        height="32"
-                        style="display: none;">
-                    </canvas>
-
+                    <!-- Hidden canvas for capturing video frame -->
+                    <canvas id="captureCanvas" style="display: none;"></canvas>
                 </div>
 
-                <!-- Low-Light Camera Enhancement & Filter Controls (Req: Contrast & Brightness for Low-Light Emergency Scenarios) -->
-                <div id="cameraFilterToolbar" class="camera-filter-toolbar">
-                    <div class="filter-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                        <span style="font-size: 13px; font-weight: 700; color: #1e293b; display: flex; align-items: center; gap: 6px;">
-                            💡 Low-Light Vision Enhancer <span style="font-size: 11px; font-weight: normal; color: #64748b;">(Contrast &amp; Brightness for Emergency Recognition)</span>
-                        </span>
-                        <button type="button" class="btn-filter-reset" onclick="resetCameraFilters()" title="Reset contrast and brightness to default">
-                            ↺ Reset
-                        </button>
-                    </div>
-
-                    <!-- Filter Quick Presets -->
-                    <div class="filter-presets-row" style="display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px;">
-                        <button type="button" id="presetNormal" class="filter-chip" onclick="applyCameraFilterPreset('normal')">
-                            Standard (100%)
-                        </button>
-                        <button type="button" id="presetLowLight" class="filter-chip" onclick="applyCameraFilterPreset('lowlight')">
-                            💡 Low-Light Boost
-                        </button>
-                        <button type="button" id="presetHighContrast" class="filter-chip" onclick="applyCameraFilterPreset('highcontrast')">
-                            🌓 High Contrast
-                        </button>
-                        <button type="button" id="presetNight" class="filter-chip" onclick="applyCameraFilterPreset('night')">
-                            🌙 Night Rescue
-                        </button>
-                    </div>
-
-                    <!-- Granular Sliders -->
-                    <div class="filter-sliders-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-                        <div class="filter-slider-item">
-                            <div style="display: flex; justify-content: space-between; font-size: 11.5px; font-weight: 600; color: #475569; margin-bottom: 4px;">
-                                <span>☀️ Brightness</span>
-                                <span id="cameraBrightnessVal" style="color: #0284c7; font-weight: 700;">100%</span>
-                            </div>
-                            <input
-                                type="range"
-                                id="cameraBrightnessSlider"
-                                min="50"
-                                max="200"
-                                value="100"
-                                step="5"
-                                oninput="setCameraBrightness(this.value)"
-                                aria-label="Camera Brightness Adjustment"
-                                style="width: 100%; accent-color: #0284c7; cursor: pointer;">
-                        </div>
-
-                        <div class="filter-slider-item">
-                            <div style="display: flex; justify-content: space-between; font-size: 11.5px; font-weight: 600; color: #475569; margin-bottom: 4px;">
-                                <span>🌓 Contrast</span>
-                                <span id="cameraContrastVal" style="color: #0284c7; font-weight: 700;">120%</span>
-                            </div>
-                            <input
-                                type="range"
-                                id="cameraContrastSlider"
-                                min="50"
-                                max="200"
-                                value="120"
-                                step="5"
-                                oninput="setCameraContrast(this.value)"
-                                aria-label="Camera Contrast Adjustment"
-                                style="width: 100%; accent-color: #0284c7; cursor: pointer;">
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Camera Control Buttons (Req 1) -->
-                <div class="camera-controls" style="display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin-top: 14px;">
+                <!-- Camera Control Buttons (Clean, Mobile-Friendly) -->
+                <div class="camera-controls" style="display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-top: 14px;">
 
                     <!-- Start Camera Button -->
                     <button
                         id="startCameraBtn"
                         class="btn-emergency"
                         onclick="startEmergencyCamera()"
-                        style="background: #0284c7; padding: 12px 22px;">
+                        style="background: #0284c7; padding: 11px 22px; font-weight: 700; border-radius: 8px;">
                         📸 Start Camera
                     </button>
 
@@ -1709,15 +1592,16 @@
                         id="captureBtn"
                         class="btn-emergency hidden"
                         onclick="captureEmergencyPhoto()"
-                        style="background: #16a34a; padding: 12px 22px;">
-                        ⏺ Capture Face
+                        style="background: #16a34a; padding: 11px 24px; font-weight: 700; border-radius: 8px;">
+                        ⏺ Capture &amp; Identify Face
                     </button>
 
                     <!-- Switch Camera (Front/Rear) -->
                     <button
                         id="switchCameraBtn"
                         class="btn-secondary hidden"
-                        onclick="switchCameraFacing()">
+                        onclick="switchCameraFacing()"
+                        style="padding: 11px 16px; border-radius: 8px;">
                         🔄 Switch Camera
                     </button>
 
@@ -1725,7 +1609,8 @@
                     <button
                         id="stopCameraBtn"
                         class="btn-secondary hidden"
-                        onclick="stopEmergencyCamera()">
+                        onclick="stopEmergencyCamera()"
+                        style="padding: 11px 16px; border-radius: 8px;">
                         ⏹ Stop Camera
                     </button>
 
@@ -1733,25 +1618,17 @@
                     <button
                         id="retakeBtn"
                         class="btn-secondary hidden"
-                        onclick="retakePhoto()">
+                        onclick="retakePhoto()"
+                        style="padding: 11px 18px; border-radius: 8px;">
                         🔁 Retake Photo
                     </button>
 
-                    <!-- Identify Patient Button -->
-                    <button
-                        id="identifyBtn"
-                        class="btn-emergency hidden"
-                        onclick="identifyEmergencyPatient()"
-                        style="background: #0f766e; padding: 12px 24px;">
-                        🔍 Identify Registered Patient
-                    </button>
-
-                    <!-- Direct Emergency Call button in camera row -->
+                    <!-- Direct 112 Call in button bar -->
                     <button
                         type="button"
                         class="btn-emergency"
                         onclick="openEmergencyCallConfirmation('112', 'Emergency Services (112)')"
-                        style="background: #dc2626; padding: 12px 20px;">
+                        style="background: #dc2626; padding: 11px 20px; font-weight: 700; border-radius: 8px;">
                         🚨 Call 112
                     </button>
 
@@ -1760,175 +1637,253 @@
                         id="helperUploadBtn"
                         type="button"
                         class="btn-secondary"
-                        onclick="$('helperPhotoFile').click()">
+                        onclick="$('helperPhotoFile').click()"
+                        style="padding: 11px 16px; border-radius: 8px;">
                         📁 Upload
                     </button>
-
                 </div>
 
-                <!-- Identification Processing Status Indicator -->
+                <!-- Identification Processing Status Spinner -->
                 <div
                     id="identifyingSpinner"
                     class="hidden"
-                    style="text-align: center; margin-top: 16px; padding: 12px; background: #fef2f2; border-radius: 8px; color: #dc2626; font-weight: bold; font-size: 13.5px;">
-                    ⏳ Analyzing biometric template against registered patient data...
-                    <div id="identifyingEngineNotice" style="font-size: 11.5px; font-weight: normal; color: #7f1d1d; margin-top: 4px;">
+                    style="text-align: center; margin-top: 14px; padding: 14px; background: #eff6ff; border: 1.5px solid #bfdbfe; border-radius: 10px; color: #1e40af; font-weight: bold; font-size: 13.5px;">
+                    <div style="font-size: 18px; margin-bottom: 4px;">⏳</div>
+                    <span>Comparing biometric template &amp; analyzing patient medical documents...</span>
+                    <div id="identifyingEngineNotice" style="font-size: 11.5px; font-weight: normal; color: #3b82f6; margin-top: 4px;">
                         Evaluating Pearson biometric vector correlation with strict 82% threshold.
                     </div>
                 </div>
 
             </div>
 
-            <!-- IDENTIFICATION RESULT: RELIABLE REGISTERED PATIENT MATCH FOUND (Req 2 & 6) -->
-                <!-- STRICT PRIVACY: Displays ONLY Patient Name, Patient ID, Blood Group, Guardian Name, Guardian Emergency Contact -->
-                <!-- NEVER displays password, email, address, medical history, notes, documents, or full profile -->
-                <div
-                    id="matchResult"
-                    class="result-card result-success hidden"
-                    style="background: #f0fdf4; border: 2px solid #86efac; border-radius: 14px; padding: 20px; box-shadow: 0 4px 18px rgba(0,0,0,0.06); margin-top: 0;">
+            <!-- ================= IDENTIFICATION RESULT: RELIABLE MATCH FOUND ================= -->
+            <div
+                id="matchResult"
+                class="result-card result-success hidden"
+                style="background: #ffffff; border: 2px solid #86efac; border-radius: 14px; padding: 20px; box-shadow: 0 4px 18px rgba(0,0,0,0.06); margin-top: 0;">
 
-                    <div class="result-success-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid #bbf7d0; flex-wrap: wrap; gap: 8px;">
-                        <div>
-                            <h3 style="margin: 0; color: #15803d; font-size: 18px; display: flex; align-items: center; gap: 6px;">
-                                ✅ Registered Patient Identified
-                            </h3>
-                            <div id="matchSourceLabel" style="font-size: 11.5px; color: #166534; margin-top: 2px;">
-                                Match verified via Real Biometric Engine (Cloud Database)
-                            </div>
+                <!-- Header / Identity Badge -->
+                <div class="result-success-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; padding-bottom: 12px; border-bottom: 1px solid #e2e8f0; flex-wrap: wrap; gap: 8px;">
+                    <div>
+                        <h3 style="margin: 0; color: #15803d; font-size: 19px; display: flex; align-items: center; gap: 6px;">
+                            ✅ Patient Identified
+                        </h3>
+                        <div id="matchSourceLabel" style="font-size: 12px; color: #166534; margin-top: 2px;">
+                            Match verified via MediCare Biometric Vision Engine (PostgreSQL)
                         </div>
+                    </div>
 
-                        <span id="matchConfidenceBadge" class="match-badge" style="background: #dcfce7; color: #166534; font-weight: bold; font-size: 12px; padding: 4px 10px; border-radius: 12px;">
-                            94.2% Confidence
+                    <span id="matchConfidenceBadge" class="match-badge" style="background: #dcfce7; color: #166534; font-weight: 800; font-size: 13px; padding: 5px 12px; border-radius: 14px; border: 1px solid #86efac;">
+                        96.4% Match
+                    </span>
+                </div>
+
+                <!-- ESSENTIAL IDENTIFIED FIELDS -->
+                <div class="emergency-fields-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-bottom: 16px;">
+                    <div class="emergency-field-item" style="background: #f8fafc; padding: 10px 12px; border-radius: 8px; border: 1px solid #e2e8f0;">
+                        <div style="font-size: 11px; font-weight: bold; color: #64748b; text-transform: uppercase;">Patient Name</div>
+                        <div id="resPatientName" style="font-size: 17px; font-weight: 800; color: #0f172a; margin-top: 2px;">-</div>
+                    </div>
+
+                    <div class="emergency-field-item" style="background: #f8fafc; padding: 10px 12px; border-radius: 8px; border: 1px solid #e2e8f0;">
+                        <div style="font-size: 11px; font-weight: bold; color: #64748b; text-transform: uppercase;">Patient ID</div>
+                        <div id="resPatientId" style="font-size: 17px; font-weight: 800; color: #0284c7; margin-top: 2px;">-</div>
+                    </div>
+
+                    <div class="emergency-field-item" style="background: #f8fafc; padding: 10px 12px; border-radius: 8px; border: 1px solid #e2e8f0;">
+                        <div style="font-size: 11px; font-weight: bold; color: #64748b; text-transform: uppercase;">Blood Group</div>
+                        <div style="margin-top: 2px;">
+                            <span id="resBloodGroupBadge" class="blood-group-badge" style="background: #fee2e2; color: #b91c1c; font-size: 16px; font-weight: 800; padding: 2px 8px; border-radius: 6px;">-</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- COMPACT AI EMERGENCY ASSISTANT & CLINICAL SUMMARY -->
+                <div id="aiEmergencyAssistantCard" style="background: #f0fdf4; border: 1.5px solid #bbf7d0; border-radius: 10px; padding: 14px; margin-bottom: 16px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; border-bottom: 1px solid #bbf7d0; padding-bottom: 8px;">
+                        <span style="font-size: 14px; font-weight: 800; color: #166534; display: flex; align-items: center; gap: 6px;">
+                            🤖 AI Emergency Clinical Assistant &amp; Document Summary
+                        </span>
+                        <span style="font-size: 11px; background: #dcfce7; color: #166534; padding: 2px 8px; border-radius: 10px; font-weight: 700;">
+                            Gemini 3.8 Flash • Document Grounded
                         </span>
                     </div>
 
-                    <!-- MINIMUM AUTHORIZED EMERGENCY FIELDS (Req 2 & 6) -->
-                    <div class="emergency-fields-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px;">
-
-                        <div class="emergency-field-item" style="background: white; padding: 10px 12px; border-radius: 8px; border: 1px solid #dcfce7;">
-                            <div class="emergency-field-label" style="font-size: 11px; font-weight: bold; color: #64748b; text-transform: uppercase;">Patient Name</div>
-                            <div id="resPatientName" class="emergency-field-value" style="font-size: 16px; font-weight: 700; color: #0f172a;">-</div>
+                    <!-- 1. Documented Medical History (Allergies, Conditions, Medications from PostgreSQL records) -->
+                    <div style="margin-bottom: 12px;">
+                        <div style="font-size: 12px; font-weight: 800; color: #0f172a; margin-bottom: 4px; display: flex; align-items: center; gap: 6px;">
+                            <span>🛡️ Documented Medical History (Official Records &amp; Uploaded Documents):</span>
                         </div>
-
-                        <div class="emergency-field-item" style="background: white; padding: 10px 12px; border-radius: 8px; border: 1px solid #dcfce7;">
-                            <div class="emergency-field-label" style="font-size: 11px; font-weight: bold; color: #64748b; text-transform: uppercase;">Patient ID</div>
-                            <div id="resPatientId" class="emergency-field-value" style="font-size: 16px; font-weight: 700; color: #0f172a;">-</div>
+                        <div id="resDocumentedHistoryContainer" style="background: white; border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px 12px; font-size: 12.5px; color: #1e293b; line-height: 1.5;">
+                            <!-- Populated dynamically -->
+                            <div style="color: #64748b;">Loading documented medical records...</div>
                         </div>
-
-                        <div class="emergency-field-item" style="background: white; padding: 10px 12px; border-radius: 8px; border: 1px solid #dcfce7;">
-                            <div class="emergency-field-label" style="font-size: 11px; font-weight: bold; color: #64748b; text-transform: uppercase;">Blood Group</div>
-                            <div id="resBloodGroup" class="emergency-field-value">
-                                <span id="resBloodGroupBadge" class="blood-group-badge" style="background: #fee2e2; color: #b91c1c; font-size: 16px; font-weight: 800; padding: 2px 8px; border-radius: 6px;">-</span>
-                            </div>
-                        </div>
-
-                        <div class="emergency-field-item" style="background: white; padding: 10px 12px; border-radius: 8px; border: 1px solid #dcfce7;">
-                            <div class="emergency-field-label" style="font-size: 11px; font-weight: bold; color: #64748b; text-transform: uppercase;">Primary Guardian</div>
-                            <div id="resGuardianName" class="emergency-field-value" style="font-size: 16px; font-weight: 700; color: #0f172a;">-</div>
-                        </div>
-
                     </div>
 
-                    <!-- Guardian Emergency Phone with Direct Confirmed Call Action (Req 4) -->
-                    <div class="guardian-contact-box" style="background: #ffffff; border: 1.5px solid #86efac; border-radius: 10px; padding: 14px; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
+                    <!-- 2. AI Facial Observations (Visible signs from camera with strict disclaimer) -->
+                    <div style="margin-bottom: 12px;">
+                        <div style="font-size: 12px; font-weight: 800; color: #0f172a; margin-bottom: 4px; display: flex; align-items: center; gap: 6px;">
+                            <span>👁️ AI Visible Facial Observations (Camera Frame Analysis):</span>
+                        </div>
+                        <div id="resFacialObservationsContainer" style="background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 10px 12px; font-size: 12.5px; color: #92400e; line-height: 1.45;">
+                            <!-- Populated dynamically -->
+                            <div style="color: #64748b;">Analyzing visible indicators...</div>
+                        </div>
+                        <!-- Mandatory Clinical Disclaimer -->
+                        <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 6px; padding: 7px 10px; margin-top: 5px; font-size: 11px; color: #991b1b; line-height: 1.35;">
+                            ⚠️ <b>Clinical Safety Guardrail:</b> Visible camera observation only. Facial expressions cannot diagnose unconsciousness, internal injuries, concussion, shock, or accident severity, and cannot measure blood pressure, pulse, or blood oxygen. If the person is unresponsive or not breathing normally, CALL 112 IMMEDIATELY.
+                        </div>
+                    </div>
+
+                    <!-- 3. Missing or Unverified Records -->
+                    <div style="margin-bottom: 12px;">
+                        <div style="font-size: 12px; font-weight: 800; color: #0f172a; margin-bottom: 4px;">
+                            ❓ Missing or Unverified Information in Records:
+                        </div>
+                        <div id="resMissingInfoContainer" style="background: white; border: 1px solid #cbd5e1; border-radius: 8px; padding: 8px 12px; font-size: 12px; color: #475569; line-height: 1.4;">
+                            <!-- Populated dynamically -->
+                        </div>
+                    </div>
+
+                    <!-- 4. Recommended Immediate Next Steps -->
+                    <div>
+                        <div style="font-size: 12px; font-weight: 800; color: #0f172a; margin-bottom: 4px;">
+                            📋 Recommended Immediate First-Responder Next Steps:
+                        </div>
+                        <div id="resNextStepsContainer" style="background: white; border: 1px solid #cbd5e1; border-radius: 8px; padding: 8px 12px; font-size: 12px; color: #1e293b; line-height: 1.45;">
+                            <!-- Populated dynamically -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- AUTOMATIC GUARDIAN EMERGENCY ALERT SECTION -->
+                <div style="background: #ffffff; border: 2px solid #38bdf8; border-radius: 12px; padding: 16px; margin-bottom: 14px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 6px;">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span style="font-size: 22px;">📱</span>
+                            <div>
+                                <b style="font-size: 14px; color: #0369a1; text-transform: uppercase;">Guardian Emergency Alert Dispatch</b>
+                                <div style="font-size: 11.5px; color: #64748b;">Dispatches immediate SMS with victim name, ID, and live GPS location</div>
+                            </div>
+                        </div>
+                        <span id="guardianAlertDeliveryPill" style="font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 8px; background: #f0f9ff; color: #0369a1; border: 1px solid #bae6fd;">
+                            Status: Ready to send
+                        </span>
+                    </div>
+
+                    <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
                         <div>
-                            <div class="emergency-field-label" style="font-size: 11px; font-weight: bold; color: #64748b; text-transform: uppercase;">Guardian Emergency Phone</div>
-                            <div id="resGuardianPhone" class="emergency-field-value" style="font-size: 19px; font-weight: 800; color: #065f46;">
+                            <div style="font-size: 11px; font-weight: bold; color: #64748b; text-transform: uppercase;">Primary Emergency Guardian</div>
+                            <div style="font-size: 15px; font-weight: 800; color: #0f172a;">
+                                <span id="resGuardianName">-</span> <span id="resGuardianRel" style="font-size: 12px; font-weight: normal; color: #64748b;">(Guardian)</span>
+                            </div>
+                            <div id="resGuardianPhone" style="font-size: 16px; font-weight: 800; color: #059669; margin-top: 2px;">
                                 -
                             </div>
                         </div>
 
-                        <button
-                            type="button"
-                            id="resCallGuardianBtn"
-                            class="call-guardian-btn"
-                            onclick="callMatchedPatientGuardian()"
-                            style="background: #059669; color: white; border: none; padding: 10px 18px; border-radius: 8px; font-weight: bold; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; font-size: 14px;">
-                            📞 Call Guardian Now
-                        </button>
-                    </div>
-
-                    <!-- Attached Emergency Field Vitals in Matched Result -->
-                    <div id="resAttachedVitalsRow" class="emergency-attached-vitals-box hidden" style="margin-top: 14px; background: #ffffff; border: 1.5px solid #38bdf8; border-radius: 10px; padding: 12px 14px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
-                        <div style="display: flex; align-items: center; gap: 10px;">
-                            <span style="font-size: 22px;">💓</span>
-                            <div>
-                                <div style="font-size: 11px; font-weight: bold; color: #0369a1; text-transform: uppercase;">Attached Field Vitals</div>
-                                <div id="resAttachedVitalsText" style="font-size: 14px; font-weight: 700; color: #0f172a;">Pulse: 78 bpm • SpO2: 98%</div>
-                            </div>
-                        </div>
-                        <div style="display: flex; align-items: center; gap: 8px;">
-                            <span id="resVitalsTriagePill" class="triage-badge triage-stable">🟢 STABLE</span>
-                            <button type="button" class="btn-small secondary" onclick="openQuickVitalsModal()" style="font-size: 11.5px; padding: 4px 8px;">
-                                ✏️ Edit Vitals
+                        <!-- Action Buttons: Send SMS & Call Guardian -->
+                        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                            <button
+                                type="button"
+                                id="sendGuardianSmsBtn"
+                                onclick="dispatchGuardianEmergencyAlert()"
+                                style="background: #0284c7; color: white; border: none; padding: 10px 16px; border-radius: 8px; font-weight: bold; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; font-size: 13.5px; box-shadow: 0 2px 6px rgba(2, 132, 199, 0.3);">
+                                🚨 Dispatch Guardian SMS
+                            </button>
+                            <button
+                                type="button"
+                                id="resCallGuardianBtn"
+                                onclick="callMatchedPatientGuardian()"
+                                style="background: #059669; color: white; border: none; padding: 10px 16px; border-radius: 8px; font-weight: bold; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; font-size: 13.5px; box-shadow: 0 2px 6px rgba(5, 150, 105, 0.3);">
+                                📞 Call Guardian Directly
                             </button>
                         </div>
                     </div>
 
-                    <div class="privacy-notice" style="margin-top: 14px; font-size: 11.5px; color: #64748b; border-top: 1px dashed #bbf7d0; padding-top: 10px; line-height: 1.4;">
-                        🔒 <b>Privacy Protection Enforced:</b> Only minimum essential emergency contact data is disclosed. Full clinical notes, documents, passwords, and private home address are strictly protected. Raw face images are discarded after vector calculation.
+                    <div id="guardianAlertStatusMessage" style="font-size: 12px; color: #475569; line-height: 1.4; padding: 8px 10px; background: #f8fafc; border-radius: 6px; border: 1px dashed #cbd5e1;">
+                        📍 <b>Location Sharing:</b> GPS coordinates will be attached automatically if location access is granted in your browser.
                     </div>
-
                 </div>
 
-
-                <!-- IDENTIFICATION RESULT: NO RELIABLE MATCH (Req 2 & 6) -->
-                <!-- Strictly shows "Patient not identified" - NEVER invents data or shows another patient! -->
-                <div
-                    id="noMatchResult"
-                    class="result-card result-nomatch hidden"
-                    style="background: #fef2f2; border: 2px solid #fecaca; border-radius: 14px; padding: 20px; box-shadow: 0 4px 18px rgba(0,0,0,0.06); margin-top: 0;">
-
-                    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
-                        <span style="font-size: 26px;">⚠️</span>
-                        <div>
-                            <h3 style="margin: 0; color: #991b1b; font-size: 18px; font-weight: bold;">
-                                Patient not identified
-                            </h3>
-                            <span id="noMatchSubLabel" style="font-size: 12px; color: #b91c1c;">
-                                Biometric similarity did not reach the required 82% threshold.
-                            </span>
-                        </div>
+                <!-- CALL 112 CONFIRMATION ACTION -->
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px; background: #fef2f2; border: 1.5px solid #fecaca; border-radius: 10px; flex-wrap: wrap; gap: 10px;">
+                    <div>
+                        <b style="font-size: 13.5px; color: #991b1b; display: block;">National Emergency Services (India)</b>
+                        <span style="font-size: 11.5px; color: #7f1d1d;">Dispatch ambulance, police, or disaster rescue services</span>
                     </div>
-
-                    <p id="noMatchMessage" style="font-size: 13px; color: #7f1d1d; line-height: 1.5; margin: 0 0 14px 0;">
-                        No reliable registered patient match found. MediCare strictly never guesses, fabricates data, or displays another patient's records when identity is uncertain.
-                    </p>
-
-                    <div style="background: white; border: 1px solid #fecaca; border-radius: 8px; padding: 12px; margin-bottom: 14px;">
-                        <b style="font-size: 12.5px; color: #991b1b; display: block; margin-bottom: 4px;">Recommended Next Actions:</b>
-                        <ul style="margin: 0; padding-left: 18px; font-size: 12.5px; color: #374151; line-height: 1.5;">
-                            <li>Initiate manual emergency assistance or call <b>112</b>.</li>
-                            <li>Check the individual's belongings for physical emergency ID or blood group card.</li>
-                            <li>Ensure good lighting and retake photo if face was occluded or angled away.</li>
-                        </ul>
-                    </div>
-
-                    <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-                        <button
-                            type="button"
-                            class="btn-emergency"
-                            onclick="openEmergencyCallConfirmation('112', 'Emergency Services (112)')"
-                            style="background: #dc2626; padding: 10px 18px; font-size: 13.5px;">
-                            📞 Call 112
-                        </button>
-                        <button
-                            type="button"
-                            class="btn-secondary"
-                            onclick="openManualEmergencyModal()"
-                            style="padding: 10px 16px; font-size: 13px;">
-                            📋 Manual Emergency Assistance
-                        </button>
-                        <button
-                            type="button"
-                            class="btn-secondary"
-                            onclick="retakePhoto()"
-                            style="padding: 10px 14px; font-size: 13px;">
-                            🔁 Retake Photo
-                        </button>
-                    </div>
-
+                    <button
+                        type="button"
+                        class="btn-emergency"
+                        onclick="openEmergencyCallConfirmation('112', 'Emergency Services (112)')"
+                        style="background: #dc2626; color: white; padding: 10px 20px; font-weight: 800; font-size: 14px; border: none; border-radius: 8px; cursor: pointer;">
+                        🚨 Call 112
+                    </button>
                 </div>
+
+                <div class="privacy-notice" style="margin-top: 14px; font-size: 11px; color: #64748b; border-top: 1px dashed #e2e8f0; padding-top: 8px; line-height: 1.4;">
+                    🔒 <b>Privacy Protection Enforced:</b> Minimum necessary emergency disclosure. Patient's residential address, financial info, and non-emergency notes are protected. All emergency identification events and guardian alerts are logged in PostgreSQL.
+                </div>
+
+            </div>
+
+            <!-- ================= IDENTIFICATION RESULT: NO RELIABLE MATCH ================= -->
+            <div
+                id="noMatchResult"
+                class="result-card result-nomatch hidden"
+                style="background: #fef2f2; border: 2px solid #fecaca; border-radius: 14px; padding: 20px; box-shadow: 0 4px 18px rgba(0,0,0,0.06); margin-top: 0;">
+
+                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+                    <span style="font-size: 28px;">⚠️</span>
+                    <div>
+                        <h3 style="margin: 0; color: #991b1b; font-size: 19px; font-weight: bold;">
+                            Patient Not Identified
+                        </h3>
+                        <span id="noMatchSubLabel" style="font-size: 12px; color: #b91c1c;">
+                            Biometric similarity did not reach the strict 82% threshold required for patient safety.
+                        </span>
+                    </div>
+                </div>
+
+                <p id="noMatchMessage" style="font-size: 13px; color: #7f1d1d; line-height: 1.5; margin: 0 0 14px 0;">
+                    No reliable registered patient match found. MediCare strictly never guesses, fabricates data, or displays another patient's records when identity is uncertain.
+                </p>
+
+                <div style="background: white; border: 1px solid #fecaca; border-radius: 8px; padding: 12px; margin-bottom: 14px;">
+                    <b style="font-size: 12.5px; color: #991b1b; display: block; margin-bottom: 4px;">Recommended Next Actions:</b>
+                    <ul style="margin: 0; padding-left: 18px; font-size: 12.5px; color: #374151; line-height: 1.5;">
+                        <li>Prioritize calling <b>112</b> if the person is injured or unresponsive.</li>
+                        <li>Check the individual's belongings for physical emergency ID or blood group card.</li>
+                        <li>Ensure good lighting and retake photo if face was occluded, blurred, or angled away.</li>
+                    </ul>
+                </div>
+
+                <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                    <button
+                        type="button"
+                        class="btn-emergency"
+                        onclick="openEmergencyCallConfirmation('112', 'Emergency Services (112)')"
+                        style="background: #dc2626; padding: 10px 18px; font-size: 13.5px; font-weight: bold; border-radius: 8px;">
+                        🚨 Call 112
+                    </button>
+                    <button
+                        type="button"
+                        class="btn-secondary"
+                        onclick="openManualEmergencyModal()"
+                        style="padding: 10px 16px; font-size: 13px; border-radius: 8px;">
+                        📋 Manual Emergency Directory
+                    </button>
+                    <button
+                        type="button"
+                        class="btn-secondary"
+                        onclick="retakePhoto()"
+                        style="padding: 10px 14px; font-size: 13px; border-radius: 8px;">
+                        🔁 Retake Photo
+                    </button>
+                </div>
+
+            </div>
 
         </div>
 
@@ -2754,8 +2709,13 @@
 
                 <input type="file" id="facePhotoFileInput" accept="image/*" style="display:none;" onchange="handleFacePhotoSelected(event)">
 
-                <div id="faceStatusFeedback" style="text-align: center; margin-top: 10px; font-size: 13px; font-weight: 600; color: #0284c7;">
-                    📸 Align your face and click "Capture & Enroll Face"
+                <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px 12px; margin-top: 12px; text-align: left;">
+                    <label style="display: flex; align-items: flex-start; gap: 8px; font-size: 12px; color: #334155; cursor: pointer; line-height: 1.4;">
+                        <input type="checkbox" id="patientBiometricConsentCheckbox" checked style="margin-top: 2px;">
+                        <span>
+                            <b>Informed Patient Consent:</b> I give informed consent for MediCare to securely register and associate my facial biometric template with my unique Patient ID in PostgreSQL solely for emergency first-responder identification and clinical record retrieval. I understand helpers cannot alter or replace my biometric template.
+                        </span>
+                    </label>
                 </div>
 
                 <div class="button-row" style="margin-top: 16px; display: flex; gap: 8px; justify-content: space-between; flex-wrap: wrap;">
@@ -3209,6 +3169,55 @@
                     <option value="success" selected>✅ Successful Verification (Passes confidence threshold)</option>
                     <option value="failed">❌ Failed / Rejected (Low lighting, occlusion, or spoof attempt)</option>
                 </select>
+            </div>
+            <!-- Engine Match Sensitivity Threshold Setting -->
+            <div style="margin-bottom: 14px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                    <label for="testBioThreshold" style="display: flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: bold; color: #334155; margin: 0;">
+                        <span>🎯 Biometric Match Threshold:</span>
+                        <span id="testBioThresholdBadge" style="background: #e0f2fe; color: #0369a1; padding: 2px 8px; border-radius: 12px; font-size: 12px; font-weight: 700;">
+                            85%
+                        </span>
+                    </label>
+                    <span id="testBioSensitivityLabel" style="font-size: 11.5px; font-weight: 600; color: #0284c7; background: #f0f9ff; padding: 2px 7px; border-radius: 4px; border: 1px solid #bae6fd;">
+                        Standard (Balanced)
+                    </span>
+                </div>
+                
+                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+                    <span style="font-size: 11px; color: #64748b; font-weight: 600;">50% (Lenient)</span>
+                    <input
+                        type="range"
+                        id="testBioThreshold"
+                        min="50"
+                        max="99"
+                        value="85"
+                        step="1"
+                        style="flex: 1; accent-color: #0284c7; cursor: pointer; height: 6px;"
+                        oninput="onBioThresholdChange(this.value)"
+                    />
+                    <span style="font-size: 11px; color: #64748b; font-weight: 600;">99% (Strict)</span>
+                </div>
+
+                <!-- Quick sensitivity preset buttons -->
+                <div style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap;">
+                    <span style="font-size: 11px; color: #64748b;">Presets:</span>
+                    <button type="button" class="btn-preset" onclick="setBioThresholdPreset(70)" style="font-size: 11px; padding: 3px 8px; border-radius: 4px; border: 1px solid #cbd5e1; background: white; color: #475569; cursor: pointer;">
+                        70% (Lenient)
+                    </button>
+                    <button type="button" class="btn-preset" onclick="setBioThresholdPreset(85)" style="font-size: 11px; padding: 3px 8px; border-radius: 4px; border: 1px solid #0284c7; background: #e0f2fe; color: #0369a1; font-weight: 600; cursor: pointer;">
+                        85% (Balanced)
+                    </button>
+                    <button type="button" class="btn-preset" onclick="setBioThresholdPreset(92)" style="font-size: 11px; padding: 3px 8px; border-radius: 4px; border: 1px solid #cbd5e1; background: white; color: #475569; cursor: pointer;">
+                        92% (Strict)
+                    </button>
+                    <button type="button" class="btn-preset" onclick="setBioThresholdPreset(98)" style="font-size: 11px; padding: 3px 8px; border-radius: 4px; border: 1px solid #cbd5e1; background: white; color: #475569; cursor: pointer;">
+                        98% (High-Security)
+                    </button>
+                </div>
+                <p id="testBioThresholdHelp" style="margin: 6px 0 0 0; font-size: 11px; color: #64748b; line-height: 1.35;">
+                    Adjusts the minimum biometric confidence required by the recognition engine to accept an identity match.
+                </p>
             </div>
             <div style="margin-bottom: 14px;">
                 <label style="display: block; font-size: 12.5px; font-weight: bold; color: #334155; margin-bottom: 4px;">Custom Notes / Context (Optional)</label>

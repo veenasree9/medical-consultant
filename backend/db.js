@@ -225,15 +225,15 @@ async function seedMockStore() {
         guardian2Phone: "+919876543215",
         guardian2Relationship: "Mother",
         healthInformation: {
-            allergies: false,
+            allergies: true,
             diabetes: false,
             hypertension: false,
-            asthma: false,
+            asthma: true,
             heart_condition: false,
             major_surgery: false,
             regular_medication: false,
             chronic_condition: false,
-            drug_reaction: false,
+            drug_reaction: true,
             emergency_condition: false,
             isCompleted: true
         },
@@ -250,6 +250,51 @@ async function seedMockStore() {
         aadhaarVerifiedAt: new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString(),
         documents: []
     });
+
+    // Seed uploaded medical documents for PAT1001
+    const doc1 = {
+        id: 101,
+        document_id: "DOC_1790493541908_7XF70V",
+        patient_id: "PAT1001",
+        original_filename: "Complete_Blood_Count_Report.pdf",
+        file_type: "application/pdf",
+        file_size: 45200,
+        storage_reference: path.join(__dirname, "uploads/documents/PAT1001_DOC_1790493541908_7XF70V_blood_test.pdf"),
+        uploaded_by: "patient",
+        extracted_text: "Laboratory Diagnostic Health Report\nPatient: Rahul Kumar (PAT1001)\nBlood Group: O+\nHemoglobin: 14.8 g/dL (Normal: 13.5-17.5)\nRBC Count: 5.1 mil/mcL\nWBC Count: 6,800 /mcL\nPlatelets: 245,000 /mcL (Normal: 150,000-450,000)\nFasting Blood Glucose: 92 mg/dL\nKnown Allergies: None recorded on hematology sheet.\nNotes: Routine hematology profile unremarkable.",
+        uploaded_at: "2025-08-14T10:30:00.000Z",
+        created_at: "2025-08-14T10:30:00.000Z"
+    };
+    const doc2 = {
+        id: 102,
+        document_id: "DOC_1791654295964_I5E7OY",
+        patient_id: "PAT1001",
+        original_filename: "Lab_Report_Camera_Snap.jpg",
+        file_type: "image/jpeg",
+        file_size: 38400,
+        storage_reference: path.join(__dirname, "uploads/documents/PAT1001_DOC_1791654295964_I5E7OY_Lab_Report_Camera_Snap.jpg"),
+        uploaded_by: "patient",
+        extracted_text: "Clinical Lab Diagnostic Snap\nPatient: Rahul Kumar\nBlood Pressure Check: 120/80 mmHg\nNo acute cardiovascular distress noted.",
+        uploaded_at: "2025-09-02T14:15:00.000Z",
+        created_at: "2025-09-02T14:15:00.000Z"
+    };
+    const doc3 = {
+        id: 103,
+        document_id: "DOC_VITALS_1791654287292_QOS2O",
+        patient_id: "PAT1001",
+        original_filename: "Initial_Health_Vitals_Report.pdf",
+        file_type: "application/pdf",
+        file_size: 51200,
+        storage_reference: path.join(__dirname, "uploads/documents/PAT1001_DOC_VITALS_1791654287292_QOS2O_Initial_Health_Vitals_Report.pdf"),
+        uploaded_by: "patient",
+        extracted_text: "Emergency Medical & Vitals Record\nPatient: Rahul Kumar (PAT1001)\nBlood Group: O+\nKnown Allergies: Penicillin (Mild Rash) - documented 2025-08-14\nCurrent Medications: None regular\nEmergency Contact: Suresh Kumar (Father) +919876543211\nSecondary Contact: Sunita Kumar (Mother) +919876543215\nMedical Conditions: Mild seasonal asthma; No chronic cardiac or hypertensive conditions.",
+        uploaded_at: "2025-08-14T11:00:00.000Z",
+        created_at: "2025-08-14T11:00:00.000Z"
+    };
+    mockStore.documents.set(doc1.document_id, doc1);
+    mockStore.documents.set(doc2.document_id, doc2);
+    mockStore.documents.set(doc3.document_id, doc3);
+    mockStore.patients.get("PAT1001").documents = [doc1, doc2, doc3];
 
     // Seed Patient PAT1002
     mockStore.users.set("USR_PAT_1002", {

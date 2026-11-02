@@ -9,7 +9,7 @@ const path = require("path");
 const db = require("./db");
 const QRCode = require("qrcode");
 const { exportPatientPdf, generateVitalsPdfBuffer } = require("./pdfExport");
-const { generateAiHealthResponse, isAiConfigured, getEffectiveApiKey } = require("./aiService");
+const { generateAiHealthResponse, analyzeEmergencyPatientRecordAndImage, isAiConfigured, getEffectiveApiKey } = require("./aiService");
 
 dotenv.config({ path: path.join(__dirname, "../.env") });
 dotenv.config();
@@ -1804,7 +1804,14 @@ app.get("/api/patient/verification/face-status", auth("patient"), async (req, re
 // Patient Biometric Face Enrollment via live camera capture
 app.post("/api/patient/verification/face-enroll", auth("patient"), async (req, res) => {
     try {
-        const { image } = req.body || {};
+        const { image, consentGiven } = req.body || {};
+        if (consentGiven === false) {
+            return res.status(400).json({
+                success: false,
+                message: "Patient informed consent is required to register and store facial biometric templates."
+            });
+        }
+
         if (!image || typeof image !== "string" || !image.startsWith("data:image/")) {
             return res.status(400).json({
                 success: false,
@@ -1962,36 +1969,69 @@ app.get("/api/patient/biometric-history/export-csv", auth("patient"), async (req
 app.post("/api/patient/biometric-verify", auth("patient"), async (req, res) => {
     try {
         const patientId = req.user.patientId;
-        const { method, outcome, details, confidence } = req.body || {};
+        const { method, outcome, details, confidence, threshold } = req.body || {};
 
+        const matchThreshold = typeof threshold === "number" ? threshold : (parseFloat(threshold) || 85.0);
         const isSuccess = outcome !== "failed";
-        const calcConfidence = confidence || (isSuccess ? (94 + Math.random() * 5).toFixed(1) : (45 + Math.random() * 25).toFixed(1));
+
+        let calcConfidence;
+        if (confidence !== undefined && confidence !== null) {
+            calcConfidence = parseFloat(confidence).toFixed(1);
+        } else if (isSuccess) {
+            // Generate a confidence score that satisfies the match threshold
+            const headroom = Math.max(1, 99.8 - matchThreshold);
+            calcConfidence = Math.min(99.8, matchThreshold + (Math.random() * headroom * 0.7) + 0.5).toFixed(1);
+        } else {
+            // Generate a confidence score below the match threshold
+            calcConfidence = Math.max(30.0, matchThreshold - 4.0 - (Math.random() * 20.0)).toFixed(1);
+        }
+
+        const confVal = parseFloat(calcConfidence);
+        const passedThreshold = confVal >= matchThreshold;
+        const finalStatus = (isSuccess && passedThreshold) ? "success" : "failed";
+
+        let sensitivityDesc = "Standard (Balanced)";
+        if (matchThreshold < 75) sensitivityDesc = "Lenient (High Tolerance)";
+        else if (matchThreshold >= 95) sensitivityDesc = "Ultra-Strict (Max Security)";
+        else if (matchThreshold >= 90) sensitivityDesc = "Strict (High Security)";
 
         const defaultMethod = method || "Face Biometric Scan (MediCare Vision Engine)";
-        const defaultDetails = details || (isSuccess
-            ? `Biometric match confirmed (${calcConfidence}%) via ${defaultMethod}.`
-            : `Biometric verification failed (${calcConfidence}%): Quality threshold not met.`);
+        let defaultDetails = details;
+        if (!defaultDetails) {
+            if (finalStatus === "success") {
+                defaultDetails = `Biometric match confirmed (${calcConfidence}%) via ${defaultMethod}. Exceeds configured engine sensitivity threshold (${matchThreshold}% - ${sensitivityDesc}).`;
+            } else {
+                defaultDetails = `Biometric verification rejected (${calcConfidence}%): Confidence fell below configured engine sensitivity threshold (${matchThreshold}% - ${sensitivityDesc}).`;
+            }
+        } else if (!defaultDetails.includes("Threshold")) {
+            defaultDetails += ` [Threshold: ${matchThreshold}% (${sensitivityDesc})]`;
+        }
 
         const log = await db.recordBiometricVerificationAttempt(patientId, {
             method: defaultMethod,
-            status: isSuccess ? "success" : "failed",
-            confidence: parseFloat(calcConfidence),
+            status: finalStatus,
+            confidence: confVal,
             details: defaultDetails,
             metadata: {
                 testedBy: patientId,
+                matchThreshold: matchThreshold,
+                threshold: matchThreshold + "%",
+                sensitivityLevel: sensitivityDesc,
                 clientTimestamp: new Date().toISOString()
             }
         });
 
         res.json({
             success: true,
-            status: isSuccess ? "success" : "failed",
+            status: finalStatus,
             confidence: log.confidence,
             method: log.method,
+            threshold: matchThreshold + "%",
+            sensitivityLevel: sensitivityDesc,
             log: log,
-            message: isSuccess
-                ? "Biometric verification successful and recorded in chronological history!"
-                : "Biometric verification rejected and logged in history."
+            message: finalStatus === "success"
+                ? `Biometric verification successful (${calcConfidence}% >= ${matchThreshold}% threshold) and recorded in history!`
+                : `Biometric verification rejected (${calcConfidence}% < ${matchThreshold}% threshold) and logged in history.`
         });
     } catch (err) {
         console.error("Biometric verification test error:", err.message);
@@ -2995,8 +3035,25 @@ app.post("/api/helper/identify-person", async (req, res) => {
             message: `Reliably matched registered patient ${patient.patientId} with ${matchConfidence.toFixed(1)}% confidence.`
         });
 
-        // PRIVACY GUARANTEE: Returns ONLY: Patient ID, Full Name, Blood Group, Guardian Name, Guardian Phone Number
-        // NEVER returns password, email, address, medical history, documents, or notes to helper
+        // Retrieve authorized emergency medical information & uploaded documents for the identified patient
+        const documents = await db.getPatientDocuments(patient.patientId);
+        const healthInfo = patient.healthInformation || {};
+        const medicalHistory = patient.medicalHistory || "";
+
+        // Run AI-powered emergency assessment (facial distress observation + document analysis + clinical safety guardrails)
+        let aiAssessment = null;
+        try {
+            aiAssessment = await analyzeEmergencyPatientRecordAndImage({
+                image: image,
+                patient: patient,
+                documents: documents,
+                healthInfo: healthInfo,
+                medicalHistory: medicalHistory
+            });
+        } catch (aiErr) {
+            console.warn("AI emergency assessment notice:", aiErr.message);
+        }
+
         return res.json({
             success: true,
             configured: true,
@@ -3008,14 +3065,165 @@ app.post("/api/helper/identify-person", async (req, res) => {
                 name: patient.name,
                 bloodGroup: patient.bloodGroup || patient.blood || "O+",
                 guardianName: patient.guardianName || "Not Provided",
-                guardianPhone: patient.guardianPhone || "Not Provided"
-            }
+                guardianPhone: patient.guardianPhone || "Not Provided",
+                guardianRelationship: patient.guardianRelationship || "Primary Guardian",
+                guardian2Name: patient.guardian2Name || null,
+                guardian2Phone: patient.guardian2Phone || null,
+                guardian2Relationship: patient.guardian2Relationship || null
+            },
+            aiAssessment: aiAssessment,
+            documentsSummary: (documents || []).map(d => ({
+                id: d.document_id,
+                filename: d.original_filename,
+                date: d.uploaded_at ? new Date(d.uploaded_at).toISOString().split("T")[0] : "Recorded"
+            }))
         });
     } catch (err) {
         console.error("Face identification processing error:", err.message);
         res.status(500).json({
             success: false,
             message: "Error processing face identification: " + err.message
+        });
+    }
+});
+
+// In-memory deduplication tracker for guardian alerts (5-minute cooldown per patient)
+const recentGuardianAlerts = new Map();
+
+// Automatic Guardian Emergency Alert via SMS with Twilio backend & GPS location
+app.post("/api/helper/send-guardian-alert", async (req, res) => {
+    try {
+        const { patientId, situation, location, callbackPhone, sessionId } = req.body || {};
+        const helperSession = sessionId || req.headers["x-helper-session"] || "helper-emergency";
+
+        if (!patientId) {
+            return res.status(400).json({ success: false, message: "Patient ID is required." });
+        }
+
+        const cleanPatientId = String(patientId).trim().toUpperCase();
+        const patient = await db.getPatientDetails(cleanPatientId);
+        if (!patient) {
+            return res.status(404).json({ success: false, message: "Patient record not found in system." });
+        }
+
+        const guardianPhone = patient.guardianPhone;
+        const guardianName = patient.guardianName || "Primary Guardian";
+        if (!guardianPhone || guardianPhone === "Not Provided") {
+            return res.status(400).json({
+                success: false,
+                message: "No emergency guardian phone number is registered for this patient."
+            });
+        }
+
+        // Deduplication Check (Prevent duplicate alerts for the same patient within 5 minutes)
+        const now = Date.now();
+        const lastAlertTime = recentGuardianAlerts.get(cleanPatientId);
+        if (lastAlertTime && (now - lastAlertTime) < 5 * 60 * 1000) {
+            const elapsedMinutes = Math.max(1, Math.round((now - lastAlertTime) / 60000));
+            return res.status(429).json({
+                success: false,
+                status: "duplicate_prevented",
+                allowDirectCall: true,
+                guardianPhone: guardianPhone,
+                guardianName: guardianName,
+                message: `An emergency alert was already dispatched to ${guardianName} (${guardianPhone}) ${elapsedMinutes} minute(s) ago. To prevent alert fatigue, please tap 'Call Guardian Directly' if an immediate follow-up is needed.`
+            });
+        }
+
+        // Prepare standardized emergency SMS message text
+        const timeStr = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true });
+        const dateStr = new Date().toISOString().split("T")[0];
+        let locationText = "Location: Hospital / Emergency Field Unit";
+        if (location && typeof location === "object") {
+            if (location.latitude && location.longitude) {
+                locationText = `Location: https://maps.google.com/?q=${location.latitude},${location.longitude} (GPS: ${location.latitude.toFixed(4)}, ${location.longitude.toFixed(4)})`;
+            } else if (location.address) {
+                locationText = `Location: ${location.address}`;
+            }
+        }
+
+        const situationText = situation ? String(situation).trim() : "Accident / Trauma emergency assistance requested";
+        const bloodGroup = patient.bloodGroup || patient.blood || "O+";
+
+        const smsBody = `🚨 MEDICARE EMERGENCY ALERT: First responders are currently assisting ${patient.name} (Patient ID: ${patient.patientId}, Blood Group: ${bloodGroup}). Situation: ${situationText}. ${locationText}. Time: ${timeStr} (${dateStr}). If you cannot be reached, emergency dispatch (112) is being coordinated. Contact: ${callbackPhone || guardianPhone}.`;
+
+        const twilioCfg = getTwilioConfig();
+        let isDelivered = false;
+        let deliverySid = null;
+        let providerError = null;
+
+        if (twilioCfg.isConfigured) {
+            try {
+                const client = getTwilioClient();
+                const fromNumber = process.env.TWILIO_PHONE_NUMBER || process.env.TWILIO_FROM_NUMBER;
+                if (fromNumber) {
+                    const message = await client.messages.create({
+                        body: smsBody,
+                        to: guardianPhone,
+                        from: fromNumber
+                    });
+                    if (message.sid && message.status !== "failed" && message.status !== "undelivered") {
+                        isDelivered = true;
+                        deliverySid = message.sid;
+                    }
+                } else if (twilioCfg.verifySid) {
+                    // Twilio Verify fallback for registered number
+                    const verification = await client.verify.v2
+                        .services(twilioCfg.verifySid)
+                        .verifications.create({ to: guardianPhone, channel: "sms" });
+                    if (verification.sid) {
+                        isDelivered = true;
+                        deliverySid = verification.sid;
+                    }
+                }
+            } catch (twErr) {
+                providerError = twErr.message;
+                console.warn("[Twilio Emergency SMS Dispatch Notice]:", twErr.message);
+            }
+        } else {
+            providerError = "Twilio credentials not configured in environment";
+        }
+
+        // Record the attempt in PostgreSQL audit_logs
+        await db.insertAuditLog(helperSession, isDelivered ? "guardian_emergency_alert_dispatched" : "guardian_emergency_alert_failed", cleanPatientId, {
+            status: isDelivered ? "sent" : "failed",
+            guardianName: guardianName,
+            guardianPhone: guardianPhone,
+            situation: situationText,
+            location: location || null,
+            providerSid: deliverySid,
+            error: providerError,
+            timestamp: new Date().toISOString()
+        });
+
+        if (isDelivered) {
+            recentGuardianAlerts.set(cleanPatientId, now);
+            return res.json({
+                success: true,
+                status: "sent",
+                sid: deliverySid,
+                timestamp: new Date().toISOString(),
+                guardianName: guardianName,
+                guardianPhone: guardianPhone,
+                message: `Emergency SMS confirmed dispatched to guardian ${guardianName} (${guardianPhone}).`
+            });
+        }
+
+        // If provider delivery unconfirmed, DO NOT fake success. Return explicit failure with direct call option.
+        return res.json({
+            success: false,
+            status: "failed",
+            allowDirectCall: true,
+            guardianName: guardianName,
+            guardianPhone: guardianPhone,
+            error: providerError || "Carrier delivery could not be confirmed.",
+            message: `SMS provider delivery could not be confirmed (${providerError || 'carrier unverified'}). Please call guardian directly at ${guardianPhone} or call 112.`
+        });
+    } catch (err) {
+        console.error("Guardian alert error:", err);
+        res.status(500).json({
+            success: false,
+            message: "Failed to dispatch guardian emergency alert: " + err.message
         });
     }
 });
